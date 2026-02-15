@@ -1,4 +1,4 @@
-import argon2 from "argon2";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import type { ExtendedPrismaClient } from "@barstock/database";
 import type { Role } from "@barstock/types";
@@ -17,15 +17,11 @@ export async function verifyPassword(
   plainPassword: string,
   hashedPassword: string
 ): Promise<boolean> {
-  try {
-    return await argon2.verify(hashedPassword, plainPassword);
-  } catch {
-    return false;
-  }
+  return bcrypt.compare(plainPassword, hashedPassword);
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  return argon2.hash(password);
+  return bcrypt.hash(password, 12);
 }
 
 export function createAccessToken(payload: UserPayload): string {
