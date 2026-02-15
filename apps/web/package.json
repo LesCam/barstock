@@ -11,6 +11,7 @@
   "dependencies": {
     "@barstock/api": "workspace:*",
     "@barstock/database": "workspace:*",
+    "@prisma/client": "^6.3.1",
     "@barstock/types": "workspace:*",
     "@barstock/validators": "workspace:*",
     "@barstock/ui": "workspace:*",

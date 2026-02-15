@@ -4,6 +4,7 @@ import { prisma } from "@barstock/database";
 import { verifyPassword, buildUserPayload } from "@barstock/api/src/services/auth.service";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "change-me-in-production",
   providers: [
     Credentials({
       name: "credentials",
