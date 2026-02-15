@@ -9,7 +9,8 @@
     "clean": "turbo clean",
     "db:generate": "pnpm --filter @barstock/database generate",
     "db:push": "pnpm --filter @barstock/database push",
-    "db:studio": "pnpm --filter @barstock/database studio"
+    "db:studio": "pnpm --filter @barstock/database studio",
+    "db:seed": "pnpm --filter @barstock/database seed"
   },
   "devDependencies": {
     "turbo": "^2.3.3",
