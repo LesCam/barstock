@@ -1,11 +1,12 @@
 import { View, Text, FlatList, StyleSheet } from "react-native";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/lib/auth-context";
 
 export default function InventoryTab() {
-  const locationId = ""; // TODO: from auth context
+  const { selectedLocationId } = useAuth();
   const { data: items } = trpc.inventory.list.useQuery(
-    { locationId },
-    { enabled: !!locationId }
+    { locationId: selectedLocationId! },
+    { enabled: !!selectedLocationId }
   );
 
   return (

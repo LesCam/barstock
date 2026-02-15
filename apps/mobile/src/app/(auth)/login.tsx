@@ -1,17 +1,20 @@
 import { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from "react-native";
-import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
-import { setAuthToken } from "@/lib/trpc";
+import { useAuth } from "@/lib/auth-context";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const { signIn } = useAuth();
 
   const login = trpc.auth.login.useMutation({
-    onSuccess(data) {
-      setAuthToken(data.accessToken);
-      router.replace("/(tabs)");
+    async onSuccess(data) {
+      try {
+        await signIn(data.accessToken, data.refreshToken);
+      } catch (e: any) {
+        Alert.alert("Login Failed", e.message ?? "Could not fetch user profile");
+      }
     },
     onError(error) {
       Alert.alert("Login Failed", error.message);

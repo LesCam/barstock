@@ -1,13 +1,13 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/lib/auth-context";
 
 export default function SessionsTab() {
-  // TODO: get locationId from auth context
-  const locationId = "";
+  const { selectedLocationId } = useAuth();
   const { data: sessions, isLoading } = trpc.sessions.list.useQuery(
-    { locationId, openOnly: false },
-    { enabled: !!locationId }
+    { locationId: selectedLocationId!, openOnly: false },
+    { enabled: !!selectedLocationId }
   );
 
   return (

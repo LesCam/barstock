@@ -1,5 +1,5 @@
 import { createTRPCReact } from "@trpc/react-query";
-import { httpBatchLink } from "@trpc/client";
+import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 import type { AppRouter } from "@barstock/api";
 
@@ -13,14 +13,18 @@ export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
-export const trpcClient = trpc.createClient({
-  links: [
-    httpBatchLink({
-      url: `${API_URL}/api/trpc`,
-      transformer: superjson,
-      headers() {
-        return authToken ? { authorization: `Bearer ${authToken}` } : {};
-      },
-    }),
-  ],
-});
+const links = [
+  httpBatchLink({
+    url: `${API_URL}/api/trpc`,
+    transformer: superjson,
+    headers() {
+      return authToken ? { authorization: `Bearer ${authToken}` } : {};
+    },
+  }),
+];
+
+// React Query integrated client (for hooks)
+export const trpcClient = trpc.createClient({ links });
+
+// Vanilla client for imperative calls (e.g. inside AuthProvider)
+export const trpcVanilla = createTRPCClient<AppRouter>({ links });
