@@ -25,10 +25,18 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
 
 # Build outputs
 build/
 dist/
+.next/
+.expo/
+.turbo/
+
+# Prisma
+packages/database/prisma/*.db
 
 # IDE
 .vscode/

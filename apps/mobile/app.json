@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "BarStock",
+    "slug": "barstock",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "barstock",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.barstock.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "BarStock uses the camera to scan barcodes for inventory counting.",
+        "NSBluetoothAlwaysUsageDescription": "BarStock connects to Bluetooth scales for bottle weighing."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.barstock.app",
+      "permissions": ["CAMERA", "BLUETOOTH", "BLUETOOTH_ADMIN", "BLUETOOTH_CONNECT"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-camera"
+    ]
+  }
+}

@@ -1,0 +1,499 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────
+
+enum RoleT {
+  admin
+  manager
+  staff
+
+  @@map("role_t")
+}
+
+enum InventoryItemTypeT {
+  packaged_beer
+  keg_beer
+  liquor
+  wine
+  food
+  misc
+
+  @@map("inventory_item_type_t")
+}
+
+enum UomT {
+  units
+  oz
+  ml
+  grams
+
+  @@map("uom_t")
+}
+
+enum SourceSystemT {
+  toast
+  square
+  lightspeed
+  clover
+  other
+  manual
+
+  @@map("source_system_t")
+}
+
+enum MappingModeT {
+  packaged_unit
+  draft_by_tap
+  draft_by_product
+
+  @@map("mapping_mode_t")
+}
+
+enum KegStatusT {
+  in_storage
+  in_service
+  empty
+  returned
+
+  @@map("keg_status_t")
+}
+
+enum EventTypeT {
+  pos_sale
+  tap_flow
+  manual_adjustment
+  inventory_count_adjustment
+  transfer
+
+  @@map("event_type_t")
+}
+
+enum ConfidenceLevelT {
+  theoretical
+  measured
+  estimated
+
+  @@map("confidence_level_t")
+}
+
+enum VarianceReasonT {
+  waste_foam
+  comp
+  staff_drink
+  theft
+  breakage
+  line_cleaning
+  transfer
+  unknown
+
+  @@map("variance_reason_t")
+}
+
+enum SessionTypeT {
+  shift
+  daily
+  weekly
+  monthly
+
+  @@map("session_type_t")
+}
+
+// ─── Multi-tenant ────────────────────────────────────────────
+
+model Org {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  locations       Location[]
+  bottleTemplates BottleTemplate[]
+
+  @@map("orgs")
+}
+
+// ─── Core ────────────────────────────────────────────────────
+
+model Location {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  timezone    String   @default("America/Montreal")
+  closeoutHour Int     @default(4) @map("closeout_hour")
+  orgId       String?  @map("org_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  org              Org?               @relation(fields: [orgId], references: [id])
+  users            User[]
+  userLocations    UserLocation[]
+  inventoryItems   InventoryItem[]
+  kegInstances     KegInstance[]
+  tapLines         TapLine[]
+  tapAssignments   TapAssignment[]
+  pourProfiles     PourProfile[]
+  posConnections   POSConnection[]
+  salesLines       SalesLine[]
+  consumptionEvents ConsumptionEvent[]
+  inventorySessions InventorySession[]
+  bottleTemplates  BottleTemplate[]
+  bottleMeasurements BottleMeasurement[]
+  posMappings      POSItemMapping[]
+
+  @@map("locations")
+}
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         RoleT
+  locationId   String   @map("location_id") @db.Uuid
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  location          Location           @relation(fields: [locationId], references: [id])
+  userLocations     UserLocation[]
+  createdSessions   InventorySession[] @relation("SessionCreatedBy")
+  closedSessions    InventorySession[] @relation("SessionClosedBy")
+  bottleMeasurements BottleMeasurement[]
+
+  @@map("users")
+}
+
+model UserLocation {
+  userId     String @map("user_id") @db.Uuid
+  locationId String @map("location_id") @db.Uuid
+  role       RoleT
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, locationId])
+  @@map("user_locations")
+}
+
+// ─── Inventory ───────────────────────────────────────────────
+
+model InventoryItem {
+  id         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String             @map("location_id") @db.Uuid
+  type       InventoryItemTypeT
+  name       String
+  barcode    String?
+  vendorSku  String?            @map("vendor_sku")
+  baseUom    UomT               @map("base_uom")
+  packSize   Decimal?           @map("pack_size")
+  packUom    UomT?              @map("pack_uom")
+  active     Boolean            @default(true)
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+
+  location           Location             @relation(fields: [locationId], references: [id])
+  priceHistory       PriceHistory[]
+  kegInstances       KegInstance[]
+  consumptionEvents  ConsumptionEvent[]
+  sessionLines       InventorySessionLine[]
+  posMappings        POSItemMapping[]
+  bottleTemplates    BottleTemplate[]
+  bottleMeasurements BottleMeasurement[]
+
+  @@index([locationId], map: "ix_inventory_items_location")
+  @@map("inventory_items")
+}
+
+model PriceHistory {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inventoryItemId String    @map("inventory_item_id") @db.Uuid
+  unitCost        Decimal   @map("unit_cost")
+  currency        String    @default("CAD")
+  effectiveFromTs DateTime  @map("effective_from_ts") @db.Timestamptz()
+  effectiveToTs   DateTime? @map("effective_to_ts") @db.Timestamptz()
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@index([inventoryItemId, effectiveFromTs], map: "ix_price_history_item_from")
+  @@map("price_history")
+}
+
+// ─── Draft Beer ──────────────────────────────────────────────
+
+model KegSize {
+  id      String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name    String
+  totalOz Decimal @map("total_oz")
+
+  kegInstances KegInstance[]
+
+  @@map("keg_sizes")
+}
+
+model KegInstance {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId      String     @map("location_id") @db.Uuid
+  inventoryItemId String     @map("inventory_item_id") @db.Uuid
+  kegSizeId       String     @map("keg_size_id") @db.Uuid
+  status          KegStatusT @default(in_storage)
+  receivedTs      DateTime   @map("received_ts") @db.Timestamptz()
+  tappedTs        DateTime?  @map("tapped_ts") @db.Timestamptz()
+  emptiedTs       DateTime?  @map("emptied_ts") @db.Timestamptz()
+  startingOz      Decimal    @map("starting_oz")
+  notes           String?
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+
+  location      Location      @relation(fields: [locationId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  kegSize       KegSize       @relation(fields: [kegSizeId], references: [id])
+  tapAssignments TapAssignment[]
+  consumptionEvents ConsumptionEvent[]
+  sessionLines  InventorySessionLine[]
+
+  @@index([locationId], map: "ix_keg_instances_location")
+  @@index([inventoryItemId], map: "ix_keg_instances_item")
+  @@map("keg_instances")
+}
+
+model TapLine {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  name       String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  location       Location          @relation(fields: [locationId], references: [id])
+  tapAssignments TapAssignment[]
+  consumptionEvents ConsumptionEvent[]
+  posMappings    POSItemMapping[]
+  sessionLines   InventorySessionLine[]
+
+  @@map("tap_lines")
+}
+
+model TapAssignment {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId       String    @map("location_id") @db.Uuid
+  tapLineId        String    @map("tap_line_id") @db.Uuid
+  kegInstanceId    String    @map("keg_instance_id") @db.Uuid
+  effectiveStartTs DateTime  @map("effective_start_ts") @db.Timestamptz()
+  effectiveEndTs   DateTime? @map("effective_end_ts") @db.Timestamptz()
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  location    Location    @relation(fields: [locationId], references: [id])
+  tapLine     TapLine     @relation(fields: [tapLineId], references: [id])
+  kegInstance KegInstance @relation(fields: [kegInstanceId], references: [id])
+
+  @@index([tapLineId, effectiveStartTs], map: "ix_tap_assign_line_time")
+  @@map("tap_assignments")
+}
+
+model PourProfile {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  name       String
+  oz         Decimal
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  location    Location         @relation(fields: [locationId], references: [id])
+  posMappings POSItemMapping[]
+
+  @@map("pour_profiles")
+}
+
+// ─── POS Integration ─────────────────────────────────────────
+
+model POSConnection {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId    String    @map("location_id") @db.Uuid
+  sourceSystem  SourceSystemT @map("source_system")
+  method        String
+  status        String    @default("active")
+  lastSuccessTs DateTime? @map("last_success_ts") @db.Timestamptz()
+  lastError     String?   @map("last_error")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@map("pos_connections")
+}
+
+model SalesLine {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceSystem      SourceSystemT @map("source_system")
+  sourceLocationId  String       @map("source_location_id")
+  locationId        String       @map("location_id") @db.Uuid
+  businessDate      DateTime     @map("business_date") @db.Date
+  soldAt            DateTime     @map("sold_at") @db.Timestamptz()
+  receiptId         String       @map("receipt_id")
+  lineId            String       @map("line_id")
+  posItemId         String       @map("pos_item_id")
+  posItemName       String       @map("pos_item_name")
+  quantity          Decimal
+  isVoided          Boolean      @default(false) @map("is_voided")
+  isRefunded        Boolean      @default(false) @map("is_refunded")
+  sizeModifierId    String?      @map("size_modifier_id")
+  sizeModifierName  String?      @map("size_modifier_name")
+  rawPayloadJson    Json?        @map("raw_payload_json")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  location          Location           @relation(fields: [locationId], references: [id])
+  consumptionEvents ConsumptionEvent[]
+
+  @@unique([sourceSystem, sourceLocationId, businessDate, receiptId, lineId, sizeModifierId], map: "ux_salesline_idem")
+  @@index([locationId, soldAt], map: "ix_sales_lines_location_time")
+  @@map("sales_lines")
+}
+
+model POSItemMapping {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId      String       @map("location_id") @db.Uuid
+  sourceSystem    SourceSystemT @map("source_system")
+  posItemId       String       @map("pos_item_id")
+  inventoryItemId String       @map("inventory_item_id") @db.Uuid
+  mode            MappingModeT
+  pourProfileId   String?      @map("pour_profile_id") @db.Uuid
+  tapLineId       String?      @map("tap_line_id") @db.Uuid
+  active          Boolean      @default(true)
+  effectiveFromTs DateTime     @map("effective_from_ts") @db.Timestamptz()
+  effectiveToTs   DateTime?    @map("effective_to_ts") @db.Timestamptz()
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  location      Location      @relation(fields: [locationId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  pourProfile   PourProfile?  @relation(fields: [pourProfileId], references: [id])
+  tapLine       TapLine?      @relation(fields: [tapLineId], references: [id])
+
+  @@index([locationId, sourceSystem, posItemId, effectiveFromTs], map: "ix_mappings_lookup")
+  @@map("pos_item_mappings")
+}
+
+// ─── Immutable Ledger ────────────────────────────────────────
+
+model ConsumptionEvent {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId         String           @map("location_id") @db.Uuid
+  eventType          EventTypeT       @map("event_type")
+  sourceSystem       SourceSystemT    @map("source_system")
+  eventTs            DateTime         @map("event_ts") @db.Timestamptz()
+  inventoryItemId    String           @map("inventory_item_id") @db.Uuid
+  kegInstanceId      String?          @map("keg_instance_id") @db.Uuid
+  tapLineId          String?          @map("tap_line_id") @db.Uuid
+  receiptId          String?          @map("receipt_id")
+  salesLineId        String?          @map("sales_line_id") @db.Uuid
+  quantityDelta      Decimal          @map("quantity_delta")
+  uom                UomT
+  confidenceLevel    ConfidenceLevelT @map("confidence_level")
+  varianceReason     VarianceReasonT? @map("variance_reason")
+  notes              String?
+  reversalOfEventId  String?          @map("reversal_of_event_id") @db.Uuid
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+
+  location       Location      @relation(fields: [locationId], references: [id])
+  inventoryItem  InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  kegInstance    KegInstance?  @relation(fields: [kegInstanceId], references: [id])
+  tapLine        TapLine?      @relation(fields: [tapLineId], references: [id])
+  salesLine      SalesLine?    @relation(fields: [salesLineId], references: [id])
+  reversalOf     ConsumptionEvent?  @relation("EventReversal", fields: [reversalOfEventId], references: [id])
+  reversedBy     ConsumptionEvent[] @relation("EventReversal")
+
+  @@index([locationId, eventTs], map: "ix_events_loc_ts")
+  @@index([inventoryItemId, eventTs], map: "ix_events_item_ts")
+  @@map("consumption_events")
+}
+
+// ─── Sessions ────────────────────────────────────────────────
+
+model InventorySession {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId  String       @map("location_id") @db.Uuid
+  sessionType SessionTypeT @map("session_type")
+  startedTs   DateTime     @map("started_ts") @db.Timestamptz()
+  endedTs     DateTime?    @map("ended_ts") @db.Timestamptz()
+  createdBy   String?      @map("created_by") @db.Uuid
+  closedBy    String?      @map("closed_by") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  location           Location               @relation(fields: [locationId], references: [id])
+  createdByUser      User?                  @relation("SessionCreatedBy", fields: [createdBy], references: [id])
+  closedByUser       User?                  @relation("SessionClosedBy", fields: [closedBy], references: [id])
+  lines              InventorySessionLine[]
+  bottleMeasurements BottleMeasurement[]
+
+  @@map("inventory_sessions")
+}
+
+model InventorySessionLine {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId        String   @map("session_id") @db.Uuid
+  inventoryItemId  String   @map("inventory_item_id") @db.Uuid
+  countUnits       Decimal? @map("count_units")
+  tapLineId        String?  @map("tap_line_id") @db.Uuid
+  kegInstanceId    String?  @map("keg_instance_id") @db.Uuid
+  percentRemaining Decimal? @map("percent_remaining")
+  grossWeightGrams Decimal? @map("gross_weight_grams")
+  isManual         Boolean  @default(false) @map("is_manual")
+  notes            String?
+  derivedMl        Decimal? @map("derived_ml")
+  derivedOz        Decimal? @map("derived_oz")
+  bottleTemplateId String?  @map("bottle_template_id") @db.Uuid
+  confidenceLevel  String?  @map("confidence_level")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  session       InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem    @relation(fields: [inventoryItemId], references: [id])
+  tapLine       TapLine?         @relation(fields: [tapLineId], references: [id])
+  kegInstance   KegInstance?     @relation(fields: [kegInstanceId], references: [id])
+  bottleTemplate BottleTemplate? @relation(fields: [bottleTemplateId], references: [id])
+
+  @@index([sessionId], map: "ix_session_lines_session")
+  @@map("inventory_session_lines")
+}
+
+// ─── Scale / Bottle ──────────────────────────────────────────
+
+model BottleTemplate {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId             String?  @map("org_id") @db.Uuid
+  locationId        String?  @map("location_id") @db.Uuid
+  inventoryItemId   String   @map("inventory_item_id") @db.Uuid
+  containerSizeMl   Decimal  @map("container_size_ml")
+  emptyBottleWeightG Decimal @map("empty_bottle_weight_g")
+  fullBottleWeightG  Decimal @map("full_bottle_weight_g")
+  densityGPerMl     Decimal? @map("density_g_per_ml")
+  enabled           Boolean  @default(true)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  org           Org?           @relation(fields: [orgId], references: [id])
+  location      Location?      @relation(fields: [locationId], references: [id])
+  inventoryItem InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  sessionLines  InventorySessionLine[]
+
+  @@index([inventoryItemId], map: "ix_bottle_templates_item")
+  @@map("bottle_templates")
+}
+
+model BottleMeasurement {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId      String   @map("location_id") @db.Uuid
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  sessionId       String?  @map("session_id") @db.Uuid
+  measuredAtTs    DateTime @map("measured_at_ts") @db.Timestamptz()
+  grossWeightG    Decimal  @map("gross_weight_g")
+  isManual        Boolean  @default(false) @map("is_manual")
+  confidenceLevel String   @map("confidence_level")
+  scaleDeviceId   String?  @map("scale_device_id")
+  scaleDeviceName String?  @map("scale_device_name")
+  notes           String?
+  createdBy       String?  @map("created_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  location      Location         @relation(fields: [locationId], references: [id])
+  inventoryItem InventoryItem    @relation(fields: [inventoryItemId], references: [id])
+  session       InventorySession? @relation(fields: [sessionId], references: [id])
+  createdByUser User?            @relation(fields: [createdBy], references: [id])
+
+  @@map("bottle_measurements")
+}

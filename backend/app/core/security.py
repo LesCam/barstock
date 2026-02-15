@@ -1,11 +1,13 @@
 """
 Security Module - JWT Authentication & Authorization
+Using Argon2 for password hashing (more secure and no bcrypt issues)
 """
 
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -13,8 +15,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hasher using Argon2
+ph = PasswordHasher()
 
 # HTTP Bearer token
 security = HTTPBearer()
@@ -22,22 +24,20 @@ security = HTTPBearer()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        ph.verify(hashed_password, plain_password)
+        return True
+    except VerifyMismatchError:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
+    """Hash a password using Argon2"""
+    return ph.hash(password)
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Create JWT access token
-    
-    Args:
-        data: Payload to encode (should include user_id, org_id, location_ids, roles)
-        expires_delta: Optional custom expiration
-    """
+    """Create JWT access token"""
     to_encode = data.copy()
     
     if expires_delta:
@@ -60,15 +60,7 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
 
 
 def decode_token(token: str) -> Dict[str, Any]:
-    """
-    Decode and validate JWT token
-    
-    Returns:
-        Decoded payload
-        
-    Raises:
-        HTTPException: If token is invalid or expired
-    """
+    """Decode and validate JWT token"""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
@@ -84,15 +76,7 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """
-    Get current authenticated user from JWT token
-    
-    Returns user payload with:
-    - user_id
-    - org_id
-    - location_ids (list)
-    - roles (dict mapping location_id -> role)
-    """
+    """Get current authenticated user from JWT token"""
     token = credentials.credentials
     payload = decode_token(token)
     
@@ -109,8 +93,6 @@ async def get_current_user(
             detail="Invalid token payload"
         )
     
-    # TODO: Optionally verify user still exists and is active in database
-    
     return payload
 
 
@@ -118,15 +100,8 @@ async def require_role(
     required_role: str,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
-    """
-    Require user to have specific role for at least one location
-    
-    Args:
-        required_role: One of 'admin', 'manager', 'staff'
-    """
+    """Require user to have specific role"""
     roles = current_user.get("roles", {})
-    
-    # Check if user has required role for any location
     has_role = any(role == required_role or role == "admin" for role in roles.values())
     
     if not has_role:
@@ -149,12 +124,7 @@ async def require_location_access(
     location_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
-    """
-    Require user to have access to specific location
-    
-    Args:
-        location_id: UUID of location to check access for
-    """
+    """Require user to have access to specific location"""
     location_ids = current_user.get("location_ids", [])
     
     if location_id not in location_ids:
@@ -171,30 +141,17 @@ def check_location_role(
     required_role: str,
     current_user: Dict[str, Any]
 ) -> bool:
-    """
-    Check if user has specific role for a location
-    
-    Args:
-        location_id: Location to check
-        required_role: Required role level
-        current_user: User payload from JWT
-        
-    Returns:
-        True if user has required role or higher
-    """
+    """Check if user has specific role for a location"""
     roles = current_user.get("roles", {})
     user_role = roles.get(location_id)
     
     if user_role is None:
         return False
     
-    # Admin has all permissions
     if user_role == "admin":
         return True
     
-    # Role hierarchy
     role_hierarchy = {"admin": 3, "manager": 2, "staff": 1}
-    
     user_level = role_hierarchy.get(user_role, 0)
     required_level = role_hierarchy.get(required_role, 0)
     

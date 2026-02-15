@@ -1,0 +1,48 @@
+import { router, protectedProcedure } from "../trpc";
+import { inventoryItemCreateSchema, inventoryItemUpdateSchema, priceHistoryCreateSchema, onHandQuerySchema } from "@barstock/validators";
+import { InventoryService } from "../services/inventory.service";
+import { z } from "zod";
+
+export const inventoryRouter = router({
+  create: protectedProcedure
+    .input(inventoryItemCreateSchema)
+    .mutation(({ ctx, input }) => ctx.prisma.inventoryItem.create({ data: input })),
+
+  list: protectedProcedure
+    .input(z.object({ locationId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      ctx.prisma.inventoryItem.findMany({
+        where: { locationId: input.locationId },
+        orderBy: { name: "asc" },
+      })
+    ),
+
+  getById: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      ctx.prisma.inventoryItem.findUniqueOrThrow({
+        where: { id: input.id },
+        include: {
+          priceHistory: { orderBy: { effectiveFromTs: "desc" }, take: 5 },
+        },
+      })
+    ),
+
+  update: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }).merge(inventoryItemUpdateSchema))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return ctx.prisma.inventoryItem.update({ where: { id }, data });
+    }),
+
+  addPrice: protectedProcedure
+    .input(priceHistoryCreateSchema)
+    .mutation(({ ctx, input }) => ctx.prisma.priceHistory.create({ data: input })),
+
+  onHand: protectedProcedure
+    .input(onHandQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new InventoryService(ctx.prisma);
+      return svc.calculateOnHand(input.locationId, input.asOf);
+    }),
+});
