@@ -10,6 +10,7 @@ import { sessionsRouter } from "./routers/sessions";
 import { eventsRouter } from "./routers/events";
 import { scaleRouter } from "./routers/scale";
 import { reportsRouter } from "./routers/reports";
+import { areasRouter } from "./routers/areas";
 
 export const appRouter = router({
   auth: authRouter,
@@ -23,6 +24,7 @@ export const appRouter = router({
   events: eventsRouter,
   scale: scaleRouter,
   reports: reportsRouter,
+  areas: areasRouter,
 });
 
 export type AppRouter = typeof appRouter;

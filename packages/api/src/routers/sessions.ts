@@ -43,6 +43,7 @@ export const sessionsRouter = router({
             include: {
               inventoryItem: { select: { name: true, type: true, baseUom: true } },
               tapLine: { select: { name: true } },
+              subArea: { select: { id: true, name: true, barArea: { select: { id: true, name: true } } } },
             },
           },
         },

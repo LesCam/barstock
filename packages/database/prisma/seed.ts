@@ -349,6 +349,42 @@ async function main() {
   });
   console.log(`Created 2 inventory items for ${location2.name}`);
 
+  // ── Bar Areas + Sub-Areas ────────────────────────────────────
+  const mainBar = await prisma.barArea.create({
+    data: { locationId: location1.id, name: "Main Bar", sortOrder: 0 },
+  });
+  await prisma.subArea.createMany({
+    data: [
+      { barAreaId: mainBar.id, name: "Rail", sortOrder: 0 },
+      { barAreaId: mainBar.id, name: "Backbar Shelf", sortOrder: 1 },
+    ],
+  });
+
+  const lounge = await prisma.barArea.create({
+    data: { locationId: location1.id, name: "Lounge", sortOrder: 1 },
+  });
+  await prisma.subArea.createMany({
+    data: [
+      { barAreaId: lounge.id, name: "Wine Fridge", sortOrder: 0 },
+      { barAreaId: lounge.id, name: "Beer Fridge", sortOrder: 1 },
+    ],
+  });
+
+  const patioBar = await prisma.barArea.create({
+    data: { locationId: location2.id, name: "Patio Bar", sortOrder: 0 },
+  });
+  await prisma.subArea.create({
+    data: { barAreaId: patioBar.id, name: "Rail", sortOrder: 0 },
+  });
+
+  const storage = await prisma.barArea.create({
+    data: { locationId: location2.id, name: "Storage", sortOrder: 1 },
+  });
+  await prisma.subArea.create({
+    data: { barAreaId: storage.id, name: "Walk-in", sortOrder: 0 },
+  });
+  console.log(`Created bar areas + sub-areas for both locations`);
+
   // ── Summary ──────────────────────────────────────────────────
   console.log("\n--- Seed Complete ---");
   console.log("Login credentials:");

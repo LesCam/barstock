@@ -143,6 +143,7 @@ model Location {
   bottleTemplates  BottleTemplate[]
   bottleMeasurements BottleMeasurement[]
   posMappings      POSItemMapping[]
+  barAreas         BarArea[]
 
   @@map("locations")
 }
@@ -260,10 +261,12 @@ model KegInstance {
 model TapLine {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   locationId String   @map("location_id") @db.Uuid
+  barAreaId  String?  @map("bar_area_id") @db.Uuid
   name       String
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   location       Location          @relation(fields: [locationId], references: [id])
+  barArea        BarArea?          @relation(fields: [barAreaId], references: [id])
   tapAssignments TapAssignment[]
   consumptionEvents ConsumptionEvent[]
   posMappings    POSItemMapping[]
@@ -440,6 +443,7 @@ model InventorySessionLine {
   derivedOz        Decimal? @map("derived_oz")
   bottleTemplateId String?  @map("bottle_template_id") @db.Uuid
   confidenceLevel  String?  @map("confidence_level")
+  subAreaId        String?  @map("sub_area_id") @db.Uuid
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   session       InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -447,6 +451,7 @@ model InventorySessionLine {
   tapLine       TapLine?         @relation(fields: [tapLineId], references: [id])
   kegInstance   KegInstance?     @relation(fields: [kegInstanceId], references: [id])
   bottleTemplate BottleTemplate? @relation(fields: [bottleTemplateId], references: [id])
+  subArea       SubArea?         @relation(fields: [subAreaId], references: [id])
 
   @@index([sessionId], map: "ix_session_lines_session")
   @@map("inventory_session_lines")
@@ -488,12 +493,46 @@ model BottleMeasurement {
   scaleDeviceName String?  @map("scale_device_name")
   notes           String?
   createdBy       String?  @map("created_by") @db.Uuid
+  subAreaId       String?  @map("sub_area_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   location      Location         @relation(fields: [locationId], references: [id])
   inventoryItem InventoryItem    @relation(fields: [inventoryItemId], references: [id])
   session       InventorySession? @relation(fields: [sessionId], references: [id])
   createdByUser User?            @relation(fields: [createdBy], references: [id])
+  subArea       SubArea?         @relation(fields: [subAreaId], references: [id])
 
   @@map("bottle_measurements")
+}
+
+// ─── Bar Areas ──────────────────────────────────────────────
+
+model BarArea {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  name       String
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  location Location  @relation(fields: [locationId], references: [id])
+  subAreas SubArea[]
+  tapLines TapLine[]
+
+  @@index([locationId], map: "ix_bar_areas_location")
+  @@map("bar_areas")
+}
+
+model SubArea {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  barAreaId String   @map("bar_area_id") @db.Uuid
+  name      String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  barArea            BarArea                @relation(fields: [barAreaId], references: [id], onDelete: Cascade)
+  sessionLines       InventorySessionLine[]
+  bottleMeasurements BottleMeasurement[]
+
+  @@index([barAreaId], map: "ix_sub_areas_bar_area")
+  @@map("sub_areas")
 }

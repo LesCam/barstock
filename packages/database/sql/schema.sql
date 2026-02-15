@@ -327,3 +327,39 @@ alter table inventory_session_lines
   add column if not exists derived_oz numeric,
   add column if not exists bottle_template_id uuid references bottle_templates(id),
   add column if not exists confidence_level text;
+
+-- ===========================
+-- v1.2 PATCH: BAR AREAS + SUB-AREAS
+-- ===========================
+
+create table if not exists bar_areas (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id),
+  name text not null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ix_bar_areas_location on bar_areas(location_id);
+
+create table if not exists sub_areas (
+  id uuid primary key default gen_random_uuid(),
+  bar_area_id uuid not null references bar_areas(id) on delete cascade,
+  name text not null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ix_sub_areas_bar_area on sub_areas(bar_area_id);
+
+-- Add optional bar_area_id to tap_lines
+alter table tap_lines
+  add column if not exists bar_area_id uuid references bar_areas(id);
+
+-- Add optional sub_area_id to inventory_session_lines
+alter table inventory_session_lines
+  add column if not exists sub_area_id uuid references sub_areas(id);
+
+-- Add optional sub_area_id to bottle_measurements
+alter table bottle_measurements
+  add column if not exists sub_area_id uuid references sub_areas(id);

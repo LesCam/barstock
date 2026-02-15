@@ -17,6 +17,7 @@ export const sessionLineCreateSchema = z.object({
   grossWeightGrams: z.number().min(0).optional(),
   isManual: z.boolean().default(false),
   notes: z.string().optional(),
+  subAreaId: z.string().uuid().optional(),
 });
 
 export const sessionCloseSchema = z.object({
