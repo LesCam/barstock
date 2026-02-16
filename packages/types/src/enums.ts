@@ -100,6 +100,42 @@ export const SessionType = {
 } as const;
 export type SessionType = (typeof SessionType)[keyof typeof SessionType];
 
+/** Matches PostgreSQL artwork_status_t */
+export const ArtworkStatus = {
+  on_wall: "on_wall",
+  reserved_pending_payment: "reserved_pending_payment",
+  reserved: "reserved",
+  sold: "sold",
+  removed: "removed",
+  removed_not_sold: "removed_not_sold",
+  pending_payment_issue: "pending_payment_issue",
+} as const;
+export type ArtworkStatus = (typeof ArtworkStatus)[keyof typeof ArtworkStatus];
+
+/** Matches PostgreSQL agreement_type_t */
+export const AgreementType = {
+  consignment: "consignment",
+  owned: "owned",
+} as const;
+export type AgreementType = (typeof AgreementType)[keyof typeof AgreementType];
+
+/** Matches PostgreSQL sale_mode_t */
+export const SaleMode = {
+  platform_sale: "platform_sale",
+  direct_artist_sale: "direct_artist_sale",
+  either: "either",
+} as const;
+export type SaleMode = (typeof SaleMode)[keyof typeof SaleMode];
+
+/** Matches PostgreSQL payout_method_t */
+export const PayoutMethod = {
+  etransfer: "etransfer",
+  cheque: "cheque",
+  cash: "cash",
+  other: "other",
+} as const;
+export type PayoutMethod = (typeof PayoutMethod)[keyof typeof PayoutMethod];
+
 /** Role hierarchy for RBAC */
 export const ROLE_HIERARCHY: Record<Role, number> = {
   platform_admin: 6,

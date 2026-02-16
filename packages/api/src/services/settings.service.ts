@@ -8,6 +8,13 @@ export interface BusinessSettingsData {
 const DEFAULT_SETTINGS: BusinessSettingsData = {
   capabilities: {
     artSalesEnabled: false,
+    staffArtEntryMode: false,
+    curatorArtOnlyLockdown: true,
+    staffPaymentConfirm: true,
+    discountApprovalRule: true,
+    directToArtistAllowed: false,
+    proofPhotoRequired: true,
+    proofPhotoRetentionDays: 90,
   },
 };
 
@@ -56,6 +63,6 @@ export class SettingsService {
     key: keyof CapabilityToggles
   ): Promise<boolean> {
     const settings = await this.getSettings(businessId);
-    return settings.capabilities[key] ?? false;
+    return !!settings.capabilities[key];
   }
 }

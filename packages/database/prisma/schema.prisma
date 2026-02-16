@@ -108,6 +108,44 @@ enum SessionTypeT {
   @@map("session_type_t")
 }
 
+// ─── Art Enums ──────────────────────────────────────────────
+
+enum ArtworkStatusT {
+  on_wall
+  reserved_pending_payment
+  reserved
+  sold
+  removed
+  removed_not_sold
+  pending_payment_issue
+
+  @@map("artwork_status_t")
+}
+
+enum AgreementTypeT {
+  consignment
+  owned
+
+  @@map("agreement_type_t")
+}
+
+enum SaleModeT {
+  platform_sale
+  direct_artist_sale
+  either
+
+  @@map("sale_mode_t")
+}
+
+enum PayoutMethodT {
+  etransfer
+  cheque
+  cash
+  other
+
+  @@map("payout_method_t")
+}
+
 // ─── Multi-tenant ────────────────────────────────────────────
 
 model Business {
@@ -122,6 +160,8 @@ model Business {
   auditLogs        AuditLog[]
   businessSettings BusinessSettings?
   notifications    Notification[]
+  artists          Artist[]
+  artworks         Artwork[]
 
   @@map("businesses")
 }
@@ -597,4 +637,69 @@ model Notification {
   @@index([recipientUserId, isRead, createdAt(sort: Desc)], map: "ix_notifications_recipient")
   @@index([businessId, createdAt(sort: Desc)], map: "ix_notifications_business")
   @@map("notifications")
+}
+
+// ─── Art Sales ──────────────────────────────────────────────
+
+model Artist {
+  id                          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId                  String        @map("business_id") @db.Uuid
+  name                        String
+  contactEmail                String?       @map("contact_email")
+  contactPhone                String?       @map("contact_phone")
+  payoutMethod                PayoutMethodT? @map("payout_method")
+  defaultCommissionPubPercent Decimal       @default(50) @map("default_commission_pub_percent")
+  bio                         String?
+  notes                       String?
+  active                      Boolean       @default(true)
+  createdAt                   DateTime      @default(now()) @map("created_at") @db.Timestamptz()
+
+  business Business  @relation(fields: [businessId], references: [id])
+  artworks Artwork[]
+
+  @@index([businessId], map: "ix_artists_business")
+  @@map("artists")
+}
+
+model Artwork {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId           String          @map("business_id") @db.Uuid
+  artistId             String          @map("artist_id") @db.Uuid
+  title                String
+  medium               String?
+  dimensions           String?
+  listPriceCents       Int             @map("list_price_cents")
+  status               ArtworkStatusT  @default(on_wall)
+  locationInPub        String?         @map("location_in_pub")
+  agreementType        AgreementTypeT  @default(consignment) @map("agreement_type")
+  saleMode             SaleModeT       @default(platform_sale) @map("sale_mode")
+  commissionPubPercent Decimal         @map("commission_pub_percent")
+  dateHung             DateTime?       @map("date_hung") @db.Date
+  notes                String?
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
+
+  business Business       @relation(fields: [businessId], references: [id])
+  artist   Artist          @relation(fields: [artistId], references: [id])
+  photos   ArtworkPhoto[]
+
+  @@index([businessId, status], map: "ix_artworks_business_status")
+  @@index([artistId], map: "ix_artworks_artist")
+  @@map("artworks")
+}
+
+model ArtworkPhoto {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  artworkId    String   @map("artwork_id") @db.Uuid
+  storageKey   String   @map("storage_key")
+  url          String
+  thumbnailKey String?  @map("thumbnail_key")
+  thumbnailUrl String?  @map("thumbnail_url")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+
+  @@index([artworkId], map: "ix_artwork_photos_artwork")
+  @@map("artwork_photos")
 }

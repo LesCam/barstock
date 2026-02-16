@@ -402,10 +402,114 @@ async function main() {
   await prisma.businessSettings.create({
     data: {
       businessId: business.id,
-      settingsJson: { capabilities: { artSalesEnabled: false } },
+      settingsJson: {
+        capabilities: {
+          artSalesEnabled: true,
+          staffArtEntryMode: false,
+          curatorArtOnlyLockdown: true,
+          staffPaymentConfirm: true,
+          discountApprovalRule: true,
+          directToArtistAllowed: false,
+          proofPhotoRequired: true,
+          proofPhotoRetentionDays: 90,
+        },
+      },
     },
   });
-  console.log(`Created business settings with defaults`);
+  console.log(`Created business settings with art sales enabled`);
+
+  // ── Artists + Artworks ─────────────────────────────────────
+  const artist1 = await prisma.artist.create({
+    data: {
+      businessId: business.id,
+      name: "Sarah Chen",
+      contactEmail: "sarah@example.com",
+      payoutMethod: "etransfer",
+      defaultCommissionPubPercent: 50,
+      bio: "Contemporary mixed-media artist specializing in abstract landscapes.",
+      active: true,
+    },
+  });
+
+  const artist2 = await prisma.artist.create({
+    data: {
+      businessId: business.id,
+      name: "Marcus Rivera",
+      contactEmail: "marcus@example.com",
+      contactPhone: "514-555-0199",
+      payoutMethod: "cheque",
+      defaultCommissionPubPercent: 40,
+      bio: "Oil painter focused on urban scenes and architecture.",
+      active: true,
+    },
+  });
+  console.log(`Created artists: ${artist1.name}, ${artist2.name}`);
+
+  const artwork1 = await prisma.artwork.create({
+    data: {
+      businessId: business.id,
+      artistId: artist1.id,
+      title: "Autumn Reflections",
+      medium: "Acrylic on canvas",
+      dimensions: "24x36 in",
+      listPriceCents: 85000,
+      status: "on_wall",
+      locationInPub: "Main dining room, east wall",
+      agreementType: "consignment",
+      saleMode: "platform_sale",
+      commissionPubPercent: 50,
+      dateHung: new Date("2025-11-15"),
+    },
+  });
+
+  const artwork2 = await prisma.artwork.create({
+    data: {
+      businessId: business.id,
+      artistId: artist1.id,
+      title: "Morning Mist",
+      medium: "Watercolour on paper",
+      dimensions: "18x24 in",
+      listPriceCents: 45000,
+      status: "reserved",
+      locationInPub: "Bar area, behind register",
+      agreementType: "consignment",
+      saleMode: "either",
+      commissionPubPercent: 50,
+    },
+  });
+
+  const artwork3 = await prisma.artwork.create({
+    data: {
+      businessId: business.id,
+      artistId: artist2.id,
+      title: "Mile End at Dusk",
+      medium: "Oil on canvas",
+      dimensions: "30x40 in",
+      listPriceCents: 120000,
+      status: "on_wall",
+      locationInPub: "Lounge, north wall",
+      agreementType: "consignment",
+      saleMode: "platform_sale",
+      commissionPubPercent: 40,
+      dateHung: new Date("2025-12-01"),
+    },
+  });
+
+  const artwork4 = await prisma.artwork.create({
+    data: {
+      businessId: business.id,
+      artistId: artist2.id,
+      title: "Sunset over the Canal",
+      medium: "Oil on canvas",
+      dimensions: "20x30 in",
+      listPriceCents: 75000,
+      status: "sold",
+      agreementType: "owned",
+      saleMode: "platform_sale",
+      commissionPubPercent: 40,
+    },
+  });
+  console.log(`Created ${4} demo artworks across artists`);
 
   // ── Summary ──────────────────────────────────────────────────
   console.log("\n--- Seed Complete ---");

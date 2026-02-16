@@ -7,3 +7,5 @@ export * from "./reports.schema";
 export * from "./audit.schema";
 export * from "./settings.schema";
 export * from "./notification.schema";
+export * from "./artist.schema";
+export * from "./artwork.schema";

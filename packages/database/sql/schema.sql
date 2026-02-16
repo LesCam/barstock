@@ -442,3 +442,79 @@ create table if not exists notifications (
 
 create index if not exists ix_notifications_recipient on notifications(recipient_user_id, is_read, created_at desc);
 create index if not exists ix_notifications_business on notifications(business_id, created_at desc);
+
+-- ===========================
+-- v1.5 PATCH: ART SALES DOMAIN MODELS
+-- ===========================
+
+do $$ begin
+  create type artwork_status_t as enum (
+    'on_wall', 'reserved_pending_payment', 'reserved', 'sold',
+    'removed', 'removed_not_sold', 'pending_payment_issue'
+  );
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type agreement_type_t as enum ('consignment', 'owned');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type sale_mode_t as enum ('platform_sale', 'direct_artist_sale', 'either');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type payout_method_t as enum ('etransfer', 'cheque', 'cash', 'other');
+exception when duplicate_object then null; end $$;
+
+create table if not exists artists (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id),
+  name text not null,
+  contact_email text,
+  contact_phone text,
+  payout_method payout_method_t,
+  default_commission_pub_percent numeric not null default 50
+    check (default_commission_pub_percent >= 0 and default_commission_pub_percent <= 100),
+  bio text,
+  notes text,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ix_artists_business on artists(business_id);
+
+create table if not exists artworks (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id),
+  artist_id uuid not null references artists(id),
+  title text not null,
+  medium text,
+  dimensions text,
+  list_price_cents int not null check (list_price_cents > 0),
+  status artwork_status_t not null default 'on_wall',
+  location_in_pub text,
+  agreement_type agreement_type_t not null default 'consignment',
+  sale_mode sale_mode_t not null default 'platform_sale',
+  commission_pub_percent numeric not null
+    check (commission_pub_percent >= 0 and commission_pub_percent <= 100),
+  date_hung date,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists ix_artworks_business_status on artworks(business_id, status);
+create index if not exists ix_artworks_artist on artworks(artist_id);
+
+create table if not exists artwork_photos (
+  id uuid primary key default gen_random_uuid(),
+  artwork_id uuid not null references artworks(id) on delete cascade,
+  storage_key text not null,
+  url text not null,
+  thumbnail_key text,
+  thumbnail_url text,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ix_artwork_photos_artwork on artwork_photos(artwork_id);
