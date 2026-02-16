@@ -7,7 +7,7 @@
 
 import type { ExtendedPrismaClient } from "@barstock/database";
 
-interface VarianceItem {
+export interface VarianceItem {
   inventoryItemId: string;
   itemName: string;
   theoretical: number;
@@ -19,7 +19,7 @@ interface VarianceItem {
   valueImpact: number | null;
 }
 
-interface VarianceReport {
+export interface VarianceReport {
   locationId: string;
   fromDate: Date;
   toDate: Date;

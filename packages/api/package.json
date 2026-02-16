@@ -21,6 +21,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
     "@types/jsonwebtoken": "^9.0.7",
+    "@types/ssh2": "^1.15.5",
     "typescript": "^5.7.3"
   }
 }

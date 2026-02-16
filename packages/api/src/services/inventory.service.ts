@@ -8,7 +8,7 @@
 import { Prisma } from "@prisma/client";
 import type { ExtendedPrismaClient } from "@barstock/database";
 
-interface OnHandItem {
+export interface OnHandItem {
   inventoryItemId: string;
   itemName: string;
   quantity: number;

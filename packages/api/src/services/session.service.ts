@@ -9,7 +9,7 @@ import { Prisma } from "@prisma/client";
 import type { ExtendedPrismaClient } from "@barstock/database";
 import type { VarianceReason } from "@barstock/types";
 
-interface SessionCloseResult {
+export interface SessionCloseResult {
   sessionId: string;
   adjustmentsCreated: number;
   totalVariance: number;

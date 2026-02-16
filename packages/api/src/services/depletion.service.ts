@@ -14,7 +14,7 @@
 import { Prisma } from "@prisma/client";
 import type { ExtendedPrismaClient } from "@barstock/database";
 
-interface DepletionStats {
+export interface DepletionStats {
   processed: number;
   created: number;
   unmapped: number;
