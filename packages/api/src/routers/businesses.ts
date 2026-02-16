@@ -1,4 +1,5 @@
-import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
+import { TRPCError } from "@trpc/server";
+import { router, publicProcedure, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
 import { businessCreateSchema, businessUpdateSchema } from "@barstock/validators";
 import { z } from "zod";
 
@@ -29,5 +30,21 @@ export const businessesRouter = router({
     .mutation(({ ctx, input }) => {
       const { businessId, ...data } = input;
       return ctx.prisma.business.update({ where: { id: businessId }, data });
+    }),
+
+  getBySlug: publicProcedure
+    .input(z.object({ slug: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const business = await ctx.prisma.business.findUnique({
+        where: { slug: input.slug },
+        select: { id: true, name: true, slug: true },
+      });
+      if (!business) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Business not found",
+        });
+      }
+      return business;
     }),
 });

@@ -390,3 +390,55 @@ alter table users add column if not exists business_id uuid references businesse
 
 -- Rename org_id → business_id on bottle_templates
 alter table bottle_templates rename column org_id to business_id;
+
+-- ===========================
+-- v1.4 PATCH: PLATFORM INFRASTRUCTURE (roles, slug, audit, settings, notifications)
+-- ===========================
+
+-- Expand role_t: replace auditor with accounting, add curator
+do $$ begin
+  alter type role_t add value if not exists 'accounting';
+  alter type role_t add value if not exists 'curator';
+end $$;
+
+-- Add slug to businesses
+alter table businesses add column if not exists slug text unique;
+
+-- Audit logs
+create table if not exists audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id),
+  actor_user_id uuid references users(id),
+  action_type text not null,
+  object_type text not null,
+  object_id text,
+  metadata_json jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ix_audit_logs_business_time on audit_logs(business_id, created_at);
+create index if not exists ix_audit_logs_object on audit_logs(object_type, object_id);
+
+-- Business settings
+create table if not exists business_settings (
+  business_id uuid primary key references businesses(id),
+  settings_json jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+
+-- Notifications
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id),
+  recipient_user_id uuid not null references users(id),
+  title text not null,
+  body text,
+  link_url text,
+  image_url text,
+  metadata_json jsonb,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ix_notifications_recipient on notifications(recipient_user_id, is_read, created_at desc);
+create index if not exists ix_notifications_business on notifications(business_id, created_at desc);

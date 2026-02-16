@@ -11,6 +11,9 @@ import { eventsRouter } from "./routers/events";
 import { scaleRouter } from "./routers/scale";
 import { reportsRouter } from "./routers/reports";
 import { areasRouter } from "./routers/areas";
+import { auditRouter } from "./routers/audit";
+import { settingsRouter } from "./routers/settings";
+import { notificationsRouter } from "./routers/notifications";
 
 export const appRouter = router({
   auth: authRouter,
@@ -25,6 +28,9 @@ export const appRouter = router({
   scale: scaleRouter,
   reports: reportsRouter,
   areas: areasRouter,
+  audit: auditRouter,
+  settings: settingsRouter,
+  notifications: notificationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -13,8 +13,9 @@ enum RoleT {
   platform_admin
   business_admin
   manager
+  curator
   staff
-  auditor
+  accounting
 
   @@map("role_t")
 }
@@ -112,11 +113,15 @@ enum SessionTypeT {
 model Business {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name      String
+  slug      String   @unique
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
-  locations       Location[]
-  users           User[]
-  bottleTemplates BottleTemplate[]
+  locations        Location[]
+  users            User[]
+  bottleTemplates  BottleTemplate[]
+  auditLogs        AuditLog[]
+  businessSettings BusinessSettings?
+  notifications    Notification[]
 
   @@map("businesses")
 }
@@ -167,6 +172,8 @@ model User {
   createdSessions   InventorySession[] @relation("SessionCreatedBy")
   closedSessions    InventorySession[] @relation("SessionClosedBy")
   bottleMeasurements BottleMeasurement[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
 
   @@map("users")
 }
@@ -540,4 +547,54 @@ model SubArea {
 
   @@index([barAreaId], map: "ix_sub_areas_bar_area")
   @@map("sub_areas")
+}
+
+// ─── Platform Infrastructure ────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId   String   @map("business_id") @db.Uuid
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  actionType   String   @map("action_type")
+  objectType   String   @map("object_type")
+  objectId     String?  @map("object_id")
+  metadataJson Json?    @map("metadata_json")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  business  Business @relation(fields: [businessId], references: [id])
+  actorUser User?    @relation(fields: [actorUserId], references: [id])
+
+  @@index([businessId, createdAt], map: "ix_audit_logs_business_time")
+  @@index([objectType, objectId], map: "ix_audit_logs_object")
+  @@map("audit_logs")
+}
+
+model BusinessSettings {
+  businessId   String   @id @map("business_id") @db.Uuid
+  settingsJson Json     @map("settings_json")
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@map("business_settings")
+}
+
+model Notification {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId      String   @map("business_id") @db.Uuid
+  recipientUserId String   @map("recipient_user_id") @db.Uuid
+  title           String
+  body            String?
+  linkUrl         String?  @map("link_url")
+  imageUrl        String?  @map("image_url")
+  metadataJson    Json?    @map("metadata_json")
+  isRead          Boolean  @default(false) @map("is_read")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  business  Business @relation(fields: [businessId], references: [id])
+  recipient User     @relation(fields: [recipientUserId], references: [id])
+
+  @@index([recipientUserId, isRead, createdAt(sort: Desc)], map: "ix_notifications_recipient")
+  @@index([businessId, createdAt(sort: Desc)], map: "ix_notifications_business")
+  @@map("notifications")
 }

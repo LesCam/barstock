@@ -8,7 +8,7 @@ async function main() {
 
   // ── Business ──────────────────────────────────────────────────
   const business = await prisma.business.create({
-    data: { name: "Demo Bar Group" },
+    data: { name: "Demo Bar Group", slug: "demo-bar-group" },
   });
   console.log(`Created business: ${business.name} (${business.id})`);
 
@@ -64,7 +64,17 @@ async function main() {
       businessId: business.id,
     },
   });
-  console.log(`Created users: admin, manager, staff (password: password123)`);
+  const curator = await prisma.user.create({
+    data: {
+      email: "curator@barstock.app",
+      passwordHash,
+      role: "curator",
+      locationId: location1.id,
+      businessId: business.id,
+    },
+  });
+
+  console.log(`Created users: admin, manager, staff, curator (password: password123)`);
 
   // Give admin access to both locations
   await prisma.userLocation.create({
@@ -388,11 +398,21 @@ async function main() {
   });
   console.log(`Created bar areas + sub-areas for both locations`);
 
+  // ── Business Settings ───────────────────────────────────────
+  await prisma.businessSettings.create({
+    data: {
+      businessId: business.id,
+      settingsJson: { capabilities: { artSalesEnabled: false } },
+    },
+  });
+  console.log(`Created business settings with defaults`);
+
   // ── Summary ──────────────────────────────────────────────────
   console.log("\n--- Seed Complete ---");
   console.log("Login credentials:");
   console.log("  admin@barstock.app   / password123  (business_admin, both locations)");
   console.log("  manager@barstock.app / password123  (manager, The Brass Tap)");
+  console.log("  curator@barstock.app / password123  (curator, The Brass Tap)");
   console.log("  staff@barstock.app   / password123  (staff, The Brass Tap)");
 }
 

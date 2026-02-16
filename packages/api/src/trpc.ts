@@ -3,6 +3,8 @@ import superjson from "superjson";
 import type { Context } from "./context";
 import type { UserPayload } from "./context";
 import { Role, ROLE_HIERARCHY } from "@barstock/types";
+import type { CapabilityToggles } from "@barstock/validators";
+import { SettingsService } from "./services/settings.service";
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
@@ -98,6 +100,35 @@ export function requireLocationAccess() {
       throw new TRPCError({
         code: "FORBIDDEN",
         message: "No access to this location",
+      });
+    }
+
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  });
+}
+
+/** Require a capability toggle to be enabled for the user's business */
+export function requireCapability(key: keyof CapabilityToggles) {
+  return middleware(async ({ ctx, next }) => {
+    if (!ctx.user) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+
+    // Platform admins bypass capability checks
+    if (isPlatformAdmin(ctx.user)) {
+      return next({ ctx: { ...ctx, user: ctx.user } });
+    }
+
+    const settingsService = new SettingsService(ctx.prisma);
+    const enabled = await settingsService.isCapabilityEnabled(
+      ctx.user.businessId,
+      key
+    );
+
+    if (!enabled) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: `Capability "${key}" is not enabled for this business`,
       });
     }
 

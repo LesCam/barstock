@@ -1,11 +1,24 @@
 import { z } from "zod";
 
+const slugRegex = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
+
 export const businessCreateSchema = z.object({
   name: z.string().min(1).max(255),
+  slug: z
+    .string()
+    .min(2)
+    .max(63)
+    .regex(slugRegex, "Lowercase alphanumeric and hyphens only, 2-63 chars"),
 });
 
 export const businessUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
+  slug: z
+    .string()
+    .min(2)
+    .max(63)
+    .regex(slugRegex, "Lowercase alphanumeric and hyphens only, 2-63 chars")
+    .optional(),
 });
 
 export const locationCreateSchema = z.object({

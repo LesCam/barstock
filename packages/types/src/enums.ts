@@ -3,8 +3,9 @@ export const Role = {
   platform_admin: "platform_admin",
   business_admin: "business_admin",
   manager: "manager",
+  curator: "curator",
   staff: "staff",
-  auditor: "auditor",
+  accounting: "accounting",
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
@@ -101,9 +102,10 @@ export type SessionType = (typeof SessionType)[keyof typeof SessionType];
 
 /** Role hierarchy for RBAC */
 export const ROLE_HIERARCHY: Record<Role, number> = {
-  platform_admin: 5,
-  business_admin: 4,
-  manager: 3,
+  platform_admin: 6,
+  business_admin: 5,
+  manager: 4,
+  curator: 3,
   staff: 2,
-  auditor: 1,
+  accounting: 1,
 };
