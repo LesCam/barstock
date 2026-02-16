@@ -1,6 +1,6 @@
 import { router } from "./trpc";
 import { authRouter } from "./routers/auth";
-import { orgsRouter } from "./routers/orgs";
+import { businessesRouter } from "./routers/businesses";
 import { locationsRouter } from "./routers/locations";
 import { inventoryRouter } from "./routers/inventory";
 import { posRouter } from "./routers/pos";
@@ -14,7 +14,7 @@ import { areasRouter } from "./routers/areas";
 
 export const appRouter = router({
   auth: authRouter,
-  orgs: orgsRouter,
+  businesses: businessesRouter,
   locations: locationsRouter,
   inventory: inventoryRouter,
   pos: posRouter,

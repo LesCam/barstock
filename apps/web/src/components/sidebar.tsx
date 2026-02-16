@@ -5,7 +5,12 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 
 interface SidebarProps {
-  user: { email?: string; roles?: Record<string, string> };
+  user: {
+    email?: string;
+    roles?: Record<string, string>;
+    businessName?: string;
+    highestRole?: string;
+  };
 }
 
 const navItems = [
@@ -19,6 +24,13 @@ const navItems = [
   { href: "/audit", label: "Audit Log", icon: "🔍" },
 ];
 
+function formatRole(role: string): string {
+  return role
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
 
@@ -27,6 +39,16 @@ export function Sidebar({ user }: SidebarProps) {
       <div className="border-b p-4">
         <h2 className="text-lg font-bold text-gray-900">BarStock</h2>
         <p className="mt-1 truncate text-xs text-gray-500">{user.email}</p>
+        {user.businessName && (
+          <p className="mt-0.5 truncate text-xs font-medium text-gray-700">
+            {user.businessName}
+          </p>
+        )}
+        {user.highestRole && (
+          <span className="mt-1 inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+            {formatRole(user.highestRole)}
+          </span>
+        )}
       </div>
 
       <nav className="flex-1 space-y-1 p-3">

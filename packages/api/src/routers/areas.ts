@@ -37,7 +37,7 @@ export const areasRouter = router({
     }),
 
   deleteBarArea: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       // Check if any session lines reference sub-areas of this bar area
@@ -80,7 +80,7 @@ export const areasRouter = router({
     }),
 
   deleteSubArea: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const referencedLines = await ctx.prisma.inventorySessionLine.count({

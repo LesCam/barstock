@@ -34,7 +34,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           roles: payload.roles,
           locationIds: payload.locationIds,
-          orgId: payload.orgId,
+          businessId: payload.businessId,
+          businessName: payload.businessName,
+          highestRole: payload.highestRole,
         } as any;
       },
     }),
@@ -46,7 +48,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.userId = (user as any).id;
         token.roles = (user as any).roles;
         token.locationIds = (user as any).locationIds;
-        token.orgId = (user as any).orgId;
+        token.businessId = (user as any).businessId;
+        token.businessName = (user as any).businessName;
+        token.highestRole = (user as any).highestRole;
       }
       return token;
     },
@@ -56,7 +60,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         userId: token.userId,
         roles: token.roles,
         locationIds: token.locationIds,
-        orgId: token.orgId,
+        businessId: token.businessId,
+        businessName: token.businessName,
+        highestRole: token.highestRole,
       };
       return session;
     },

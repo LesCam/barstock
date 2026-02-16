@@ -7,11 +7,11 @@ import Link from "next/link";
 export default function DashboardPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const orgId = user?.orgId;
+  const businessId = user?.businessId;
 
-  const { data: locations } = trpc.locations.listByOrg.useQuery(
-    { orgId: orgId! },
-    { enabled: !!orgId }
+  const { data: locations } = trpc.locations.listByBusiness.useQuery(
+    { businessId: businessId! },
+    { enabled: !!businessId }
   );
 
   return (
@@ -33,9 +33,9 @@ export default function DashboardPage() {
           </Link>
         ))}
 
-        {!orgId && (
+        {!businessId && (
           <div className="col-span-full rounded-lg border bg-white p-5 text-gray-500">
-            Select an organization to view locations.
+            Select a business to view locations.
           </div>
         )}
       </div>

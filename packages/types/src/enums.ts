@@ -1,8 +1,10 @@
 /** Matches PostgreSQL role_t */
 export const Role = {
-  admin: "admin",
+  platform_admin: "platform_admin",
+  business_admin: "business_admin",
   manager: "manager",
   staff: "staff",
+  auditor: "auditor",
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
@@ -99,7 +101,9 @@ export type SessionType = (typeof SessionType)[keyof typeof SessionType];
 
 /** Role hierarchy for RBAC */
 export const ROLE_HIERARCHY: Record<Role, number> = {
-  admin: 3,
-  manager: 2,
-  staff: 1,
+  platform_admin: 5,
+  business_admin: 4,
+  manager: 3,
+  staff: 2,
+  auditor: 1,
 };

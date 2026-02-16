@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import type { ExtendedPrismaClient } from "@barstock/database";
 import type { Role } from "@barstock/types";
+import { ROLE_HIERARCHY } from "@barstock/types";
 import type { UserPayload } from "../context";
 
 const SECRET_KEY = process.env.SECRET_KEY || "change-me-in-production";
@@ -53,7 +54,7 @@ export function decodeToken(token: string): Record<string, unknown> {
 }
 
 /**
- * Build the UserPayload from database user + user_locations
+ * Build the UserPayload from database user + user_locations + business
  */
 export async function buildUserPayload(
   prisma: ExtendedPrismaClient,
@@ -64,6 +65,7 @@ export async function buildUserPayload(
     include: {
       userLocations: true,
       location: true,
+      business: true,
     },
   });
 
@@ -82,14 +84,19 @@ export async function buildUserPayload(
     }
   }
 
-  // Resolve org
-  const orgId = user.location.orgId ?? undefined;
+  // Compute highest role across all locations
+  const allRoles = Object.values(roles);
+  const highestRole = allRoles.reduce((highest, r) =>
+    ROLE_HIERARCHY[r] > ROLE_HIERARCHY[highest] ? r : highest
+  , allRoles[0]);
 
   return {
     userId: user.id,
     email: user.email,
     roles,
     locationIds,
-    orgId,
+    businessId: user.businessId,
+    businessName: user.business.name,
+    highestRole,
   };
 }

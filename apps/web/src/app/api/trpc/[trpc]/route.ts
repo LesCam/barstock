@@ -14,7 +14,9 @@ const handler = async (req: Request) => {
       email: u.email,
       roles: u.roles,
       locationIds: u.locationIds,
-      orgId: u.orgId,
+      businessId: u.businessId,
+      businessName: u.businessName,
+      highestRole: u.highestRole,
     };
   }
 

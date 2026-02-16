@@ -15,7 +15,7 @@ export const scaleRouter = router({
           enabled: true,
           OR: [
             { locationId: input.locationId },
-            ...(location.orgId ? [{ orgId: location.orgId, locationId: null }] : []),
+            ...(location.businessId ? [{ businessId: location.businessId, locationId: null }] : []),
           ],
         },
         include: {
@@ -27,7 +27,7 @@ export const scaleRouter = router({
   createTemplate: protectedProcedure
     .use(requireRole("manager"))
     .input(z.object({
-      orgId: z.string().uuid().optional(),
+      businessId: z.string().uuid().optional(),
       locationId: z.string().uuid().optional(),
       inventoryItemId: z.string().uuid(),
       containerSizeMl: z.number().positive(),

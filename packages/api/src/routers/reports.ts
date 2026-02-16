@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, orgRollupQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, businessRollupQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 
@@ -25,10 +25,10 @@ export const reportsRouter = router({
       return svc.getUsageReport(input.locationId, input.fromDate, input.toDate);
     }),
 
-  orgRollup: protectedProcedure
-    .input(orgRollupQuerySchema)
+  businessRollup: protectedProcedure
+    .input(businessRollupQuerySchema)
     .query(({ ctx, input }) => {
       const svc = new ReportService(ctx.prisma);
-      return svc.getOrgRollup(input.orgId, input.asOfDate);
+      return svc.getBusinessRollup(input.businessId, input.asOfDate);
     }),
 });

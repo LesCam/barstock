@@ -10,9 +10,11 @@ datasource db {
 // ─── Enums ───────────────────────────────────────────────────
 
 enum RoleT {
-  admin
+  platform_admin
+  business_admin
   manager
   staff
+  auditor
 
   @@map("role_t")
 }
@@ -107,15 +109,16 @@ enum SessionTypeT {
 
 // ─── Multi-tenant ────────────────────────────────────────────
 
-model Org {
+model Business {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name      String
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   locations       Location[]
+  users           User[]
   bottleTemplates BottleTemplate[]
 
-  @@map("orgs")
+  @@map("businesses")
 }
 
 // ─── Core ────────────────────────────────────────────────────
@@ -125,10 +128,10 @@ model Location {
   name        String
   timezone    String   @default("America/Montreal")
   closeoutHour Int     @default(4) @map("closeout_hour")
-  orgId       String?  @map("org_id") @db.Uuid
+  businessId  String   @map("business_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
-  org              Org?               @relation(fields: [orgId], references: [id])
+  business         Business           @relation(fields: [businessId], references: [id])
   users            User[]
   userLocations    UserLocation[]
   inventoryItems   InventoryItem[]
@@ -154,10 +157,12 @@ model User {
   passwordHash String   @map("password_hash")
   role         RoleT
   locationId   String   @map("location_id") @db.Uuid
+  businessId   String   @map("business_id") @db.Uuid
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   location          Location           @relation(fields: [locationId], references: [id])
+  business          Business           @relation(fields: [businessId], references: [id])
   userLocations     UserLocation[]
   createdSessions   InventorySession[] @relation("SessionCreatedBy")
   closedSessions    InventorySession[] @relation("SessionClosedBy")
@@ -461,7 +466,7 @@ model InventorySessionLine {
 
 model BottleTemplate {
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId             String?  @map("org_id") @db.Uuid
+  businessId        String?  @map("business_id") @db.Uuid
   locationId        String?  @map("location_id") @db.Uuid
   inventoryItemId   String   @map("inventory_item_id") @db.Uuid
   containerSizeMl   Decimal  @map("container_size_ml")
@@ -471,7 +476,7 @@ model BottleTemplate {
   enabled           Boolean  @default(true)
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
-  org           Org?           @relation(fields: [orgId], references: [id])
+  business      Business?      @relation(fields: [businessId], references: [id])
   location      Location?      @relation(fields: [locationId], references: [id])
   inventoryItem InventoryItem  @relation(fields: [inventoryItemId], references: [id])
   sessionLines  InventorySessionLine[]

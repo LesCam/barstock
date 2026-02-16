@@ -14,7 +14,9 @@ interface UserPayload {
   email: string;
   roles: Record<string, string>;
   locationIds: string[];
-  orgId?: string;
+  businessId: string;
+  businessName?: string;
+  highestRole?: string;
 }
 
 interface AuthState {

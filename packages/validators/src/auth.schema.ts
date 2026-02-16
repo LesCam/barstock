@@ -15,6 +15,7 @@ export const userCreateSchema = z.object({
   password: z.string().min(8),
   role: z.nativeEnum(Role),
   locationId: z.string().uuid(),
+  businessId: z.string().uuid(),
 });
 
 export const userUpdateSchema = z.object({

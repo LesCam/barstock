@@ -9,7 +9,7 @@ export const draftRouter = router({
   ),
 
   createKegSize: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(z.object({ name: z.string().min(1), totalOz: z.number().positive() }))
     .mutation(({ ctx, input }) => ctx.prisma.kegSize.create({ data: input })),
 

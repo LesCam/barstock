@@ -1,17 +1,18 @@
-import { router, protectedProcedure, requireRole } from "../trpc";
+import { router, protectedProcedure, requireRole, requireBusinessAccess } from "../trpc";
 import { locationCreateSchema, locationUpdateSchema } from "@barstock/validators";
 import { z } from "zod";
 
 export const locationsRouter = router({
   create: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(locationCreateSchema)
     .mutation(({ ctx, input }) => ctx.prisma.location.create({ data: input })),
 
-  listByOrg: protectedProcedure
-    .input(z.object({ orgId: z.string().uuid() }))
+  listByBusiness: protectedProcedure
+    .use(requireBusinessAccess())
+    .input(z.object({ businessId: z.string().uuid() }))
     .query(({ ctx, input }) =>
-      ctx.prisma.location.findMany({ where: { orgId: input.orgId } })
+      ctx.prisma.location.findMany({ where: { businessId: input.businessId } })
     ),
 
   getById: protectedProcedure

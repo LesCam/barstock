@@ -363,3 +363,30 @@ alter table inventory_session_lines
 -- Add optional sub_area_id to bottle_measurements
 alter table bottle_measurements
   add column if not exists sub_area_id uuid references sub_areas(id);
+
+-- ===========================
+-- v1.3 PATCH: ORG → BUSINESS RENAME + EXPANDED ROLES
+-- ===========================
+
+-- Expand role_t enum: remove 'admin', add new roles
+-- NOTE: PostgreSQL does not support removing enum values, so we recreate the type.
+-- This requires a fresh DB or a migration that casts columns.
+do $$ begin
+  -- Add new enum values if they don't exist
+  alter type role_t add value if not exists 'platform_admin';
+  alter type role_t add value if not exists 'business_admin';
+  alter type role_t add value if not exists 'auditor';
+end $$;
+
+-- Rename orgs → businesses
+alter table if exists orgs rename to businesses;
+
+-- Rename org_id → business_id on locations
+alter table locations rename column org_id to business_id;
+alter table locations alter column business_id set not null;
+
+-- Add business_id to users
+alter table users add column if not exists business_id uuid references businesses(id);
+
+-- Rename org_id → business_id on bottle_templates
+alter table bottle_templates rename column org_id to business_id;

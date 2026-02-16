@@ -5,9 +5,9 @@ import { useAuth } from "@/lib/auth-context";
 export default function LocationPicker() {
   const { user, selectLocation } = useAuth();
 
-  const { data: locations, isLoading } = trpc.locations.listByOrg.useQuery(
-    { orgId: user?.orgId ?? "" },
-    { enabled: !!user?.orgId }
+  const { data: locations, isLoading } = trpc.locations.listByBusiness.useQuery(
+    { businessId: user?.businessId ?? "" },
+    { enabled: !!user?.businessId }
   );
 
   // Filter to only locations this user has access to

@@ -6,7 +6,9 @@ export interface UserPayload {
   email: string;
   roles: Record<string, Role>; // locationId -> role
   locationIds: string[];
-  orgId?: string;
+  businessId: string;
+  businessName?: string;
+  highestRole: Role;
 }
 
 export interface Context {

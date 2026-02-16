@@ -56,7 +56,7 @@ export const authRouter = router({
   me: protectedProcedure.query(({ ctx }) => ctx.user),
 
   createUser: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(userCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const passwordHash = await hashPassword(input.password);
@@ -66,12 +66,13 @@ export const authRouter = router({
           passwordHash,
           role: input.role,
           locationId: input.locationId,
+          businessId: input.businessId,
         },
       });
     }),
 
   listUsers: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .query(({ ctx }) => ctx.prisma.user.findMany({
       where: { locationId: { in: ctx.user.locationIds } },
       select: {
@@ -85,7 +86,7 @@ export const authRouter = router({
     })),
 
   updateUser: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(z.object({ userId: z.string().uuid() }).merge(userUpdateSchema))
     .mutation(async ({ ctx, input }) => {
       const { userId, ...data } = input;
@@ -97,14 +98,14 @@ export const authRouter = router({
     }),
 
   grantLocationAccess: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(userLocationCreateSchema)
     .mutation(({ ctx, input }) =>
       ctx.prisma.userLocation.create({ data: input })
     ),
 
   revokeLocationAccess: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(z.object({ userId: z.string().uuid(), locationId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       ctx.prisma.userLocation.delete({

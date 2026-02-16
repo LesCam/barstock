@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const posRouter = router({
   createConnection: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(posConnectionCreateSchema)
     .mutation(({ ctx, input }) =>
       ctx.prisma.pOSConnection.create({ data: input })
@@ -19,7 +19,7 @@ export const posRouter = router({
     ),
 
   updateConnection: protectedProcedure
-    .use(requireRole("admin"))
+    .use(requireRole("business_admin"))
     .input(z.object({ id: z.string().uuid() }).merge(posConnectionUpdateSchema))
     .mutation(({ ctx, input }) => {
       const { id, ...data } = input;

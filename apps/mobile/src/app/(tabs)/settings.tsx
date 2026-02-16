@@ -5,9 +5,9 @@ import { trpc } from "@/lib/trpc";
 export default function SettingsTab() {
   const { user, signOut, selectedLocationId, selectLocation } = useAuth();
 
-  const { data: locations } = trpc.locations.listByOrg.useQuery(
-    { orgId: user?.orgId ?? "" },
-    { enabled: !!user?.orgId && (user?.locationIds.length ?? 0) > 1 }
+  const { data: locations } = trpc.locations.listByBusiness.useQuery(
+    { businessId: user?.businessId ?? "" },
+    { enabled: !!user?.businessId && (user?.locationIds.length ?? 0) > 1 }
   );
 
   const currentLocation = locations?.find((l) => l.id === selectedLocationId);

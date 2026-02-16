@@ -81,9 +81,9 @@ export class ReportService {
     };
   }
 
-  async getOrgRollup(orgId: string, asOfDate?: Date) {
+  async getBusinessRollup(businessId: string, asOfDate?: Date) {
     const locations = await this.prisma.location.findMany({
-      where: { orgId },
+      where: { businessId },
     });
 
     const locationReports = await Promise.all(
@@ -99,10 +99,10 @@ export class ReportService {
     );
 
     return {
-      orgId,
+      businessId,
       asOfDate: asOfDate ?? new Date(),
       locations: locationReports,
-      orgTotals: {
+      businessTotals: {
         totalLocations: locations.length,
         totalValue: locationReports.reduce(
           (sum, l) => sum + l.totalValue,

@@ -6,11 +6,11 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding database...\n");
 
-  // ── Org ──────────────────────────────────────────────────────
-  const org = await prisma.org.create({
+  // ── Business ──────────────────────────────────────────────────
+  const business = await prisma.business.create({
     data: { name: "Demo Bar Group" },
   });
-  console.log(`Created org: ${org.name} (${org.id})`);
+  console.log(`Created business: ${business.name} (${business.id})`);
 
   // ── Locations ────────────────────────────────────────────────
   const location1 = await prisma.location.create({
@@ -18,7 +18,7 @@ async function main() {
       name: "The Brass Tap",
       timezone: "America/Montreal",
       closeoutHour: 4,
-      orgId: org.id,
+      businessId: business.id,
     },
   });
 
@@ -27,7 +27,7 @@ async function main() {
       name: "Riverside Lounge",
       timezone: "America/Montreal",
       closeoutHour: 3,
-      orgId: org.id,
+      businessId: business.id,
     },
   });
   console.log(`Created locations: ${location1.name}, ${location2.name}`);
@@ -39,8 +39,9 @@ async function main() {
     data: {
       email: "admin@barstock.app",
       passwordHash,
-      role: "admin",
+      role: "business_admin",
       locationId: location1.id,
+      businessId: business.id,
     },
   });
 
@@ -50,6 +51,7 @@ async function main() {
       passwordHash,
       role: "manager",
       locationId: location1.id,
+      businessId: business.id,
     },
   });
 
@@ -59,6 +61,7 @@ async function main() {
       passwordHash,
       role: "staff",
       locationId: location1.id,
+      businessId: business.id,
     },
   });
   console.log(`Created users: admin, manager, staff (password: password123)`);
@@ -68,7 +71,7 @@ async function main() {
     data: {
       userId: admin.id,
       locationId: location2.id,
-      role: "admin",
+      role: "business_admin",
     },
   });
   console.log(`Granted admin access to ${location2.name}`);
@@ -276,7 +279,7 @@ async function main() {
   // ── Bottle Templates (for scale weighing) ────────────────────
   await prisma.bottleTemplate.create({
     data: {
-      orgId: org.id,
+      businessId: business.id,
       inventoryItemId: jackDaniels.id,
       containerSizeMl: 750,
       emptyBottleWeightG: 380,
@@ -287,7 +290,7 @@ async function main() {
 
   await prisma.bottleTemplate.create({
     data: {
-      orgId: org.id,
+      businessId: business.id,
       inventoryItemId: greyGoose.id,
       containerSizeMl: 750,
       emptyBottleWeightG: 620,
@@ -298,7 +301,7 @@ async function main() {
 
   await prisma.bottleTemplate.create({
     data: {
-      orgId: org.id,
+      businessId: business.id,
       inventoryItemId: captainMorgan.id,
       containerSizeMl: 750,
       emptyBottleWeightG: 340,
@@ -388,7 +391,7 @@ async function main() {
   // ── Summary ──────────────────────────────────────────────────
   console.log("\n--- Seed Complete ---");
   console.log("Login credentials:");
-  console.log("  admin@barstock.app   / password123  (admin, both locations)");
+  console.log("  admin@barstock.app   / password123  (business_admin, both locations)");
   console.log("  manager@barstock.app / password123  (manager, The Brass Tap)");
   console.log("  staff@barstock.app   / password123  (staff, The Brass Tap)");
 }
