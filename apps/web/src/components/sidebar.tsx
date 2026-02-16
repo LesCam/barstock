@@ -22,6 +22,7 @@ const navItems = [
   { href: "/sessions", label: "Sessions", icon: "📋" },
   { href: "/reports", label: "Reports", icon: "📈" },
   { href: "/audit", label: "Audit Log", icon: "🔍" },
+  { href: "/art", label: "Art Gallery", icon: "🎨" },
 ];
 
 function formatRole(role: string): string {
@@ -53,7 +54,10 @@ export function Sidebar({ user }: SidebarProps) {
 
       <nav className="flex-1 space-y-1 p-3">
         {navItems.map((item) => {
-          const active = pathname === item.href;
+          const active =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}
