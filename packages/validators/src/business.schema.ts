@@ -9,6 +9,9 @@ export const businessCreateSchema = z.object({
     .min(2)
     .max(63)
     .regex(slugRegex, "Lowercase alphanumeric and hyphens only, 2-63 chars"),
+  contactEmail: z.string().email().optional(),
+  contactPhone: z.string().max(50).optional(),
+  address: z.string().max(500).optional(),
 });
 
 export const businessUpdateSchema = z.object({
@@ -19,6 +22,10 @@ export const businessUpdateSchema = z.object({
     .max(63)
     .regex(slugRegex, "Lowercase alphanumeric and hyphens only, 2-63 chars")
     .optional(),
+  contactEmail: z.string().email().nullish(),
+  contactPhone: z.string().max(50).nullish(),
+  address: z.string().max(500).nullish(),
+  active: z.boolean().optional(),
 });
 
 export const locationCreateSchema = z.object({

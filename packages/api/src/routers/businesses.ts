@@ -9,18 +9,51 @@ export const businessesRouter = router({
     .input(businessCreateSchema)
     .mutation(({ ctx, input }) => ctx.prisma.business.create({ data: input })),
 
-  list: protectedProcedure.query(async ({ ctx }) => {
-    if (isPlatformAdmin(ctx.user)) {
-      return ctx.prisma.business.findMany();
-    }
-    return ctx.prisma.business.findMany({ where: { id: ctx.user.businessId } });
-  }),
+  list: protectedProcedure
+    .input(
+      z
+        .object({
+          search: z.string().optional(),
+          activeOnly: z.boolean().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      if (isPlatformAdmin(ctx.user)) {
+        const where: any = {};
+        if (input?.activeOnly) {
+          where.active = true;
+        }
+        if (input?.search) {
+          where.OR = [
+            { name: { contains: input.search, mode: "insensitive" } },
+            { slug: { contains: input.search, mode: "insensitive" } },
+            { contactEmail: { contains: input.search, mode: "insensitive" } },
+          ];
+        }
+        return ctx.prisma.business.findMany({
+          where,
+          include: {
+            _count: { select: { locations: true, users: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        });
+      }
+      return ctx.prisma.business.findMany({ where: { id: ctx.user.businessId } });
+    }),
 
   getById: protectedProcedure
     .use(requireBusinessAccess())
     .input(z.object({ businessId: z.string().uuid() }))
     .query(({ ctx, input }) =>
-      ctx.prisma.business.findUniqueOrThrow({ where: { id: input.businessId } })
+      ctx.prisma.business.findUniqueOrThrow({
+        where: { id: input.businessId },
+        include: {
+          locations: true,
+          businessSettings: true,
+          _count: { select: { users: true } },
+        },
+      })
     ),
 
   update: protectedProcedure

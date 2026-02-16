@@ -52,7 +52,7 @@ export function Sidebar({ user }: SidebarProps) {
         )}
       </div>
 
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {navItems.map((item) => {
           const active =
             item.href === "/"
@@ -73,6 +73,37 @@ export function Sidebar({ user }: SidebarProps) {
             </Link>
           );
         })}
+
+        {user.highestRole === "platform_admin" && (
+          <>
+            <div className="my-2 border-t pt-2">
+              <p className="px-3 text-xs font-semibold uppercase text-gray-400">
+                Platform
+              </p>
+            </div>
+            {[{ href: "/businesses", label: "Businesses", icon: "🏢" }].map(
+              (item) => {
+                const active =
+                  pathname === item.href ||
+                  pathname.startsWith(item.href + "/");
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
+                      active
+                        ? "bg-blue-50 font-medium text-blue-700"
+                        : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <span>{item.icon}</span>
+                    {item.label}
+                  </Link>
+                );
+              }
+            )}
+          </>
+        )}
       </nav>
 
       <div className="border-t p-3">

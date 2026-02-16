@@ -518,3 +518,9 @@ create table if not exists artwork_photos (
 );
 
 create index if not exists ix_artwork_photos_artwork on artwork_photos(artwork_id);
+
+-- ── Business contact fields ─────────────────────────────────
+alter table businesses add column if not exists contact_email text;
+alter table businesses add column if not exists contact_phone text;
+alter table businesses add column if not exists address text;
+alter table businesses add column if not exists active boolean not null default true;

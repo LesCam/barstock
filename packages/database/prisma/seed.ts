@@ -6,6 +6,30 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding database...\n");
 
+  // ── Platform Business + Admin ─────────────────────────────────
+  const platformBiz = await prisma.business.create({
+    data: { name: "BarStock Platform", slug: "barstock-platform" },
+  });
+  const platformHQ = await prisma.location.create({
+    data: {
+      name: "HQ",
+      timezone: "America/Montreal",
+      closeoutHour: 0,
+      businessId: platformBiz.id,
+    },
+  });
+  const platformPasswordHash = await bcrypt.hash("password123", 12);
+  await prisma.user.create({
+    data: {
+      email: "platform@barstock.app",
+      passwordHash: platformPasswordHash,
+      role: "platform_admin",
+      locationId: platformHQ.id,
+      businessId: platformBiz.id,
+    },
+  });
+  console.log(`Created platform admin: platform@barstock.app / password123`);
+
   // ── Business ──────────────────────────────────────────────────
   const business = await prisma.business.create({
     data: { name: "Demo Bar Group", slug: "demo-bar-group" },
@@ -514,10 +538,11 @@ async function main() {
   // ── Summary ──────────────────────────────────────────────────
   console.log("\n--- Seed Complete ---");
   console.log("Login credentials:");
-  console.log("  admin@barstock.app   / password123  (business_admin, both locations)");
-  console.log("  manager@barstock.app / password123  (manager, The Brass Tap)");
-  console.log("  curator@barstock.app / password123  (curator, The Brass Tap)");
-  console.log("  staff@barstock.app   / password123  (staff, The Brass Tap)");
+  console.log("  platform@barstock.app / password123  (platform_admin)");
+  console.log("  admin@barstock.app    / password123  (business_admin, both locations)");
+  console.log("  manager@barstock.app  / password123  (manager, The Brass Tap)");
+  console.log("  curator@barstock.app  / password123  (curator, The Brass Tap)");
+  console.log("  staff@barstock.app    / password123  (staff, The Brass Tap)");
 }
 
 main()

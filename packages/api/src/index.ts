@@ -16,6 +16,7 @@ import { settingsRouter } from "./routers/settings";
 import { notificationsRouter } from "./routers/notifications";
 import { artistsRouter } from "./routers/artists";
 import { artworksRouter } from "./routers/artworks";
+import { usersRouter } from "./routers/users";
 
 export const appRouter = router({
   auth: authRouter,
@@ -35,6 +36,7 @@ export const appRouter = router({
   notifications: notificationsRouter,
   artists: artistsRouter,
   artworks: artworksRouter,
+  users: usersRouter,
 });
 
 export type AppRouter = typeof appRouter;
