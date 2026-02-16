@@ -350,7 +350,7 @@ async function main() {
     data: {
       locationId: location1.id,
       sourceSystem: "toast",
-      method: "sftp",
+      method: "sftp_export",
       status: "active",
     },
   });
