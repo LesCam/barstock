@@ -10,3 +10,4 @@ export * from "./notification.schema";
 export * from "./artist.schema";
 export * from "./artwork.schema";
 export * from "./user.schema";
+export * from "./vendor.schema";

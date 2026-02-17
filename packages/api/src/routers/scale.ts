@@ -2,6 +2,8 @@ import { router, protectedProcedure, requirePermission } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+const DEFAULT_DENSITY = 0.95;
+
 export const scaleRouter = router({
   /** Bottle templates for a location (includes org-level) */
   listTemplates: protectedProcedure
@@ -75,6 +77,83 @@ export const scaleRouter = router({
       return ctx.prisma.bottleTemplate.update({
         where: { id: input.templateId },
         data: { enabled: false },
+      });
+    }),
+
+  /** Create an inventory item + bottle template in one step (from scan-not-found flow) */
+  createItemWithTemplate: protectedProcedure
+    .use(requirePermission("canManageTareWeights"))
+    .input(z.object({
+      locationId: z.string().uuid(),
+      name: z.string().min(1).max(255),
+      barcode: z.string().optional(),
+      containerSizeMl: z.number().positive(),
+      type: z.enum(["liquor", "wine"]).default("liquor"),
+      vendorId: z.string().uuid().optional(),
+      newVendorName: z.string().min(1).max(255).optional(),
+      emptyBottleWeightG: z.number().positive().optional(),
+      fullBottleWeightG: z.number().positive().optional(),
+    }).refine(
+      (d) => d.emptyBottleWeightG || d.fullBottleWeightG,
+      { message: "At least one weight (empty or full) is required" }
+    ))
+    .mutation(async ({ ctx, input }) => {
+      const location = await ctx.prisma.location.findUniqueOrThrow({
+        where: { id: input.locationId },
+      });
+
+      return ctx.prisma.$transaction(async (tx) => {
+        // 1. Create vendor if newVendorName provided and no vendorId
+        let vendorId = input.vendorId;
+        if (input.newVendorName && !vendorId) {
+          const vendor = await tx.vendor.create({
+            data: {
+              businessId: location.businessId,
+              name: input.newVendorName,
+            },
+          });
+          vendorId = vendor.id;
+        }
+
+        // 2. Create inventory item
+        const item = await tx.inventoryItem.create({
+          data: {
+            locationId: input.locationId,
+            name: input.name,
+            type: input.type,
+            barcode: input.barcode || null,
+            vendorId: vendorId || null,
+            baseUom: "units",
+            containerSize: input.containerSizeMl,
+            containerUom: "ml",
+          },
+        });
+
+        // 3. Calculate counterpart weight from volume + density
+        let emptyG = input.emptyBottleWeightG;
+        let fullG = input.fullBottleWeightG;
+        const liquidWeightG = input.containerSizeMl * DEFAULT_DENSITY;
+
+        if (emptyG && !fullG) {
+          fullG = emptyG + liquidWeightG;
+        } else if (fullG && !emptyG) {
+          emptyG = fullG - liquidWeightG;
+        }
+
+        // 4. Create bottle template
+        const template = await tx.bottleTemplate.create({
+          data: {
+            businessId: location.businessId,
+            locationId: input.locationId,
+            inventoryItemId: item.id,
+            containerSizeMl: input.containerSizeMl,
+            emptyBottleWeightG: emptyG!,
+            fullBottleWeightG: fullG!,
+            densityGPerMl: DEFAULT_DENSITY,
+          },
+        });
+
+        return { item, template };
       });
     }),
 

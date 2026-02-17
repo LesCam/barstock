@@ -580,3 +580,22 @@ alter table keg_sizes alter column business_id set not null;
 -- ===========================
 
 ALTER TABLE user_locations ADD COLUMN IF NOT EXISTS permissions jsonb NOT NULL DEFAULT '{}';
+
+-- ===========================
+-- v1.13 PATCH: VENDORS TABLE
+-- ===========================
+
+CREATE TABLE IF NOT EXISTS vendors (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id   UUID NOT NULL REFERENCES businesses(id),
+  name          TEXT NOT NULL,
+  contact_email TEXT,
+  contact_phone TEXT,
+  address       TEXT,
+  active        BOOLEAN NOT NULL DEFAULT true,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_vendors_business ON vendors(business_id);
+
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS vendor_id UUID REFERENCES vendors(id);

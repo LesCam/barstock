@@ -14,6 +14,7 @@ import { trpc } from "@/lib/trpc";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 import { TareWeightEditModal } from "@/components/TareWeightEditModal";
+import { CreateItemFromScanModal } from "@/components/CreateItemFromScanModal";
 
 const DEFAULT_DENSITY = 0.95;
 
@@ -44,6 +45,7 @@ export default function TareWeightsScreen() {
   const [showAddSearch, setShowAddSearch] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TemplateRow | null>(null);
   const [addingItem, setAddingItem] = useState<SelectedItem | null>(null);
+  const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const utils = trpc.useUtils();
@@ -136,7 +138,7 @@ export default function TareWeightsScreen() {
         flatListRef.current?.scrollToIndex({ index: idx, animated: true });
       }
     } else {
-      // Not found — try to look up the item and prompt to add
+      // Not found — try to look up the item; if no item exists, offer quick-create
       try {
         const item = await utils.inventory.getByBarcode.fetch({
           locationId,
@@ -145,10 +147,10 @@ export default function TareWeightsScreen() {
         if (item) {
           setAddingItem(item as SelectedItem);
         } else {
-          Alert.alert("Not Found", `No item found for barcode ${barcode}`);
+          setCreatingFromScan({ barcode });
         }
       } catch {
-        Alert.alert("Not Found", `No item found for barcode ${barcode}`);
+        setCreatingFromScan({ barcode });
       }
     }
   }
@@ -285,6 +287,19 @@ export default function TareWeightsScreen() {
           containerSizeMl={Number(addingItem.containerSize) || 750}
           onSave={handleAddSave}
           onCancel={() => setAddingItem(null)}
+        />
+      )}
+
+      {/* Quick-create from scan (item not found) */}
+      {creatingFromScan && (
+        <CreateItemFromScanModal
+          barcode={creatingFromScan.barcode}
+          locationId={locationId}
+          onSuccess={() => {
+            utils.scale.listTemplates.invalidate({ locationId });
+            setCreatingFromScan(null);
+          }}
+          onCancel={() => setCreatingFromScan(null)}
         />
       )}
     </View>
