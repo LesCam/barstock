@@ -19,6 +19,7 @@ export const userCreateSchema = z.object({
   firstName: z.string().max(100).optional(),
   lastName: z.string().max(100).optional(),
   phone: z.string().max(100).optional(),
+  pin: z.string().length(4).regex(/^\d{4}$/).optional(),
 });
 
 export const userUpdateSchema = z.object({
@@ -30,6 +31,7 @@ export const userUpdateSchema = z.object({
   firstName: z.string().max(100).nullish(),
   lastName: z.string().max(100).nullish(),
   phone: z.string().max(100).nullish(),
+  pin: z.string().length(4).regex(/^\d{4}$/).nullish(),
 });
 
 export const userLocationCreateSchema = z.object({

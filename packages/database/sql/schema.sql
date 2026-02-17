@@ -532,3 +532,4 @@ alter table businesses add column if not exists active boolean not null default 
 alter table users add column if not exists first_name text;
 alter table users add column if not exists last_name text;
 alter table users add column if not exists phone text;
+alter table users add column if not exists pin char(4);

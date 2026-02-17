@@ -71,6 +71,7 @@ export const authRouter = router({
           firstName: input.firstName,
           lastName: input.lastName,
           phone: input.phone,
+          pin: input.pin,
         },
       });
     }),
@@ -100,6 +101,7 @@ export const authRouter = router({
           firstName: true,
           lastName: true,
           phone: true,
+          pin: true,
           role: true,
           locationId: true,
           isActive: true,
@@ -125,6 +127,7 @@ export const authRouter = router({
       if (data.firstName !== undefined) updateData.firstName = data.firstName;
       if (data.lastName !== undefined) updateData.lastName = data.lastName;
       if (data.phone !== undefined) updateData.phone = data.phone;
+      if (data.pin !== undefined) updateData.pin = data.pin;
       return ctx.prisma.user.update({ where: { id: userId }, data: updateData });
     }),
 
@@ -140,6 +143,7 @@ export const authRouter = router({
           firstName: true,
           lastName: true,
           phone: true,
+          pin: true,
           role: true,
           locationId: true,
           isActive: true,

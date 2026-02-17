@@ -61,6 +61,7 @@ function InviteStaffForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
   const [role, setRole] = useState<string>("staff");
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>(
     locations[0] ? [locations[0].id] : []
@@ -83,6 +84,7 @@ function InviteStaffForm({
       setEmail("");
       setPassword("");
       setPhone("");
+      setPin("");
       setRole("staff");
       setSelectedLocationIds(locations[0] ? [locations[0].id] : []);
       onSuccess();
@@ -107,6 +109,7 @@ function InviteStaffForm({
       firstName: firstName || undefined,
       lastName: lastName || undefined,
       phone: stripPhone(phone) ?? undefined,
+      pin: pin || undefined,
     });
   }
 
@@ -172,6 +175,17 @@ function InviteStaffForm({
             onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
             className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
             placeholder="(555)555-5555"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-[#EAF0FF]/80">Mobile PIN</label>
+          <input
+            type="text"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            maxLength={4}
+            className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] tracking-widest"
+            placeholder="4-digit code"
           />
         </div>
         <div>
@@ -363,6 +377,7 @@ function EditStaffModal({
   const [firstName, setFirstName] = useState<string | undefined>();
   const [lastName, setLastName] = useState<string | undefined>();
   const [phone, setPhone] = useState<string | undefined>();
+  const [pin, setPin] = useState<string | undefined>();
   const [role, setRole] = useState<string | undefined>();
   const [isActive, setIsActive] = useState<boolean | undefined>();
 
@@ -371,6 +386,7 @@ function EditStaffModal({
     setFirstName(user.firstName ?? "");
     setLastName(user.lastName ?? "");
     setPhone(formatPhoneInput(user.phone ?? ""));
+    setPin(user.pin?.trim() ?? "");
     setRole(user.role);
     setIsActive(user.isActive);
   }
@@ -390,6 +406,7 @@ function EditStaffModal({
       firstName: firstName || null,
       lastName: lastName || null,
       phone: stripPhone(phone),
+      pin: pin || null,
       isActive,
     });
   }
@@ -449,6 +466,17 @@ function EditStaffModal({
                   onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
                   placeholder="(555)555-5555"
                   className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#EAF0FF]/80">Mobile PIN</label>
+                <input
+                  type="text"
+                  value={pin ?? ""}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  maxLength={4}
+                  placeholder="4-digit code"
+                  className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] tracking-widest"
                 />
               </div>
               <div>
@@ -526,6 +554,7 @@ function StaffTable({
     firstName: string | null;
     lastName: string | null;
     phone: string | null;
+    pin: string | null;
     role: string;
     isActive: boolean;
     location: { name: string };
@@ -543,6 +572,7 @@ function StaffTable({
             <th className="px-4 py-3">Role</th>
             <th className="px-4 py-3">Locations</th>
             <th className="px-4 py-3">Phone</th>
+            <th className="px-4 py-3">PIN</th>
             <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3">Actions</th>
           </tr>
@@ -574,6 +604,7 @@ function StaffTable({
                 </div>
               </td>
               <td className="px-4 py-3 text-[#EAF0FF]/70">{formatPhone(u.phone)}</td>
+              <td className="px-4 py-3 text-[#EAF0FF]/70 tracking-widest font-mono">{u.pin?.trim() || "—"}</td>
               <td className="px-4 py-3">
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs ${
@@ -597,7 +628,7 @@ function StaffTable({
           ))}
           {users.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-4 py-8 text-center text-[#EAF0FF]/40">
+              <td colSpan={8} className="px-4 py-8 text-center text-[#EAF0FF]/40">
                 No staff members found.
               </td>
             </tr>

@@ -206,6 +206,7 @@ model User {
   firstName    String?  @map("first_name")
   lastName     String?  @map("last_name")
   phone        String?
+  pin          String?  @db.Char(4)
   passwordHash String   @map("password_hash")
   role         RoleT
   locationId   String   @map("location_id") @db.Uuid
