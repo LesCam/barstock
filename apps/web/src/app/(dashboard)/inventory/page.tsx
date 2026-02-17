@@ -25,6 +25,10 @@ const UOM_LABELS: Record<string, string> = {
   grams: "Grams",
 };
 
+function baseUomForType(type: string): string {
+  return type === InventoryItemType.keg_beer ? UOM.oz : UOM.units;
+}
+
 export default function InventoryPage() {
   const router = useRouter();
   const { data: session } = useSession();
@@ -50,7 +54,6 @@ export default function InventoryPage() {
   // Create form state
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<string>(InventoryItemType.packaged_beer);
-  const [newBaseUom, setNewBaseUom] = useState<string>(UOM.units);
   const [newBarcode, setNewBarcode] = useState("");
   const [newVendorSku, setNewVendorSku] = useState("");
   const [newPackSize, setNewPackSize] = useState("");
@@ -69,7 +72,6 @@ export default function InventoryPage() {
   function resetCreateForm() {
     setNewName("");
     setNewType(InventoryItemType.packaged_beer);
-    setNewBaseUom(UOM.units);
     setNewBarcode("");
     setNewVendorSku("");
     setNewPackSize("");
@@ -83,7 +85,7 @@ export default function InventoryPage() {
       locationId,
       name: newName.trim(),
       type: newType as any,
-      baseUom: newBaseUom as any,
+      baseUom: baseUomForType(newType) as any,
       barcode: newBarcode.trim() || undefined,
       vendorSku: newVendorSku.trim() || undefined,
       packSize: newPackSize ? Number(newPackSize) : undefined,
@@ -172,21 +174,6 @@ export default function InventoryPage() {
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
               >
                 {Object.entries(TYPE_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
-                Base UOM
-                <span title="How you count this item in inventory. Use 'Units' for bottles/cans, 'Oz' or 'mL' for draft lines." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
-              </label>
-              <select
-                value={newBaseUom}
-                onChange={(e) => setNewBaseUom(e.target.value)}
-                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
-              >
-                {Object.entries(UOM_LABELS).map(([val, label]) => (
                   <option key={val} value={val}>{label}</option>
                 ))}
               </select>

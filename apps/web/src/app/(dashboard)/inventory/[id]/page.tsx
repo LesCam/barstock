@@ -22,6 +22,10 @@ const UOM_LABELS: Record<string, string> = {
   grams: "Grams",
 };
 
+function baseUomForType(type: string): string {
+  return type === InventoryItemType.keg_beer ? UOM.oz : UOM.units;
+}
+
 export default function InventoryDetailPage({
   params,
 }: {
@@ -44,7 +48,6 @@ export default function InventoryDetailPage({
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("");
-  const [editBaseUom, setEditBaseUom] = useState("");
   const [editBarcode, setEditBarcode] = useState("");
   const [editVendorSku, setEditVendorSku] = useState("");
   const [editPackSize, setEditPackSize] = useState("");
@@ -78,7 +81,6 @@ export default function InventoryDetailPage({
     if (!item) return;
     setEditName(item.name);
     setEditType(item.type);
-    setEditBaseUom(item.baseUom);
     setEditBarcode(item.barcode ?? "");
     setEditVendorSku(item.vendorSku ?? "");
     setEditPackSize(item.packSize != null ? String(item.packSize) : "");
@@ -92,7 +94,7 @@ export default function InventoryDetailPage({
       id,
       name: editName.trim(),
       type: editType as any,
-      baseUom: editBaseUom as any,
+      baseUom: baseUomForType(editType) as any,
       barcode: editBarcode.trim() || null,
       vendorSku: editVendorSku.trim() || null,
       packSize: editPackSize ? Number(editPackSize) : null,
@@ -204,21 +206,6 @@ export default function InventoryDetailPage({
                 </select>
               </div>
               <div>
-                <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
-                  Base UOM
-                  <span title="How you count this item in inventory. Use 'Units' for bottles/cans, 'Oz' or 'mL' for draft lines." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
-                </label>
-                <select
-                  value={editBaseUom}
-                  onChange={(e) => setEditBaseUom(e.target.value)}
-                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
-                >
-                  {Object.entries(UOM_LABELS).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
                 <label className="mb-1 block text-xs text-[#EAF0FF]/60">Barcode</label>
                 <input
                   type="text"
@@ -301,10 +288,6 @@ export default function InventoryDetailPage({
             <div>
               <dt className="text-[#EAF0FF]/60">Type</dt>
               <dd className="text-[#EAF0FF]">{TYPE_LABELS[item.type] ?? item.type}</dd>
-            </div>
-            <div>
-              <dt className="text-[#EAF0FF]/60">Base UOM</dt>
-              <dd className="text-[#EAF0FF]">{UOM_LABELS[item.baseUom] ?? item.baseUom}</dd>
             </div>
             <div>
               <dt className="text-[#EAF0FF]/60">Barcode</dt>
