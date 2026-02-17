@@ -308,7 +308,7 @@ export default function DraftPage() {
                 <option value="">Select keg size…</option>
                 {kegSizes?.map((s: any) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({Number(s.totalOz)} oz)
+                    {s.name}
                   </option>
                 ))}
               </select>
@@ -316,7 +316,7 @@ export default function DraftPage() {
                 type="number"
                 value={receiveOz}
                 onChange={(e) => setReceiveOz(e.target.value)}
-                placeholder="Starting oz"
+                placeholder="Starting volume (L)"
                 required
                 min={1}
                 className="rounded border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
@@ -379,7 +379,7 @@ export default function DraftPage() {
                   <tr className="hover:bg-[#16283F]/60">
                     <td className="px-4 py-3">{keg.inventoryItem.name}</td>
                     <td className="px-4 py-3">
-                      {keg.kegSize.name} ({Number(keg.kegSize.totalOz)} oz)
+                      {keg.kegSize.name}
                     </td>
                     <td className="px-4 py-3">
                       <span
