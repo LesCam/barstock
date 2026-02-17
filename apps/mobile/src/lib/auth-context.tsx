@@ -13,6 +13,7 @@ interface UserPayload {
   userId: string;
   email: string;
   roles: Record<string, string>;
+  permissions?: Record<string, Record<string, boolean>>;
   locationIds: string[];
   businessId: string;
   businessName?: string;
@@ -67,6 +68,13 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
+}
+
+export function usePermission(key: string): boolean {
+  const { user, selectedLocationId } = useAuth();
+  if (!user || !selectedLocationId) return false;
+  if (user.highestRole === "business_admin" || user.highestRole === "platform_admin") return true;
+  return user.permissions?.[selectedLocationId]?.[key] === true;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

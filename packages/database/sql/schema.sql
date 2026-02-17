@@ -574,3 +574,9 @@ alter table locations add column if not exists phone text;
 alter table keg_sizes add column if not exists business_id uuid references businesses(id);
 update keg_sizes set business_id = (select id from businesses limit 1) where business_id is null;
 alter table keg_sizes alter column business_id set not null;
+
+-- ===========================
+-- v1.12 PATCH: PERMISSIONS JSONB ON USER_LOCATIONS
+-- ===========================
+
+ALTER TABLE user_locations ADD COLUMN IF NOT EXISTS permissions jsonb NOT NULL DEFAULT '{}';

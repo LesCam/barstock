@@ -1,4 +1,5 @@
-import { router, protectedProcedure, requireRole } from "../trpc";
+import { router, protectedProcedure, requirePermission } from "../trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 export const scaleRouter = router({
@@ -19,13 +20,13 @@ export const scaleRouter = router({
           ],
         },
         include: {
-          inventoryItem: { select: { name: true, type: true } },
+          inventoryItem: { select: { name: true, type: true, barcode: true } },
         },
       });
     }),
 
   createTemplate: protectedProcedure
-    .use(requireRole("manager"))
+    .use(requirePermission("canManageTareWeights"))
     .input(z.object({
       businessId: z.string().uuid().optional(),
       locationId: z.string().uuid().optional(),
@@ -38,6 +39,44 @@ export const scaleRouter = router({
     .mutation(({ ctx, input }) =>
       ctx.prisma.bottleTemplate.create({ data: input })
     ),
+
+  updateTemplate: protectedProcedure
+    .use(requirePermission("canManageTareWeights"))
+    .input(z.object({
+      templateId: z.string().uuid(),
+      emptyBottleWeightG: z.number().positive().optional(),
+      fullBottleWeightG: z.number().positive().optional(),
+      densityGPerMl: z.number().positive().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const template = await ctx.prisma.bottleTemplate.findUniqueOrThrow({
+        where: { id: input.templateId },
+      });
+      if (template.businessId && template.businessId !== ctx.user.businessId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Template belongs to another business" });
+      }
+      const { templateId, ...data } = input;
+      return ctx.prisma.bottleTemplate.update({
+        where: { id: templateId },
+        data,
+      });
+    }),
+
+  deleteTemplate: protectedProcedure
+    .use(requirePermission("canManageTareWeights"))
+    .input(z.object({ templateId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const template = await ctx.prisma.bottleTemplate.findUniqueOrThrow({
+        where: { id: input.templateId },
+      });
+      if (template.businessId && template.businessId !== ctx.user.businessId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Template belongs to another business" });
+      }
+      return ctx.prisma.bottleTemplate.update({
+        where: { id: input.templateId },
+        data: { enabled: false },
+      });
+    }),
 
   /** Record a bottle measurement */
   recordMeasurement: protectedProcedure

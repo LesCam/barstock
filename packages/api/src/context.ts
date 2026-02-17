@@ -5,6 +5,7 @@ export interface UserPayload {
   userId: string;
   email: string;
   roles: Record<string, Role>; // locationId -> role
+  permissions: Record<string, Record<string, boolean>>; // locationId -> { permKey: bool }
   locationIds: string[];
   businessId: string;
   businessName?: string;

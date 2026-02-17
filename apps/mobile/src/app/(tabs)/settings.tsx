@@ -1,9 +1,12 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "expo-router";
+import { useAuth, usePermission } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 
 export default function SettingsTab() {
+  const router = useRouter();
   const { user, signOut, selectedLocationId, selectLocation } = useAuth();
+  const canManageTareWeights = usePermission("canManageTareWeights");
 
   const { data: locations } = trpc.locations.listByBusiness.useQuery(
     { businessId: user?.businessId ?? "" },
@@ -42,6 +45,14 @@ export default function SettingsTab() {
         <TouchableOpacity style={styles.card}>
           <Text style={styles.rowText}>Connect Bluetooth Scale</Text>
         </TouchableOpacity>
+        {canManageTareWeights && (
+          <TouchableOpacity
+            style={[styles.card, { marginTop: 8 }]}
+            onPress={() => router.push("/tare-weights")}
+          >
+            <Text style={styles.rowText}>Manage Tare Weights</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.section}>

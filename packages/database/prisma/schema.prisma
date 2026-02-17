@@ -237,9 +237,10 @@ model User {
 }
 
 model UserLocation {
-  userId     String @map("user_id") @db.Uuid
-  locationId String @map("location_id") @db.Uuid
-  role       RoleT
+  userId      String @map("user_id") @db.Uuid
+  locationId  String @map("location_id") @db.Uuid
+  role        RoleT
+  permissions Json?  @default("{}") @map("permissions")
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)

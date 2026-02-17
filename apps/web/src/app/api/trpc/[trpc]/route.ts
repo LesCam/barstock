@@ -13,6 +13,7 @@ const handler = async (req: Request) => {
       userId: u.userId,
       email: u.email,
       roles: u.roles,
+      permissions: u.permissions ?? {},
       locationIds: u.locationIds,
       businessId: u.businessId,
       businessName: u.businessName,

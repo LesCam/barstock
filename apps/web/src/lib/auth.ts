@@ -33,6 +33,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           roles: payload.roles,
+          permissions: payload.permissions,
           locationIds: payload.locationIds,
           businessId: payload.businessId,
           businessName: payload.businessName,
@@ -47,6 +48,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.userId = (user as any).id;
         token.roles = (user as any).roles;
+        token.permissions = (user as any).permissions;
         token.locationIds = (user as any).locationIds;
         token.businessId = (user as any).businessId;
         token.businessName = (user as any).businessName;
@@ -59,6 +61,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ...session.user,
         userId: token.userId,
         roles: token.roles,
+        permissions: token.permissions,
         locationIds: token.locationIds,
         businessId: token.businessId,
         businessName: token.businessName,

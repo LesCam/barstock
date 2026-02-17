@@ -136,6 +136,41 @@ export function requireCapability(key: keyof CapabilityToggles) {
   });
 }
 
+/** Require a permission key to be true for the user in any of their locations */
+export function requirePermission(key: string) {
+  return middleware(async ({ ctx, next }) => {
+    if (!ctx.user) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+
+    // Platform admins and business admins bypass permission checks
+    if (isPlatformAdmin(ctx.user)) {
+      return next({ ctx: { ...ctx, user: ctx.user } });
+    }
+    const roles = ctx.user.roles as Record<string, Role>;
+    const isBusinessAdmin = Object.values(roles).some(
+      (r) => r === Role.business_admin
+    );
+    if (isBusinessAdmin) {
+      return next({ ctx: { ...ctx, user: ctx.user } });
+    }
+
+    const permissions = ctx.user.permissions ?? {};
+    const hasPermission = Object.values(permissions).some(
+      (locPerms) => locPerms[key] === true
+    );
+
+    if (!hasPermission) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: `Missing permission: ${key}`,
+      });
+    }
+
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  });
+}
+
 /** Check role for specific location */
 export function checkLocationRole(
   locationId: string,

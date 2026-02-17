@@ -1,0 +1,249 @@
+import { useState } from "react";
+import { View, Text, TouchableOpacity, Modal, StyleSheet } from "react-native";
+import { NumericKeypad } from "./NumericKeypad";
+
+interface TareWeightEditModalProps {
+  visible: boolean;
+  itemName: string;
+  currentTareWeightG?: number;
+  currentFullWeightG?: number;
+  containerSizeMl: number;
+  onSave: (emptyBottleWeightG: number, fullBottleWeightG: number) => void;
+  onCancel: () => void;
+}
+
+type WeightTab = "tare" | "full";
+
+const DEFAULT_DENSITY = 0.95; // g/mL approximate for spirits
+
+export function TareWeightEditModal({
+  visible,
+  itemName,
+  currentTareWeightG,
+  currentFullWeightG,
+  containerSizeMl,
+  onSave,
+  onCancel,
+}: TareWeightEditModalProps) {
+  const [activeTab, setActiveTab] = useState<WeightTab>("tare");
+  const [tareValue, setTareValue] = useState(
+    currentTareWeightG != null ? String(Math.round(currentTareWeightG)) : ""
+  );
+  const [fullValue, setFullValue] = useState(
+    currentFullWeightG != null ? String(Math.round(currentFullWeightG)) : ""
+  );
+
+  const tareG = parseInt(tareValue) || 0;
+  const fullG = parseInt(fullValue) || 0;
+
+  // Auto-calculate the counterpart
+  const autoFullG = tareG > 0 ? tareG + containerSizeMl * DEFAULT_DENSITY : 0;
+  const autoTareG = fullG > 0 && containerSizeMl > 0 ? fullG - containerSizeMl * DEFAULT_DENSITY : 0;
+
+  const effectiveTareG = tareG > 0 ? tareG : Math.max(0, Math.round(autoTareG));
+  const effectiveFullG = fullG > 0 ? fullG : Math.round(autoFullG);
+
+  function handleSave() {
+    if (effectiveTareG <= 0 && effectiveFullG <= 0) return;
+    onSave(effectiveTareG, effectiveFullG);
+  }
+
+  const canSave = effectiveTareG > 0 || effectiveFullG > 0;
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.backdrop}>
+        <View style={styles.sheet}>
+          <Text style={styles.title} numberOfLines={1}>
+            {itemName}
+          </Text>
+
+          {/* Tab toggle */}
+          <View style={styles.tabRow}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === "tare" && styles.tabActive]}
+              onPress={() => setActiveTab("tare")}
+            >
+              <Text
+                style={[styles.tabText, activeTab === "tare" && styles.tabTextActive]}
+              >
+                Tare Weight
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === "full" && styles.tabActive]}
+              onPress={() => setActiveTab("full")}
+            >
+              <Text
+                style={[styles.tabText, activeTab === "full" && styles.tabTextActive]}
+              >
+                Full Weight
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Weight display */}
+          <View style={styles.displayArea}>
+            {activeTab === "tare" ? (
+              <>
+                <Text style={styles.weightValue}>
+                  {tareG > 0 ? (tareG / 1000).toFixed(3) : "0.000"} kg
+                </Text>
+                <Text style={styles.weightGrams}>{tareG} g</Text>
+                {tareG > 0 && (
+                  <Text style={styles.autoCalc}>
+                    Full bottle: ~{(autoFullG / 1000).toFixed(3)} kg (auto)
+                  </Text>
+                )}
+              </>
+            ) : (
+              <>
+                <Text style={styles.weightValue}>
+                  {fullG > 0 ? (fullG / 1000).toFixed(3) : "0.000"} kg
+                </Text>
+                <Text style={styles.weightGrams}>{fullG} g</Text>
+                {fullG > 0 && autoTareG > 0 && (
+                  <Text style={styles.autoCalc}>
+                    Tare weight: ~{(autoTareG / 1000).toFixed(3)} kg (auto)
+                  </Text>
+                )}
+              </>
+            )}
+            <Text style={styles.containerInfo}>
+              Container: {containerSizeMl} ml
+            </Text>
+          </View>
+
+          {/* Keypad */}
+          <NumericKeypad
+            value={activeTab === "tare" ? tareValue : fullValue}
+            onChange={activeTab === "tare" ? setTareValue : setFullValue}
+            maxLength={5}
+          />
+
+          {/* Actions */}
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
+              onPress={handleSave}
+              disabled={!canSave}
+            >
+              <Text style={styles.saveBtnText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20,
+    paddingBottom: 34,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1a1a1a",
+    marginBottom: 12,
+  },
+  tabRow: {
+    flexDirection: "row",
+    backgroundColor: "#f3f4f6",
+    borderRadius: 8,
+    padding: 3,
+    marginBottom: 16,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  tabActive: {
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#666",
+  },
+  tabTextActive: {
+    color: "#1a1a1a",
+    fontWeight: "600",
+  },
+  displayArea: {
+    alignItems: "center",
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  weightValue: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#1a1a1a",
+  },
+  weightGrams: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 2,
+  },
+  autoCalc: {
+    fontSize: 13,
+    color: "#2563eb",
+    marginTop: 6,
+  },
+  containerInfo: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 4,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+  },
+  saveBtn: {
+    flex: 1,
+    backgroundColor: "#2563eb",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  saveBtnDisabled: {
+    opacity: 0.4,
+  },
+  saveBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#f3f4f6",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  cancelBtnText: {
+    color: "#666",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+});

@@ -360,6 +360,57 @@ function LocationAccessSection({
   );
 }
 
+// ── Feature Permissions Section ───────────────────────────────
+
+function FeaturePermissionsSection({
+  userId,
+  primaryLocationId,
+  userRole,
+}: {
+  userId: string;
+  primaryLocationId: string;
+  userRole: string;
+}) {
+  const { data: permissions, refetch } = trpc.auth.getUserPermissions.useQuery({ userId });
+  const setPermMutation = trpc.auth.setUserPermission.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  // Don't show for business_admin or platform_admin — they always have full access
+  if (userRole === "business_admin" || userRole === "platform_admin") return null;
+
+  const isManager = userRole === "manager" || userRole === "curator";
+  const tareWeightEnabled = permissions?.[primaryLocationId]?.canManageTareWeights ?? false;
+
+  return (
+    <div className="mt-4">
+      <h4 className="text-sm font-semibold text-[#EAF0FF]/80">Feature Permissions</h4>
+      <div className="mt-2 space-y-1 rounded-md border border-white/10 bg-[#0B1623] p-3">
+        <label className="flex items-center gap-2 text-sm text-[#EAF0FF] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={tareWeightEnabled}
+            disabled={setPermMutation.isPending}
+            onChange={(e) =>
+              setPermMutation.mutate({
+                userId,
+                locationId: primaryLocationId,
+                permissionKey: "canManageTareWeights",
+                value: e.target.checked,
+              })
+            }
+            className="rounded border-white/10 bg-[#0B1623]"
+          />
+          Manage Tare Weights
+          <span className="text-xs text-[#EAF0FF]/40">
+            {isManager ? "(default: ON)" : "(default: OFF)"}
+          </span>
+        </label>
+      </div>
+    </div>
+  );
+}
+
 // ── Edit Staff Modal ──────────────────────────────────────────
 
 function EditStaffModal({
@@ -418,7 +469,7 @@ function EditStaffModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg rounded-lg border border-white/10 bg-[#16283F] p-6 shadow-xl">
+      <div className="w-full max-w-lg rounded-lg border border-white/10 bg-[#16283F] p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-[#EAF0FF]">Edit Staff Member</h2>
           <button onClick={onClose} className="text-[#EAF0FF]/40 hover:text-[#EAF0FF]">
@@ -513,6 +564,12 @@ function EditStaffModal({
               allLocations={allLocations}
               userRole={role ?? user.role}
               onUpdated={onUpdated}
+            />
+
+            <FeaturePermissionsSection
+              userId={user.id}
+              primaryLocationId={user.locationId}
+              userRole={role ?? user.role}
             />
 
             <div className="mt-4 flex items-center gap-3 border-t border-white/10 pt-4">

@@ -53,6 +53,13 @@ export function decodeToken(token: string): Record<string, unknown> {
   }
 }
 
+/** Derive default permissions from a role */
+export function deriveDefaultPermissions(role: Role): Record<string, boolean> {
+  return {
+    canManageTareWeights: ROLE_HIERARCHY[role] >= ROLE_HIERARCHY["manager"],
+  };
+}
+
 /**
  * Build the UserPayload from database user + user_locations + business
  */
@@ -70,11 +77,13 @@ export async function buildUserPayload(
   });
 
   const roles: Record<string, Role> = {};
+  const permissions: Record<string, Record<string, boolean>> = {};
   const locationIds: string[] = [];
 
   // Primary location
   roles[user.locationId] = user.role as Role;
   locationIds.push(user.locationId);
+  permissions[user.locationId] = deriveDefaultPermissions(user.role as Role);
 
   // Additional locations from user_locations
   for (const ul of user.userLocations) {
@@ -82,6 +91,17 @@ export async function buildUserPayload(
     if (!locationIds.includes(ul.locationId)) {
       locationIds.push(ul.locationId);
     }
+    // Role defaults, then merge stored overrides
+    const defaults = deriveDefaultPermissions(ul.role as Role);
+    const stored = (ul.permissions as Record<string, boolean>) ?? {};
+    permissions[ul.locationId] = { ...defaults, ...stored };
+  }
+
+  // For primary location, also check if there's a user_locations row with overrides
+  const primaryUl = user.userLocations.find((ul) => ul.locationId === user.locationId);
+  if (primaryUl) {
+    const stored = (primaryUl.permissions as Record<string, boolean>) ?? {};
+    permissions[user.locationId] = { ...permissions[user.locationId], ...stored };
   }
 
   // Compute highest role across all locations
@@ -94,6 +114,7 @@ export async function buildUserPayload(
     userId: user.id,
     email: user.email,
     roles,
+    permissions,
     locationIds,
     businessId: user.businessId,
     businessName: user.business.name,

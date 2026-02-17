@@ -11,6 +11,7 @@ import {
   createRefreshToken,
   decodeToken,
   buildUserPayload,
+  deriveDefaultPermissions,
 } from "../services/auth.service";
 
 export const authRouter = router({
@@ -319,5 +320,78 @@ export const authRouter = router({
       ]);
 
       return { success: true };
+    }),
+
+  setUserPermission: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({
+      userId: z.string().uuid(),
+      locationId: z.string().uuid(),
+      permissionKey: z.string(),
+      value: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const targetUser = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: input.userId, businessId: ctx.user.businessId },
+      });
+
+      const existing = await ctx.prisma.userLocation.findUnique({
+        where: { userId_locationId: { userId: input.userId, locationId: input.locationId } },
+      });
+
+      const newPerms = {
+        ...((existing?.permissions as Record<string, boolean>) ?? {}),
+        [input.permissionKey]: input.value,
+      };
+
+      if (existing) {
+        await ctx.prisma.userLocation.update({
+          where: { userId_locationId: { userId: input.userId, locationId: input.locationId } },
+          data: { permissions: newPerms },
+        });
+      } else {
+        // Primary location without a user_locations row — create one
+        await ctx.prisma.userLocation.create({
+          data: {
+            userId: input.userId,
+            locationId: input.locationId,
+            role: targetUser.role,
+            permissions: newPerms,
+          },
+        });
+      }
+
+      return { success: true };
+    }),
+
+  getUserPermissions: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ userId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const targetUser = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: input.userId, businessId: ctx.user.businessId },
+        include: { userLocations: true },
+      });
+
+      const result: Record<string, Record<string, boolean>> = {};
+
+      // Primary location defaults
+      result[targetUser.locationId] = deriveDefaultPermissions(targetUser.role as any);
+
+      // Merge stored overrides from user_locations
+      for (const ul of targetUser.userLocations) {
+        const defaults = deriveDefaultPermissions(ul.role as any);
+        const stored = (ul.permissions as Record<string, boolean>) ?? {};
+        result[ul.locationId] = { ...defaults, ...stored };
+      }
+
+      // Primary location may also have a user_locations row
+      const primaryUl = targetUser.userLocations.find((ul) => ul.locationId === targetUser.locationId);
+      if (primaryUl) {
+        const stored = (primaryUl.permissions as Record<string, boolean>) ?? {};
+        result[targetUser.locationId] = { ...result[targetUser.locationId], ...stored };
+      }
+
+      return result;
     }),
 });
