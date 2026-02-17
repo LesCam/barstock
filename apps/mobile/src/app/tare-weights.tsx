@@ -137,6 +137,18 @@ export default function TareWeightsScreen() {
       if (idx >= 0) {
         flatListRef.current?.scrollToIndex({ index: idx, animated: true });
       }
+      const tareKg = (Number(found.emptyBottleWeightG) / 1000).toFixed(3);
+      Alert.alert(
+        "Already Exists",
+        `"${found.inventoryItem.name}" already has a tare weight of ${tareKg} kg.`,
+        [
+          {
+            text: "Edit",
+            onPress: () => setEditingTemplate(found),
+          },
+          { text: "OK", style: "cancel" },
+        ]
+      );
     } else {
       // Not found — try to look up the item; if no item exists, offer quick-create
       try {

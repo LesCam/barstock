@@ -2,11 +2,12 @@ import { useState, useCallback, useMemo } from "react";
 import { View, Text, TouchableOpacity, ScrollView, Switch, Modal, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { trpc } from "@/lib/trpc";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, usePermission } from "@/lib/auth-context";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 import { ScaleConnector } from "@/components/ScaleConnector";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
+import { CreateItemFromScanModal } from "@/components/CreateItemFromScanModal";
 import type { ScaleReading } from "@/lib/scale/scale-manager";
 
 interface SelectedItem {
@@ -30,6 +31,9 @@ export default function LiquorWeighScreen() {
   const [scaleWeight, setScaleWeight] = useState<number | null>(null);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [showScanner, setShowScanner] = useState(false);
+  const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
+
+  const canTare = usePermission("canManageTareWeights");
 
   const { data: templates } = trpc.scale.listTemplates.useQuery(
     { locationId: selectedLocationId! },
@@ -59,6 +63,24 @@ export default function LiquorWeighScreen() {
     }
   }, []);
 
+  function handleBarcodeNotFound(barcode: string) {
+    if (canTare) {
+      Alert.alert(
+        "Item Not Recognized",
+        "This barcode isn't registered yet. Would you like to create the item now, or set it aside?",
+        [
+          { text: "Create Item", onPress: () => setCreatingFromScan({ barcode }) },
+          { text: "Set Aside", style: "cancel" },
+        ]
+      );
+    } else {
+      Alert.alert(
+        "Item Not Recognized",
+        "Set this bottle aside until its tare weight has been set up."
+      );
+    }
+  }
+
   async function handleRescan(barcode: string) {
     setShowScanner(false);
     try {
@@ -71,10 +93,10 @@ export default function LiquorWeighScreen() {
         setScaleWeight(null);
         setManualWeight("");
       } else {
-        Alert.alert("Not Found", `No item found for barcode ${barcode}`);
+        handleBarcodeNotFound(barcode);
       }
     } catch {
-      Alert.alert("Not Found", `No item found for barcode ${barcode}`);
+      handleBarcodeNotFound(barcode);
     }
   }
 
@@ -149,6 +171,7 @@ export default function LiquorWeighScreen() {
             setManualWeight("");
             setUseManual(false);
           }}
+          onBarcodeNotFound={handleBarcodeNotFound}
           itemTypeFilter={["liquor", "wine"]}
           placeholder="Search liquor/wine or scan..."
         />
@@ -374,6 +397,19 @@ export default function LiquorWeighScreen() {
             {submittedCount} bottle{submittedCount !== 1 ? "s" : ""} weighed this session
           </Text>
         </View>
+      )}
+
+      {/* Quick-create from scan (item not found) */}
+      {creatingFromScan && (
+        <CreateItemFromScanModal
+          barcode={creatingFromScan.barcode}
+          locationId={selectedLocationId!}
+          onSuccess={() => {
+            utils.scale.listTemplates.invalidate({ locationId: selectedLocationId! });
+            setCreatingFromScan(null);
+          }}
+          onCancel={() => setCreatingFromScan(null)}
+        />
       )}
     </View>
   );

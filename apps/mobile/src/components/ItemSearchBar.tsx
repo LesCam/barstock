@@ -16,6 +16,7 @@ interface InventoryItem {
 interface ItemSearchBarProps {
   locationId: string;
   onItemSelected: (item: InventoryItem) => void;
+  onBarcodeNotFound?: (barcode: string) => void;
   itemTypeFilter?: string[];
   placeholder?: string;
 }
@@ -23,6 +24,7 @@ interface ItemSearchBarProps {
 export function ItemSearchBar({
   locationId,
   onItemSelected,
+  onBarcodeNotFound,
   itemTypeFilter,
   placeholder = "Search items or scan barcode...",
 }: ItemSearchBarProps) {
@@ -75,11 +77,17 @@ export function ItemSearchBar({
       });
       if (item) {
         handleSelect(item as InventoryItem);
+      } else if (onBarcodeNotFound) {
+        onBarcodeNotFound(barcode);
       } else {
         setScanError(`No item found for barcode ${barcode}`);
       }
     } catch {
-      setScanError(`No item found for barcode ${barcode}`);
+      if (onBarcodeNotFound) {
+        onBarcodeNotFound(barcode);
+      } else {
+        setScanError(`No item found for barcode ${barcode}`);
+      }
     }
   }
 

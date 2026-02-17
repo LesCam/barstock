@@ -71,6 +71,12 @@ export default function PackagedCountScreen() {
             setCountType("individual");
             setQuantity("");
           }}
+          onBarcodeNotFound={() => {
+            Alert.alert(
+              "Item Not Recognized",
+              "Set this item aside — the barcode hasn't been registered yet."
+            );
+          }}
           itemTypeFilter={["packaged_unit"]}
           placeholder="Search packaged items or scan..."
         />
