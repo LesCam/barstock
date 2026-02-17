@@ -66,3 +66,4 @@ android/app/build/
 # Uploads
 /tmp/uploads/
 /tmp/exports/
+uploads/
