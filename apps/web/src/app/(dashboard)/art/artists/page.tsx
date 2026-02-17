@@ -17,17 +17,17 @@ export default function ArtistsListPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Artists</h1>
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Artists</h1>
         <div className="flex gap-2">
           <Link
             href="/art/artists/new"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
           >
             + Artist
           </Link>
           <Link
             href="/art"
-            className="rounded-md border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
           >
             Gallery
           </Link>
@@ -35,11 +35,11 @@ export default function ArtistsListPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-[#EAF0FF]/60">Loading...</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-white">
+        <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
           <table className="w-full text-left text-sm">
-            <thead className="border-b bg-gray-50 text-xs uppercase text-gray-500">
+            <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Email</th>
@@ -51,25 +51,25 @@ export default function ArtistsListPage() {
             </thead>
             <tbody className="divide-y">
               {data?.items.map((artist: any) => (
-                <tr key={artist.id} className="hover:bg-gray-50">
+                <tr key={artist.id} className="hover:bg-[#16283F]/60">
                   <td className="px-4 py-3">
                     <Link
                       href={`/art/artists/${artist.id}`}
-                      className="font-medium text-blue-600 hover:underline"
+                      className="font-medium text-[#E9B44C] hover:underline"
                     >
                       {artist.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{artist.contactEmail ?? "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{artist.contactPhone ?? "—"}</td>
+                  <td className="px-4 py-3 text-[#EAF0FF]/70">{artist.contactEmail ?? "—"}</td>
+                  <td className="px-4 py-3 text-[#EAF0FF]/70">{artist.contactPhone ?? "—"}</td>
                   <td className="px-4 py-3">{artist.defaultCommissionPubPercent}%</td>
                   <td className="px-4 py-3">{artist._count?.artworks ?? 0}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                         artist.active
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-500"
+                          ? "bg-green-500/10 text-green-400"
+                          : "bg-white/5 text-[#EAF0FF]/40"
                       }`}
                     >
                       {artist.active ? "Active" : "Inactive"}

@@ -26,6 +26,10 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
+const adminNavItems = [
+  { href: "/staff", label: "Staff", icon: "👥" },
+];
+
 function formatRole(role: string): string {
   return role
     .split("_")
@@ -37,12 +41,12 @@ export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-64 flex-col border-r bg-white">
-      <div className="border-b p-4">
-        <h2 className="text-lg font-bold text-gray-900">{user.businessName || "Dashboard"}</h2>
-        <p className="mt-1 truncate text-xs text-gray-500">{user.email}</p>
+    <aside className="flex w-64 flex-col border-r border-white/10 bg-[var(--navy-bg)]">
+      <div className="border-b border-white/10 p-4">
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">{user.businessName || "Dashboard"}</h2>
+        <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{user.email}</p>
         {user.highestRole && (
-          <span className="mt-1 inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+          <span className="mt-1 inline-block rounded-full bg-[#E9B44C]/10 px-2 py-0.5 text-xs font-medium text-[#E9B44C]">
             {formatRole(user.highestRole)}
           </span>
         )}
@@ -60,8 +64,8 @@ export function Sidebar({ user }: SidebarProps) {
               href={item.href}
               className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
                 active
-                  ? "bg-blue-50 font-medium text-blue-700"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-[#16283F] font-medium text-[#E9B44C]"
+                  : "text-[var(--text-primary)] hover:bg-[#16283F]"
               }`}
             >
               <span>{item.icon}</span>
@@ -70,10 +74,31 @@ export function Sidebar({ user }: SidebarProps) {
           );
         })}
 
+        {(user.highestRole === "business_admin" || user.highestRole === "platform_admin") &&
+          adminNavItems.map((item) => {
+            const active =
+              pathname === item.href ||
+              pathname.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
+                  active
+                    ? "bg-[#16283F] font-medium text-[#E9B44C]"
+                    : "text-[var(--text-primary)] hover:bg-[#16283F]"
+                }`}
+              >
+                <span>{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+
         {user.highestRole === "platform_admin" && (
           <>
-            <div className="my-2 border-t pt-2">
-              <p className="px-3 text-xs font-semibold uppercase text-gray-400">
+            <div className="my-2 border-t border-white/10 pt-2">
+              <p className="px-3 text-xs font-semibold uppercase text-[var(--text-muted)]">
                 Platform
               </p>
             </div>
@@ -88,8 +113,8 @@ export function Sidebar({ user }: SidebarProps) {
                     href={item.href}
                     className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
                       active
-                        ? "bg-blue-50 font-medium text-blue-700"
-                        : "text-gray-700 hover:bg-gray-100"
+                        ? "bg-[#16283F] font-medium text-[#E9B44C]"
+                        : "text-[var(--text-primary)] hover:bg-[#16283F]"
                     }`}
                   >
                     <span>{item.icon}</span>
@@ -102,14 +127,14 @@ export function Sidebar({ user }: SidebarProps) {
         )}
       </nav>
 
-      <div className="border-t p-3 pb-12">
+      <div className="border-t border-white/10 p-3 pb-12">
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="w-full rounded-md px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-100"
+          className="w-full rounded-md px-3 py-2 text-left text-sm text-[var(--text-muted)] hover:bg-[#16283F]"
         >
           Sign out
         </button>
-        <p className="mt-2 px-3 text-xs text-gray-400">Powered by Barstock</p>
+        <p className="mt-2 px-3 text-xs text-[#EAF0FF]/40">Powered by Barstock</p>
       </div>
     </aside>
   );

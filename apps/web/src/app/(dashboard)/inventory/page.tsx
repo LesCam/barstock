@@ -57,12 +57,12 @@ export default function InventoryPage() {
     const active = sortKey === field;
     return (
       <th
-        className="cursor-pointer select-none px-4 py-3 hover:text-gray-700"
+        className="cursor-pointer select-none px-4 py-3 hover:text-[#EAF0FF]/80"
         onClick={() => toggleSort(field)}
       >
         <span className="inline-flex items-center gap-1">
           {label}
-          <span className={`text-xs ${active ? "text-blue-600" : "text-gray-300"}`}>
+          <span className={`text-xs ${active ? "text-[#E9B44C]" : "text-[#EAF0FF]/30"}`}>
             {active ? (sortDir === "asc" ? "▲" : "▼") : "▲"}
           </span>
         </span>
@@ -73,7 +73,7 @@ export default function InventoryPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Inventory Catalog</h1>
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Inventory Catalog</h1>
       </div>
 
       <input
@@ -81,15 +81,15 @@ export default function InventoryPage() {
         placeholder="Search items..."
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="mb-4 w-full max-w-sm rounded-md border px-3 py-2 text-sm"
+        className="mb-4 w-full max-w-sm rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
       />
 
       {isLoading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-[#EAF0FF]/60">Loading...</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-white">
+        <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
           <table className="w-full text-left text-sm">
-            <thead className="border-b bg-gray-50 text-xs uppercase text-gray-500">
+            <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
               <tr>
                 <SortHeader label="Name" field="name" />
                 <SortHeader label="Type" field="type" />
@@ -103,7 +103,7 @@ export default function InventoryPage() {
               {sortedItems.map((item) => {
                 const oh = onHandMap.get(item.id);
                 return (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                  <tr key={item.id} className="hover:bg-[#16283F]/60">
                     <td className="px-4 py-3 font-medium">{item.name}</td>
                     <td className="px-4 py-3">{item.type.replace("_", " ")}</td>
                     <td className="px-4 py-3">{item.baseUom}</td>
@@ -114,7 +114,7 @@ export default function InventoryPage() {
                     <td className="px-4 py-3">
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs ${
-                          item.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                          item.active ? "bg-green-500/10 text-green-400" : "bg-white/5 text-[#EAF0FF]/40"
                         }`}
                       >
                         {item.active ? "Active" : "Inactive"}

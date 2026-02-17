@@ -90,19 +90,19 @@ export default function EditArtistPage() {
     });
   };
 
-  if (isLoading) return <p className="text-gray-500">Loading...</p>;
-  if (!artist) return <p className="text-gray-500">Artist not found.</p>;
+  if (isLoading) return <p className="text-[#EAF0FF]/60">Loading...</p>;
+  if (!artist) return <p className="text-[#EAF0FF]/60">Artist not found.</p>;
 
   return (
     <div>
       <div className="mb-4">
-        <Link href="/art/artists" className="text-sm text-blue-600 hover:underline">
+        <Link href="/art/artists" className="text-sm text-[#E9B44C] hover:underline">
           ← Back to Artists
         </Link>
       </div>
 
       <div className="mb-6 flex items-start justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Edit Artist</h1>
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Edit Artist</h1>
         {artist.active && (
           <button
             onClick={() => {
@@ -110,7 +110,7 @@ export default function EditArtistPage() {
                 deactivate.mutate({ id, businessId: businessId! });
               }
             }}
-            className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+            className="rounded-md border border-red-500/30 px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/10"
           >
             Deactivate
           </button>
@@ -119,44 +119,44 @@ export default function EditArtistPage() {
 
       <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Name *</label>
+          <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">Name *</label>
           <input
             type="text"
             value={form.name}
             onChange={(e) => set("name", e.target.value)}
             required
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
+            <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">Email</label>
             <input
               type="email"
               value={form.contactEmail}
               onChange={(e) => set("contactEmail", e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Phone</label>
+            <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">Phone</label>
             <input
               type="tel"
               value={form.contactPhone}
               onChange={(e) => set("contactPhone", e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Payout Method</label>
+            <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">Payout Method</label>
             <select
               value={form.payoutMethod}
               onChange={(e) => set("payoutMethod", e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
             >
               <option value="">Select...</option>
               <option value="etransfer">E-Transfer</option>
@@ -166,35 +166,35 @@ export default function EditArtistPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Commission %</label>
+            <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">Commission %</label>
             <input
               type="number"
               min="0"
               max="100"
               value={form.defaultCommissionPubPercent}
               onChange={(e) => set("defaultCommissionPubPercent", e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
             />
           </div>
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Bio</label>
+          <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">Bio</label>
           <textarea
             value={form.bio}
             onChange={(e) => set("bio", e.target.value)}
             rows={3}
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+          <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">Notes</label>
           <textarea
             value={form.notes}
             onChange={(e) => set("notes", e.target.value)}
             rows={3}
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
           />
         </div>
 
@@ -206,13 +206,13 @@ export default function EditArtistPage() {
           <button
             type="submit"
             disabled={update.isPending}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
           >
             {update.isPending ? "Saving..." : "Save Changes"}
           </button>
           <Link
             href="/art/artists"
-            className="rounded-md border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
           >
             Cancel
           </Link>
@@ -220,8 +220,8 @@ export default function EditArtistPage() {
       </form>
 
       {/* Artist's Artworks */}
-      <div className="mt-10 border-t pt-6">
-        <h2 className="mb-4 text-lg font-bold text-gray-900">
+      <div className="mt-10 border-t border-white/10 pt-6">
+        <h2 className="mb-4 text-lg font-bold text-[#EAF0FF]">
           Artworks by {artist.name}
         </h2>
 
@@ -232,8 +232,8 @@ export default function EditArtistPage() {
               onClick={() => setStatusFilter(f.value)}
               className={`rounded-full px-3 py-1 text-sm font-medium ${
                 statusFilter === f.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  ? "bg-[#E9B44C] text-[#0B1623]"
+                  : "bg-white/5 text-[#EAF0FF]/80 hover:bg-[#16283F]"
               }`}
             >
               {f.label}
@@ -242,7 +242,7 @@ export default function EditArtistPage() {
         </div>
 
         {artworksData?.items.length === 0 ? (
-          <p className="text-sm text-gray-500">No artworks yet.</p>
+          <p className="text-sm text-[#EAF0FF]/60">No artworks yet.</p>
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {artworksData?.items.map((artwork) => (

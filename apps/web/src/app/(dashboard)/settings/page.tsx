@@ -30,12 +30,12 @@ export default function SettingsPage() {
   const canEdit = ADMIN_ROLES.includes(user?.highestRole ?? "");
 
   if (!businessId) {
-    return <div className="text-gray-500">No business selected.</div>;
+    return <div className="text-[#EAF0FF]/60">No business selected.</div>;
   }
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+      <h1 className="text-2xl font-bold text-[#EAF0FF]">Settings</h1>
       <BusinessProfileSection businessId={businessId} canEdit={canEdit} />
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
     </div>
@@ -88,16 +88,16 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
     });
   }
 
-  if (!business) return <div className="text-gray-500">Loading business profile...</div>;
+  if (!business) return <div className="text-[#EAF0FF]/60">Loading business profile...</div>;
 
   return (
-    <div className="rounded-lg border bg-white p-6">
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Business Profile</h2>
         {canEdit && !editing && (
           <button
             onClick={() => setEditing(true)}
-            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#D4A43C]"
           >
             Edit
           </button>
@@ -107,77 +107,77 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
       {editing ? (
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Name</label>
+            <label className="block text-sm font-medium text-[#EAF0FF]/80">Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="mt-1 w-full rounded-md border px-3 py-2 text-sm sm:w-1/2"
+              className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Slug</label>
-            <p className="mt-1 font-mono text-sm text-gray-500">{business.slug}</p>
+            <label className="block text-sm font-medium text-[#EAF0FF]/80">Slug</label>
+            <p className="mt-1 font-mono text-sm text-[#EAF0FF]/60">{business.slug}</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Contact Email</label>
+            <label className="block text-sm font-medium text-[#EAF0FF]/80">Contact Email</label>
             <input
               type="email"
               value={contactEmail}
               onChange={(e) => setContactEmail(e.target.value)}
-              className="mt-1 w-full rounded-md border px-3 py-2 text-sm sm:w-1/2"
+              className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
               placeholder="contact@example.com"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Contact Phone</label>
+            <label className="block text-sm font-medium text-[#EAF0FF]/80">Contact Phone</label>
             <input
               type="tel"
               value={contactPhone}
               onChange={(e) => setContactPhone(formatPhone(e.target.value))}
-              className="mt-1 w-full rounded-md border px-3 py-2 text-sm sm:w-1/2"
+              className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
               placeholder="(555)555-5555"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Street Address</label>
+            <label className="block text-sm font-medium text-[#EAF0FF]/80">Street Address</label>
             <input
               type="text"
               value={street}
               onChange={(e) => setStreet(e.target.value)}
-              className="mt-1 w-full rounded-md border px-3 py-2 text-sm sm:w-1/2"
+              className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
               placeholder="123 Main St"
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700">City</label>
+              <label className="block text-sm font-medium text-[#EAF0FF]/80">City</label>
               <input
                 type="text"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
                 placeholder="Montreal"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Province / State</label>
+              <label className="block text-sm font-medium text-[#EAF0FF]/80">Province / State</label>
               <input
                 type="text"
                 value={province}
                 onChange={(e) => setProvince(e.target.value)}
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
                 placeholder="QC"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Postal / ZIP Code</label>
+              <label className="block text-sm font-medium text-[#EAF0FF]/80">Postal / ZIP Code</label>
               <input
                 type="text"
                 value={postalCode}
                 onChange={(e) => setPostalCode(e.target.value)}
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
                 placeholder="H2X 1Y4"
               />
             </div>
@@ -186,7 +186,7 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
             >
               {updateMutation.isPending ? "Saving..." : "Save"}
             </button>
@@ -203,7 +203,7 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
                 setProvince(parts[2] ?? "");
                 setPostalCode(parts[3] ?? "");
               }}
-              className="rounded-md border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
             >
               Cancel
             </button>
@@ -215,23 +215,23 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
       ) : (
         <dl className="grid gap-4 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-gray-500">Name</dt>
+            <dt className="text-[#EAF0FF]/60">Name</dt>
             <dd className="font-medium">{business.name}</dd>
           </div>
           <div>
-            <dt className="text-gray-500">Slug</dt>
+            <dt className="text-[#EAF0FF]/60">Slug</dt>
             <dd className="font-mono">{business.slug}</dd>
           </div>
           <div>
-            <dt className="text-gray-500">Contact Email</dt>
+            <dt className="text-[#EAF0FF]/60">Contact Email</dt>
             <dd className="font-medium">{business.contactEmail ?? "—"}</dd>
           </div>
           <div>
-            <dt className="text-gray-500">Contact Phone</dt>
+            <dt className="text-[#EAF0FF]/60">Contact Phone</dt>
             <dd className="font-medium">{business.contactPhone ? formatPhone(business.contactPhone) : "—"}</dd>
           </div>
           <div className="sm:col-span-2">
-            <dt className="text-gray-500">Address</dt>
+            <dt className="text-[#EAF0FF]/60">Address</dt>
             {(() => {
               const parts = (business.address ?? "").split(" | ").filter(Boolean);
               if (!parts.length) return <dd className="font-medium">—</dd>;
@@ -285,17 +285,17 @@ function CapabilityTogglesSection({ businessId, canEdit }: { businessId: string;
     updateMutation.mutate({ businessId, capabilities: localCaps });
   }
 
-  if (!localCaps) return <div className="text-gray-500">Loading capabilities...</div>;
+  if (!localCaps) return <div className="text-[#EAF0FF]/60">Loading capabilities...</div>;
 
   return (
-    <div className="rounded-lg border bg-white p-6">
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Capability Settings</h2>
         {canEdit && dirty && (
           <button
             onClick={handleSave}
             disabled={updateMutation.isPending}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
           >
             {updateMutation.isPending ? "Saving..." : "Save Changes"}
           </button>
@@ -305,13 +305,13 @@ function CapabilityTogglesSection({ businessId, canEdit }: { businessId: string;
       <div className="space-y-4">
         {Object.entries(CAPABILITY_LABELS).map(([key, label]) => (
           <div key={key} className="flex items-center justify-between">
-            <span className="text-sm text-gray-700">{label}</span>
+            <span className="text-sm text-[#EAF0FF]/80">{label}</span>
             <button
               type="button"
               disabled={!canEdit}
               onClick={() => handleToggle(key, !localCaps[key])}
               className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                localCaps[key] ? "bg-blue-600" : "bg-gray-200"
+                localCaps[key] ? "bg-[#E9B44C]" : "bg-white/10"
               } ${!canEdit ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
             >
               <span
@@ -324,7 +324,7 @@ function CapabilityTogglesSection({ businessId, canEdit }: { businessId: string;
         ))}
 
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-700">Proof Photo Retention Days</span>
+          <span className="text-sm text-[#EAF0FF]/80">Proof Photo Retention Days</span>
           <input
             type="number"
             min={1}
@@ -332,7 +332,7 @@ function CapabilityTogglesSection({ businessId, canEdit }: { businessId: string;
             value={localCaps.proofPhotoRetentionDays ?? 90}
             onChange={(e) => handleNumberChange("proofPhotoRetentionDays", Number(e.target.value))}
             disabled={!canEdit}
-            className="w-20 rounded-md border px-2 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
       </div>

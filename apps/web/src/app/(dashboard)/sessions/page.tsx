@@ -16,18 +16,18 @@ export default function SessionsPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Inventory Sessions</h1>
-        <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Inventory Sessions</h1>
+        <button className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]">
           New Session
         </button>
       </div>
 
       {isLoading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-[#EAF0FF]/60">Loading...</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-white">
+        <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
           <table className="w-full text-left text-sm">
-            <thead className="border-b bg-gray-50 text-xs uppercase text-gray-500">
+            <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
               <tr>
                 <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Started</th>
@@ -39,7 +39,7 @@ export default function SessionsPage() {
             </thead>
             <tbody className="divide-y">
               {sessions?.map((s) => (
-                <tr key={s.id} className="hover:bg-gray-50">
+                <tr key={s.id} className="hover:bg-[#16283F]/60">
                   <td className="px-4 py-3 capitalize">{s.sessionType}</td>
                   <td className="px-4 py-3 text-xs">
                     {new Date(s.startedTs).toLocaleString()}
@@ -53,8 +53,8 @@ export default function SessionsPage() {
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs ${
                         s.endedTs
-                          ? "bg-gray-100 text-gray-600"
-                          : "bg-blue-100 text-blue-700"
+                          ? "bg-white/5 text-[#EAF0FF]/70"
+                          : "bg-[#E9B44C]/10 text-[#E9B44C]"
                       }`}
                     >
                       {s.endedTs ? "Closed" : "Open"}

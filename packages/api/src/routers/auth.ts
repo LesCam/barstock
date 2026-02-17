@@ -68,23 +68,48 @@ export const authRouter = router({
           role: input.role,
           locationId: input.locationId,
           businessId: input.businessId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          phone: input.phone,
         },
       });
     }),
 
   listUsers: protectedProcedure
     .use(requireRole("business_admin"))
-    .query(({ ctx }) => ctx.prisma.user.findMany({
-      where: { locationId: { in: ctx.user.locationIds } },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        locationId: true,
-        isActive: true,
-        createdAt: true,
-      },
-    })),
+    .input(z.object({
+      search: z.string().optional(),
+      activeOnly: z.boolean().optional(),
+    }).optional())
+    .query(({ ctx, input }) => {
+      const where: any = { businessId: ctx.user.businessId };
+      if (input?.activeOnly) where.isActive = true;
+      if (input?.search) {
+        const term = input.search;
+        where.OR = [
+          { email: { contains: term, mode: "insensitive" } },
+          { firstName: { contains: term, mode: "insensitive" } },
+          { lastName: { contains: term, mode: "insensitive" } },
+        ];
+      }
+      return ctx.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          locationId: true,
+          isActive: true,
+          createdAt: true,
+          location: { select: { name: true } },
+          userLocations: { select: { locationId: true, role: true, location: { select: { name: true } } } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    }),
 
   updateUser: protectedProcedure
     .use(requireRole("business_admin"))
@@ -95,8 +120,35 @@ export const authRouter = router({
       if (data.email) updateData.email = data.email;
       if (data.password) updateData.passwordHash = await hashPassword(data.password);
       if (data.isActive !== undefined) updateData.isActive = data.isActive;
+      if (data.role) updateData.role = data.role;
+      if (data.locationId) updateData.locationId = data.locationId;
+      if (data.firstName !== undefined) updateData.firstName = data.firstName;
+      if (data.lastName !== undefined) updateData.lastName = data.lastName;
+      if (data.phone !== undefined) updateData.phone = data.phone;
       return ctx.prisma.user.update({ where: { id: userId }, data: updateData });
     }),
+
+  getUserDetail: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ userId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      ctx.prisma.user.findUniqueOrThrow({
+        where: { id: input.userId, businessId: ctx.user.businessId },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          locationId: true,
+          isActive: true,
+          createdAt: true,
+          location: { select: { id: true, name: true } },
+          userLocations: { select: { locationId: true, role: true, location: { select: { id: true, name: true } } } },
+        },
+      })
+    ),
 
   grantLocationAccess: protectedProcedure
     .use(requireRole("business_admin"))
@@ -113,6 +165,53 @@ export const authRouter = router({
         where: { userId_locationId: input },
       })
     ),
+
+  switchPrimaryLocation: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ userId: z.string().uuid(), newPrimaryId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: input.userId, businessId: ctx.user.businessId },
+        select: { locationId: true, role: true },
+      });
+
+      const oldPrimaryId = user.locationId;
+      if (oldPrimaryId === input.newPrimaryId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Already the primary location" });
+      }
+
+      // Check existing userLocation entries
+      const [existingOldGrant, existingNewGrant] = await Promise.all([
+        ctx.prisma.userLocation.findUnique({
+          where: { userId_locationId: { userId: input.userId, locationId: oldPrimaryId } },
+        }),
+        ctx.prisma.userLocation.findUnique({
+          where: { userId_locationId: { userId: input.userId, locationId: input.newPrimaryId } },
+        }),
+      ]);
+
+      await ctx.prisma.$transaction(async (tx) => {
+        // 1. Set new primary
+        await tx.user.update({
+          where: { id: input.userId },
+          data: { locationId: input.newPrimaryId },
+        });
+        // 2. Preserve old primary as additional access (only if not already granted)
+        if (!existingOldGrant) {
+          await tx.userLocation.create({
+            data: { userId: input.userId, locationId: oldPrimaryId, role: user.role },
+          });
+        }
+        // 3. Remove new primary from userLocations (it's now the primary)
+        if (existingNewGrant) {
+          await tx.userLocation.delete({
+            where: { userId_locationId: { userId: input.userId, locationId: input.newPrimaryId } },
+          });
+        }
+      });
+
+      return { success: true };
+    }),
 
   requestPasswordReset: publicProcedure
     .input(forgotPasswordSchema)

@@ -20,7 +20,7 @@ export default function DraftPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-gray-900">Draft Beer / Kegs</h1>
+      <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">Draft Beer / Kegs</h1>
 
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-semibold">Tap Board</h2>
@@ -28,36 +28,36 @@ export default function DraftPage() {
           {tapLines?.map((tap) => {
             const assignment = tap.tapAssignments[0];
             return (
-              <div key={tap.id} className="rounded-lg border bg-white p-4">
+              <div key={tap.id} className="rounded-lg border border-white/10 bg-[#16283F] p-4">
                 <h3 className="font-medium">{tap.name}</h3>
                 {assignment ? (
                   <div className="mt-2 text-sm">
-                    <p className="text-gray-900">
+                    <p className="text-[#EAF0FF]">
                       {assignment.kegInstance.inventoryItem.name}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-[#EAF0FF]/60">
                       Tapped: {assignment.effectiveStartTs
                         ? new Date(assignment.effectiveStartTs).toLocaleDateString()
                         : "—"}
                     </p>
                   </div>
                 ) : (
-                  <p className="mt-2 text-sm italic text-gray-400">Empty</p>
+                  <p className="mt-2 text-sm italic text-[#EAF0FF]/40">Empty</p>
                 )}
               </div>
             );
           })}
           {tapLines?.length === 0 && (
-            <p className="text-sm text-gray-500">No tap lines configured.</p>
+            <p className="text-sm text-[#EAF0FF]/60">No tap lines configured.</p>
           )}
         </div>
       </section>
 
       <section>
         <h2 className="mb-3 text-lg font-semibold">Keg Inventory ({kegs?.length ?? 0})</h2>
-        <div className="overflow-x-auto rounded-lg border bg-white">
+        <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
           <table className="w-full text-left text-sm">
-            <thead className="border-b bg-gray-50 text-xs uppercase text-gray-500">
+            <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
               <tr>
                 <th className="px-4 py-3">Product</th>
                 <th className="px-4 py-3">Size</th>
@@ -67,11 +67,11 @@ export default function DraftPage() {
             </thead>
             <tbody className="divide-y">
               {kegs?.map((keg) => (
-                <tr key={keg.id} className="hover:bg-gray-50">
+                <tr key={keg.id} className="hover:bg-[#16283F]/60">
                   <td className="px-4 py-3">{keg.inventoryItem.name}</td>
                   <td className="px-4 py-3">{keg.kegSize.name} ({Number(keg.kegSize.totalOz)} oz)</td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs capitalize">
+                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs capitalize text-[#EAF0FF]/70">
                       {keg.status.replace("_", " ")}
                     </span>
                   </td>

@@ -91,8 +91,8 @@ export default function ArtworkDetailPage() {
     e.target.value = "";
   };
 
-  if (isLoading) return <p className="text-gray-500">Loading...</p>;
-  if (!artwork) return <p className="text-gray-500">Artwork not found.</p>;
+  if (isLoading) return <p className="text-[#EAF0FF]/60">Loading...</p>;
+  if (!artwork) return <p className="text-[#EAF0FF]/60">Artwork not found.</p>;
 
   const transitions = VALID_TRANSITIONS[artwork.status] ?? [];
   const photoCount = artwork.photos?.length ?? 0;
@@ -100,18 +100,18 @@ export default function ArtworkDetailPage() {
   return (
     <div>
       <div className="mb-4">
-        <Link href="/art" className="text-sm text-blue-600 hover:underline">
+        <Link href="/art" className="text-sm text-[#E9B44C] hover:underline">
           ← Back to Gallery
         </Link>
       </div>
 
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{artwork.title}</h1>
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">{artwork.title}</h1>
           {artwork.artist && (
             <Link
               href={`/art/artists/${artwork.artist.id}`}
-              className="text-sm text-blue-600 hover:underline"
+              className="text-sm text-[#E9B44C] hover:underline"
             >
               {artwork.artist.name}
             </Link>
@@ -119,7 +119,7 @@ export default function ArtworkDetailPage() {
         </div>
         <Link
           href={`/art/${id}/edit`}
-          className="rounded-md border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
         >
           Edit
         </Link>
@@ -147,7 +147,7 @@ export default function ArtworkDetailPage() {
           {photoCount < 3 && (
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex h-48 w-48 flex-shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-500"
+              className="flex h-48 w-48 flex-shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-white/20 text-[#EAF0FF]/40 hover:border-white/30 hover:text-[#EAF0FF]/60"
               disabled={addPhoto.isPending}
             >
               {addPhoto.isPending ? "Uploading..." : "+ Photo"}
@@ -161,51 +161,51 @@ export default function ArtworkDetailPage() {
           onChange={handlePhotoUpload}
           className="hidden"
         />
-        <p className="mt-1 text-xs text-gray-400">{photoCount}/3 photos</p>
+        <p className="mt-1 text-xs text-[#EAF0FF]/40">{photoCount}/3 photos</p>
       </div>
 
       {/* Details */}
-      <div className="mb-6 rounded-lg border bg-white p-5">
+      <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F] p-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <p className="text-xs text-gray-500">Status</p>
+            <p className="text-xs text-[#EAF0FF]/60">Status</p>
             <StatusBadge status={artwork.status} />
           </div>
           <div>
-            <p className="text-xs text-gray-500">Price</p>
+            <p className="text-xs text-[#EAF0FF]/60">Price</p>
             <p className="font-medium">{formatPrice(artwork.listPriceCents)}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Medium</p>
+            <p className="text-xs text-[#EAF0FF]/60">Medium</p>
             <p>{artwork.medium ?? "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Dimensions</p>
+            <p className="text-xs text-[#EAF0FF]/60">Dimensions</p>
             <p>{artwork.dimensions ?? "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Location in Pub</p>
+            <p className="text-xs text-[#EAF0FF]/60">Location in Pub</p>
             <p>{artwork.locationInPub ?? "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Agreement</p>
+            <p className="text-xs text-[#EAF0FF]/60">Agreement</p>
             <p className="capitalize">{artwork.agreementType}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Sale Mode</p>
+            <p className="text-xs text-[#EAF0FF]/60">Sale Mode</p>
             <p>{artwork.saleMode.replace(/_/g, " ")}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Commission %</p>
+            <p className="text-xs text-[#EAF0FF]/60">Commission %</p>
             <p>{artwork.commissionPubPercent != null ? `${artwork.commissionPubPercent}%` : "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Date Hung</p>
+            <p className="text-xs text-[#EAF0FF]/60">Date Hung</p>
             <p>{formatDate(artwork.dateHung)}</p>
           </div>
           {artwork.notes && (
             <div className="sm:col-span-2">
-              <p className="text-xs text-gray-500">Notes</p>
+              <p className="text-xs text-[#EAF0FF]/60">Notes</p>
               <p className="whitespace-pre-wrap">{artwork.notes}</p>
             </div>
           )}
@@ -214,8 +214,8 @@ export default function ArtworkDetailPage() {
 
       {/* Status Transitions */}
       {transitions.length > 0 && (
-        <div className="rounded-lg border bg-white p-5">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Change Status</h2>
+        <div className="rounded-lg border border-white/10 bg-[#16283F] p-5">
+          <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]/80">Change Status</h2>
           <div className="flex flex-wrap gap-2">
             {transitions.map((t) => (
               <button
@@ -224,7 +224,7 @@ export default function ArtworkDetailPage() {
                   updateStatus.mutate({ id, businessId: businessId!, status: t.status as any })
                 }
                 disabled={updateStatus.isPending}
-                className="rounded-md border px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-md border border-white/10 px-3 py-1.5 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60 disabled:opacity-50"
               >
                 {t.label}
               </button>

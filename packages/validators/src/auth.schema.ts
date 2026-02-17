@@ -16,12 +16,20 @@ export const userCreateSchema = z.object({
   role: z.nativeEnum(Role),
   locationId: z.string().uuid(),
   businessId: z.string().uuid(),
+  firstName: z.string().max(100).optional(),
+  lastName: z.string().max(100).optional(),
+  phone: z.string().max(100).optional(),
 });
 
 export const userUpdateSchema = z.object({
   email: z.string().email().optional(),
   password: z.string().min(8).optional(),
   isActive: z.boolean().optional(),
+  role: z.nativeEnum(Role).optional(),
+  locationId: z.string().uuid().optional(),
+  firstName: z.string().max(100).nullish(),
+  lastName: z.string().max(100).nullish(),
+  phone: z.string().max(100).nullish(),
 });
 
 export const userLocationCreateSchema = z.object({

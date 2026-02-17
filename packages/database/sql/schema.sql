@@ -524,3 +524,11 @@ alter table businesses add column if not exists contact_email text;
 alter table businesses add column if not exists contact_phone text;
 alter table businesses add column if not exists address text;
 alter table businesses add column if not exists active boolean not null default true;
+
+-- ===========================
+-- v1.6 PATCH: USER PROFILE FIELDS
+-- ===========================
+
+alter table users add column if not exists first_name text;
+alter table users add column if not exists last_name text;
+alter table users add column if not exists phone text;

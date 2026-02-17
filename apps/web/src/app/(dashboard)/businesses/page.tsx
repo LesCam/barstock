@@ -28,10 +28,10 @@ export default function BusinessesPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Businesses</h1>
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Businesses</h1>
         <Link
           href="/businesses/new"
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
         >
           + New Business
         </Link>
@@ -43,14 +43,14 @@ export default function BusinessesPage() {
           placeholder="Search by name, slug, or email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-72 rounded-md border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-72 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
         />
         <button
           onClick={() => setActiveOnly(!activeOnly)}
           className={`rounded-full px-3 py-1 text-sm font-medium ${
             activeOnly
-              ? "bg-green-100 text-green-800"
-              : "bg-gray-100 text-gray-700"
+              ? "bg-green-500/10 text-green-400"
+              : "bg-white/5 text-[#EAF0FF]/80"
           }`}
         >
           {activeOnly ? "Active Only" : "All"}
@@ -58,15 +58,15 @@ export default function BusinessesPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-[#EAF0FF]/60">Loading...</p>
       ) : !businesses?.length ? (
-        <div className="rounded-lg border bg-white p-8 text-center text-gray-500">
+        <div className="rounded-lg border border-white/10 bg-[#16283F] p-8 text-center text-[#EAF0FF]/60">
           No businesses found.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-white">
+        <div className="overflow-hidden rounded-lg border border-white/10 bg-[#16283F]">
           <table className="w-full text-left text-sm">
-            <thead className="border-b bg-gray-50 text-xs font-medium uppercase text-gray-500">
+            <thead className="border-b border-white/10 bg-[#0B1623] text-xs font-medium uppercase text-[#EAF0FF]/60">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Slug</th>
@@ -76,33 +76,33 @@ export default function BusinessesPage() {
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-white/10">
               {businesses.map((biz: any) => (
-                <tr key={biz.id} className="hover:bg-gray-50">
+                <tr key={biz.id} className="hover:bg-[#16283F]/60">
                   <td className="px-4 py-3">
                     <Link
                       href={`/businesses/${biz.id}`}
-                      className="font-medium text-blue-600 hover:underline"
+                      className="font-medium text-[#E9B44C] hover:underline"
                     >
                       {biz.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{biz.slug}</td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-3 text-[#EAF0FF]/60">{biz.slug}</td>
+                  <td className="px-4 py-3 text-[#EAF0FF]/60">
                     {biz.contactEmail || "—"}
                   </td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-3 text-[#EAF0FF]/60">
                     {biz._count?.locations ?? "—"}
                   </td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-3 text-[#EAF0FF]/60">
                     {biz._count?.users ?? "—"}
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
                         biz.active !== false
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
+                          ? "bg-green-500/10 text-green-400"
+                          : "bg-red-500/10 text-red-400"
                       }`}
                     >
                       {biz.active !== false ? "Active" : "Archived"}

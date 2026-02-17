@@ -30,24 +30,24 @@ export default function BusinessDetailPage() {
     { enabled: !!user && !!id }
   );
 
-  if (isLoading) return <p className="text-gray-500">Loading...</p>;
-  if (!business) return <p className="text-gray-500">Business not found.</p>;
+  if (isLoading) return <p className="text-[#EAF0FF]/60">Loading...</p>;
+  if (!business) return <p className="text-[#EAF0FF]/60">Business not found.</p>;
 
   return (
     <div className="space-y-8">
       <div className="flex items-center gap-3">
         <button
           onClick={() => router.push("/businesses")}
-          className="text-sm text-gray-500 hover:text-gray-700"
+          className="text-sm text-[#EAF0FF]/60 hover:text-[#EAF0FF]/80"
         >
           &larr; Back
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">{business.name}</h1>
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">{business.name}</h1>
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-medium ${
             business.active !== false
-              ? "bg-green-100 text-green-800"
-              : "bg-red-100 text-red-800"
+              ? "bg-green-500/10 text-green-400"
+              : "bg-red-500/10 text-red-400"
           }`}
         >
           {business.active !== false ? "Active" : "Archived"}
@@ -104,71 +104,71 @@ function EditBusinessSection({ business }: { business: any }) {
   }
 
   return (
-    <section className="rounded-lg border bg-white p-6">
-      <h2 className="mb-4 text-lg font-semibold text-gray-900">
+    <section className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <h2 className="mb-4 text-lg font-semibold text-[#EAF0FF]">
         Business Info
       </h2>
       <form onSubmit={handleSave} className="grid grid-cols-2 gap-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+          <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">
             Name
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+          <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">
             Slug
           </label>
           <input
             type="text"
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+          <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">
             Contact Email
           </label>
           <input
             type="email"
             value={contactEmail}
             onChange={(e) => setContactEmail(e.target.value)}
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+          <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">
             Contact Phone
           </label>
           <input
             type="tel"
             value={contactPhone}
             onChange={(e) => setContactPhone(e.target.value)}
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
           />
         </div>
         <div className="col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+          <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">
             Address
           </label>
           <textarea
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             rows={2}
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
           />
         </div>
         <div className="col-span-2 flex items-center gap-3">
           <button
             type="submit"
             disabled={updateMutation.isPending}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
           >
             {updateMutation.isPending ? "Saving..." : "Save Changes"}
           </button>
@@ -187,8 +187,8 @@ function EditBusinessSection({ business }: { business: any }) {
               disabled={toggleMutation.isPending}
               className={`rounded-md px-4 py-2 text-sm font-medium ${
                 business.active !== false
-                  ? "border border-red-300 text-red-700 hover:bg-red-50"
-                  : "border border-green-300 text-green-700 hover:bg-green-50"
+                  ? "border border-red-500/30 text-red-400 hover:bg-red-500/10"
+                  : "border border-green-500/30 text-green-400 hover:bg-green-500/10"
               }`}
             >
               {business.active !== false ? "Archive" : "Activate"}
@@ -204,32 +204,32 @@ function EditBusinessSection({ business }: { business: any }) {
 
 function LocationsSection({ locations }: { locations: any[] }) {
   return (
-    <section className="rounded-lg border bg-white p-6">
-      <h2 className="mb-4 text-lg font-semibold text-gray-900">Locations</h2>
+    <section className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <h2 className="mb-4 text-lg font-semibold text-[#EAF0FF]">Locations</h2>
       {locations.length === 0 ? (
-        <p className="text-sm text-gray-500">No locations yet.</p>
+        <p className="text-sm text-[#EAF0FF]/60">No locations yet.</p>
       ) : (
         <table className="w-full text-left text-sm">
-          <thead className="border-b text-xs font-medium uppercase text-gray-500">
+          <thead className="border-b border-white/10 text-xs font-medium uppercase text-[#EAF0FF]/60">
             <tr>
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Timezone</th>
               <th className="px-4 py-2">Closeout Hour</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-white/10">
             {locations.map((loc: any) => (
-              <tr key={loc.id} className="hover:bg-gray-50">
+              <tr key={loc.id} className="hover:bg-[#16283F]/60">
                 <td className="px-4 py-2">
                   <Link
                     href={`/locations/${loc.id}`}
-                    className="font-medium text-blue-600 hover:underline"
+                    className="font-medium text-[#E9B44C] hover:underline"
                   >
                     {loc.name}
                   </Link>
                 </td>
-                <td className="px-4 py-2 text-gray-500">{loc.timezone}</td>
-                <td className="px-4 py-2 text-gray-500">
+                <td className="px-4 py-2 text-[#EAF0FF]/60">{loc.timezone}</td>
+                <td className="px-4 py-2 text-[#EAF0FF]/60">
                   {loc.closeoutHour}:00
                 </td>
               </tr>
@@ -264,16 +264,16 @@ function UsersSection({
   });
 
   return (
-    <section className="rounded-lg border bg-white p-6">
+    <section className="rounded-lg border border-white/10 bg-[#16283F] p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Users</h2>
+        <h2 className="text-lg font-semibold text-[#EAF0FF]">Users</h2>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setActiveOnly(!activeOnly)}
             className={`rounded-full px-3 py-1 text-xs font-medium ${
               activeOnly
-                ? "bg-green-100 text-green-800"
-                : "bg-gray-100 text-gray-700"
+                ? "bg-green-500/10 text-green-400"
+                : "bg-white/5 text-[#EAF0FF]/80"
             }`}
           >
             {activeOnly ? "Active Only" : "All"}
@@ -281,7 +281,7 @@ function UsersSection({
           {locations.length > 0 && (
             <button
               onClick={() => setShowInvite(!showInvite)}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
             >
               {showInvite ? "Cancel" : "Invite User"}
             </button>
@@ -307,12 +307,12 @@ function UsersSection({
       )}
 
       {isLoading ? (
-        <p className="text-sm text-gray-500">Loading users...</p>
+        <p className="text-sm text-[#EAF0FF]/60">Loading users...</p>
       ) : !users?.length ? (
-        <p className="text-sm text-gray-500">No users found.</p>
+        <p className="text-sm text-[#EAF0FF]/60">No users found.</p>
       ) : (
         <table className="w-full text-left text-sm">
-          <thead className="border-b text-xs font-medium uppercase text-gray-500">
+          <thead className="border-b border-white/10 text-xs font-medium uppercase text-[#EAF0FF]/60">
             <tr>
               <th className="px-4 py-2">Email</th>
               <th className="px-4 py-2">Role</th>
@@ -321,24 +321,24 @@ function UsersSection({
               <th className="px-4 py-2">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-white/10">
             {users.map((u: any) => (
-              <tr key={u.id} className="hover:bg-gray-50">
+              <tr key={u.id} className="hover:bg-[#16283F]/60">
                 <td className="px-4 py-2">{u.email}</td>
                 <td className="px-4 py-2">
-                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                  <span className="rounded-full bg-[#E9B44C]/10 px-2 py-0.5 text-xs font-medium text-[#E9B44C]">
                     {formatRole(u.role)}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-gray-500">
+                <td className="px-4 py-2 text-[#EAF0FF]/60">
                   {u.location?.name ?? "—"}
                 </td>
                 <td className="px-4 py-2">
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                       u.isActive
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800"
+                        ? "bg-green-500/10 text-green-400"
+                        : "bg-red-500/10 text-red-400"
                     }`}
                   >
                     {u.isActive ? "Active" : "Inactive"}
@@ -411,11 +411,11 @@ function InviteUserForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-4 rounded-md border bg-gray-50 p-4"
+      className="mb-4 rounded-md border border-white/10 bg-[#0B1623] p-4"
     >
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-700">
+          <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/80">
             Email
           </label>
           <input
@@ -423,11 +423,11 @@ function InviteUserForm({
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border px-3 py-1.5 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-1.5 text-sm text-[#EAF0FF]"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-700">
+          <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/80">
             Temp Password (min 8)
           </label>
           <input
@@ -436,17 +436,17 @@ function InviteUserForm({
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border px-3 py-1.5 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-1.5 text-sm text-[#EAF0FF]"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-700">
+          <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/80">
             Role
           </label>
           <select
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            className="w-full rounded-md border px-3 py-1.5 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-1.5 text-sm text-[#EAF0FF]"
           >
             {ASSIGNABLE_ROLES.map((r) => (
               <option key={r} value={r}>
@@ -456,13 +456,13 @@ function InviteUserForm({
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-700">
+          <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/80">
             Primary Location
           </label>
           <select
             value={locationId}
             onChange={(e) => setLocationId(e.target.value)}
-            className="w-full rounded-md border px-3 py-1.5 text-sm"
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-1.5 text-sm text-[#EAF0FF]"
           >
             {locations.map((loc: any) => (
               <option key={loc.id} value={loc.id}>
@@ -477,7 +477,7 @@ function InviteUserForm({
         <button
           type="submit"
           disabled={createMutation.isPending}
-          className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="rounded-md bg-[#E9B44C] px-4 py-1.5 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
         >
           {createMutation.isPending ? "Creating..." : "Create User"}
         </button>

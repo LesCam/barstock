@@ -203,6 +203,9 @@ model Location {
 model User {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String   @unique
+  firstName    String?  @map("first_name")
+  lastName     String?  @map("last_name")
+  phone        String?
   passwordHash String   @map("password_hash")
   role         RoleT
   locationId   String   @map("location_id") @db.Uuid

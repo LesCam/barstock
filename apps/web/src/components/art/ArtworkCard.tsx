@@ -24,9 +24,9 @@ export function ArtworkCard({ artwork }: ArtworkCardProps) {
   return (
     <Link
       href={`/art/${artwork.id}`}
-      className="group rounded-lg border bg-white shadow-sm transition-shadow hover:shadow-md"
+      className="group rounded-lg border border-white/10 bg-[#16283F] shadow-sm transition-shadow hover:shadow-md"
     >
-      <div className="aspect-square w-full overflow-hidden rounded-t-lg bg-gray-100">
+      <div className="aspect-square w-full overflow-hidden rounded-t-lg bg-[#16283F]/60">
         {photo ? (
           <img
             src={photo.thumbnailUrl ?? photo.url}
@@ -34,18 +34,18 @@ export function ArtworkCard({ artwork }: ArtworkCardProps) {
             className="h-full w-full object-cover transition-transform group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-4xl text-gray-300">
+          <div className="flex h-full w-full items-center justify-center text-4xl text-[#EAF0FF]/30">
             🖼️
           </div>
         )}
       </div>
       <div className="p-3">
-        <h3 className="truncate text-sm font-semibold text-gray-900">{artwork.title}</h3>
+        <h3 className="truncate text-sm font-semibold text-[#EAF0FF]">{artwork.title}</h3>
         {artwork.artist && (
-          <p className="truncate text-xs text-gray-500">{artwork.artist.name}</p>
+          <p className="truncate text-xs text-[#EAF0FF]/60">{artwork.artist.name}</p>
         )}
         <div className="mt-2 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-900">
+          <span className="text-sm font-medium text-[#EAF0FF]">
             {formatPrice(artwork.listPriceCents)}
           </span>
           <StatusBadge status={artwork.status} />

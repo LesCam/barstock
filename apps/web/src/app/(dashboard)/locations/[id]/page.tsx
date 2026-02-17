@@ -59,15 +59,15 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     updateMutation.mutate({ locationId: id, name: name.trim(), timezone, closeoutHour });
   }
 
-  if (!location) return <div className="text-gray-500">Loading...</div>;
+  if (!location) return <div className="text-[#EAF0FF]/60">Loading...</div>;
 
   return (
     <div>
-      <Link href="/" className="mb-4 inline-block text-sm text-blue-600 hover:underline">
+      <Link href="/" className="mb-4 inline-block text-sm text-[#E9B44C] hover:underline">
         &larr; Back to Dashboard
       </Link>
 
-      <h1 className="mb-6 text-2xl font-bold text-gray-900">{location.name}</h1>
+      <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">{location.name}</h1>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Unmapped Items" value={stats?.unmappedCount ?? 0} alert={!!stats?.unmappedCount} />
@@ -79,13 +79,13 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         <StatCard label="Timezone" value={location.timezone} />
       </div>
 
-      <div className="mt-8 rounded-lg border bg-white p-5">
+      <div className="mt-8 rounded-lg border border-white/10 bg-[#16283F] p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Location Details</h2>
           {canEdit && !editing && (
             <button
               onClick={() => setEditing(true)}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#D4A43C]"
             >
               Edit
             </button>
@@ -95,21 +95,21 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         {editing ? (
           <form onSubmit={handleSave} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Name</label>
+              <label className="block text-sm font-medium text-[#EAF0FF]/80">Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm sm:w-1/2"
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Timezone</label>
+              <label className="block text-sm font-medium text-[#EAF0FF]/80">Timezone</label>
               <select
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm sm:w-1/2"
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
               >
                 {TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>{tz}</option>
@@ -117,17 +117,17 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-[#EAF0FF]/80">
                 Closeout Hour
                 <span
                   title="The hour when the business day ends. E.g. 4:00 AM means late-night sales after midnight still count as the previous day."
-                  className="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-xs text-gray-600"
+                  className="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-[#16283F] text-xs text-[#EAF0FF]/70"
                 >?</span>
               </label>
               <select
                 value={closeoutHour}
                 onChange={(e) => setCloseoutHour(Number(e.target.value))}
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm sm:w-1/2"
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
               >
                 {Array.from({ length: 24 }, (_, i) => (
                   <option key={i} value={i}>{i}:00</option>
@@ -138,7 +138,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               <button
                 type="submit"
                 disabled={updateMutation.isPending}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
               >
                 {updateMutation.isPending ? "Saving..." : "Save"}
               </button>
@@ -150,7 +150,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                   setTimezone(location.timezone);
                   setCloseoutHour(location.closeoutHour);
                 }}
-                className="rounded-md border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
               >
                 Cancel
               </button>
@@ -162,11 +162,11 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         ) : (
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-gray-500">Closeout Hour</dt>
+              <dt className="text-[#EAF0FF]/60">Closeout Hour</dt>
               <dd className="font-medium">{location.closeoutHour}:00</dd>
             </div>
             <div>
-              <dt className="text-gray-500">ID</dt>
+              <dt className="text-[#EAF0FF]/60">ID</dt>
               <dd className="font-mono text-xs">{location.id}</dd>
             </div>
           </dl>
@@ -178,9 +178,9 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
 function StatCard({ label, value, alert }: { label: string; value: string | number; alert?: boolean }) {
   return (
-    <div className={`rounded-lg border bg-white p-4 ${alert ? "border-amber-300 bg-amber-50" : ""}`}>
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
+    <div className={`rounded-lg border bg-[#16283F] p-4 ${alert ? "border-amber-500/30 bg-amber-500/10" : ""}`}>
+      <p className="text-sm text-[#EAF0FF]/60">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-[#EAF0FF]">{value}</p>
     </div>
   );
 }

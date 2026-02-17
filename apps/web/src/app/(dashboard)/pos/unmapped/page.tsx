@@ -118,15 +118,15 @@ export default function UnmappedPage() {
 
   return (
     <div>
-      <h1 className="mb-2 text-2xl font-bold text-gray-900">Unmapped POS Items</h1>
-      <p className="mb-6 text-sm text-gray-500">
+      <h1 className="mb-2 text-2xl font-bold text-[#EAF0FF]">Unmapped POS Items</h1>
+      <p className="mb-6 text-sm text-[#EAF0FF]/60">
         Items sold in the last 7 days that have no inventory mapping. Map them to start tracking depletion.
       </p>
 
       {isLoading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-[#EAF0FF]/60">Loading...</p>
       ) : unmapped?.length === 0 ? (
-        <div className="rounded-lg border bg-green-50 p-6 text-center text-green-700">
+        <div className="rounded-lg border border-white/10 bg-green-500/10 p-6 text-center text-green-400">
           All POS items are mapped. Nice work!
         </div>
       ) : (
@@ -137,13 +137,13 @@ export default function UnmappedPage() {
               placeholder="Search unmapped items..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full max-w-sm rounded-md border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full max-w-sm rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
             />
           </div>
 
-          <div className="overflow-x-auto rounded-lg border bg-white">
+          <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
             <table className="w-full text-left text-sm">
-              <thead className="border-b bg-gray-50 text-xs uppercase text-gray-500">
+              <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
                 <tr>
                   <th className="px-4 py-3">POS Item</th>
                   <th className="px-4 py-3">Source</th>
@@ -158,30 +158,30 @@ export default function UnmappedPage() {
                   const key = `${item.source_system}-${item.pos_item_id}`;
                   const isOpen = mappingItemKey === key;
                   return (
-                    <tr key={key} className="hover:bg-gray-50">
+                    <tr key={key} className="hover:bg-[#16283F]/60">
                       <td className="px-4 py-3" colSpan={isOpen ? 6 : undefined}>
                         {isOpen ? (
                           <div>
                             <div className="mb-3 flex items-center gap-2">
                               <span className="font-medium">{item.pos_item_name}</span>
-                              <span className="font-mono text-xs text-gray-400">{item.pos_item_id}</span>
-                              <span className="rounded bg-gray-100 px-2 py-0.5 text-xs capitalize text-gray-600">{item.source_system}</span>
+                              <span className="font-mono text-xs text-[#EAF0FF]/40">{item.pos_item_id}</span>
+                              <span className="rounded bg-white/5 px-2 py-0.5 text-xs capitalize text-[#EAF0FF]/70">{item.source_system}</span>
                             </div>
 
                             <div className="flex flex-wrap items-end gap-3">
                               <div className="min-w-[240px] flex-1">
-                                <label className="mb-1 block text-xs font-medium text-gray-600">Inventory Item</label>
+                                <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Inventory Item</label>
                                 <input
                                   type="text"
                                   placeholder="Search inventory..."
                                   value={inventorySearch}
                                   onChange={(e) => setInventorySearch(e.target.value)}
-                                  className="mb-1 w-full rounded-md border px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  className="mb-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
                                 />
                                 <select
                                   value={inventoryItemId}
                                   onChange={(e) => setInventoryItemId(e.target.value)}
-                                  className="w-full rounded-md border px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
                                 >
                                   <option value="">Select item...</option>
                                   {filteredInventory.map((inv) => (
@@ -193,11 +193,11 @@ export default function UnmappedPage() {
                               </div>
 
                               <div className="min-w-[160px]">
-                                <label className="mb-1 block text-xs font-medium text-gray-600">Mode</label>
+                                <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Mode</label>
                                 <select
                                   value={mode}
                                   onChange={(e) => setMode(e.target.value)}
-                                  className="w-full rounded-md border px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
                                 >
                                   {MODE_OPTIONS.map((opt) => (
                                     <option key={opt.value} value={opt.value}>
@@ -210,11 +210,11 @@ export default function UnmappedPage() {
                               {isDraft && (
                                 <>
                                   <div className="min-w-[160px]">
-                                    <label className="mb-1 block text-xs font-medium text-gray-600">Pour Profile</label>
+                                    <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Pour Profile</label>
                                     <select
                                       value={pourProfileId}
                                       onChange={(e) => setPourProfileId(e.target.value)}
-                                      className="w-full rounded-md border px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                      className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
                                     >
                                       <option value="">Select profile...</option>
                                       {pourProfiles?.map((p) => (
@@ -226,11 +226,11 @@ export default function UnmappedPage() {
                                   </div>
 
                                   <div className="min-w-[160px]">
-                                    <label className="mb-1 block text-xs font-medium text-gray-600">Tap Line</label>
+                                    <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Tap Line</label>
                                     <select
                                       value={tapLineId}
                                       onChange={(e) => setTapLineId(e.target.value)}
-                                      className="w-full rounded-md border px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                      className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
                                     >
                                       <option value="">Select tap...</option>
                                       {tapLines?.map((t) => {
@@ -251,13 +251,13 @@ export default function UnmappedPage() {
                                 <button
                                   onClick={() => handleSave(item)}
                                   disabled={createMapping.isPending}
-                                  className="rounded-md bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                                  className="rounded-md bg-[#E9B44C] px-4 py-1.5 text-sm text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
                                 >
                                   {createMapping.isPending ? "Saving..." : "Save"}
                                 </button>
                                 <button
                                   onClick={() => setMappingItemKey(null)}
-                                  className="rounded-md border px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+                                  className="rounded-md border border-white/10 px-4 py-1.5 text-sm text-[#EAF0FF]/70 hover:bg-[#16283F]/60"
                                 >
                                   Cancel
                                 </button>
@@ -271,7 +271,7 @@ export default function UnmappedPage() {
                         ) : (
                           <div>
                             <div className="font-medium">{item.pos_item_name}</div>
-                            <div className="font-mono text-xs text-gray-400">{item.pos_item_id}</div>
+                            <div className="font-mono text-xs text-[#EAF0FF]/40">{item.pos_item_id}</div>
                           </div>
                         )}
                       </td>
@@ -284,7 +284,7 @@ export default function UnmappedPage() {
                           <td className="px-4 py-3">
                             <button
                               onClick={() => openMapping(key)}
-                              className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
+                              className="rounded-md bg-[#E9B44C] px-3 py-1 text-xs text-[#0B1623] hover:bg-[#C8922E]"
                             >
                               Map
                             </button>

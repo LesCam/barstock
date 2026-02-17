@@ -32,17 +32,17 @@ export default function ArtGalleryPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Art Gallery</h1>
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Art Gallery</h1>
         <div className="flex gap-2">
           <Link
             href="/art/new"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
           >
             + Artwork
           </Link>
           <Link
             href="/art/artists"
-            className="rounded-md border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
           >
             Artists
           </Link>
@@ -56,8 +56,8 @@ export default function ArtGalleryPage() {
             onClick={() => setStatusFilter(f.value)}
             className={`rounded-full px-3 py-1 text-sm font-medium ${
               statusFilter === f.value
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                ? "bg-[#E9B44C] text-[#0B1623]"
+                : "bg-white/5 text-[#EAF0FF]/80 hover:bg-[#16283F]"
             }`}
           >
             {f.label}
@@ -66,11 +66,11 @@ export default function ArtGalleryPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-[#EAF0FF]/60">Loading...</p>
       ) : data?.items.length === 0 ? (
-        <div className="rounded-lg border bg-white p-8 text-center text-gray-500">
+        <div className="rounded-lg border border-white/10 bg-[#16283F] p-8 text-center text-[#EAF0FF]/60">
           No artworks found.{" "}
-          <Link href="/art/new" className="text-blue-600 hover:underline">
+          <Link href="/art/new" className="text-[#E9B44C] hover:underline">
             Add one
           </Link>
         </div>
