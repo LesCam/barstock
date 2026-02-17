@@ -54,7 +54,6 @@ export default function InventoryPage() {
   const [newBarcode, setNewBarcode] = useState("");
   const [newVendorSku, setNewVendorSku] = useState("");
   const [newPackSize, setNewPackSize] = useState("");
-  const [newPackUom, setNewPackUom] = useState<string>("");
   const [newContainerSize, setNewContainerSize] = useState("");
   const [newContainerUom, setNewContainerUom] = useState<string>("");
 
@@ -74,7 +73,6 @@ export default function InventoryPage() {
     setNewBarcode("");
     setNewVendorSku("");
     setNewPackSize("");
-    setNewPackUom("");
     setNewContainerSize("");
     setNewContainerUom("");
   }
@@ -89,7 +87,7 @@ export default function InventoryPage() {
       barcode: newBarcode.trim() || undefined,
       vendorSku: newVendorSku.trim() || undefined,
       packSize: newPackSize ? Number(newPackSize) : undefined,
-      packUom: newPackUom ? (newPackUom as any) : undefined,
+      packUom: newPackSize ? (UOM.units as any) : undefined,
       containerSize: newContainerSize ? Number(newContainerSize) : undefined,
       containerUom: newContainerUom ? (newContainerUom as any) : undefined,
     });
@@ -225,22 +223,6 @@ export default function InventoryPage() {
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
                 placeholder="e.g. 12"
               />
-            </div>
-            <div>
-              <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
-                Pack UOM
-                <span title="Unit for the pack count. Usually 'Units' (bottles, cans)." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
-              </label>
-              <select
-                value={newPackUom}
-                onChange={(e) => setNewPackUom(e.target.value)}
-                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
-              >
-                <option value="">None</option>
-                {Object.entries(UOM_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
-                ))}
-              </select>
             </div>
             <div>
               <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
