@@ -64,6 +64,25 @@ export default function TareWeightsScreen() {
 
   const deleteMutation = trpc.scale.deleteTemplate.useMutation({
     onSuccess: () => utils.scale.listTemplates.invalidate({ locationId }),
+    onError: (error, variables) => {
+      if (error.data?.code === "PRECONDITION_FAILED") {
+        // Template has references — ask user to confirm force delete
+        Alert.alert(
+          "Template In Use",
+          error.message + "\n\nThis is a soft delete — historical data will be preserved.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Remove Anyway",
+              style: "destructive",
+              onPress: () => deleteMutation.mutate({ templateId: variables.templateId, force: true }),
+            },
+          ]
+        );
+      } else {
+        Alert.alert("Error", error.message ?? "Failed to delete template.");
+      }
+    },
   });
 
   const createMutation = trpc.scale.createTemplate.useMutation({

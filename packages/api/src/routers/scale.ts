@@ -64,9 +64,31 @@ export const scaleRouter = router({
       });
     }),
 
+  /** Check if a template has related measurements or session lines */
+  checkTemplateUsage: protectedProcedure
+    .input(z.object({ templateId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [sessionLineCount, measurementCount] = await Promise.all([
+        ctx.prisma.inventorySessionLine.count({
+          where: { bottleTemplateId: input.templateId },
+        }),
+        ctx.prisma.bottleMeasurement.count({
+          where: {
+            inventoryItemId: (
+              await ctx.prisma.bottleTemplate.findUniqueOrThrow({
+                where: { id: input.templateId },
+                select: { inventoryItemId: true },
+              })
+            ).inventoryItemId,
+          },
+        }),
+      ]);
+      return { sessionLineCount, measurementCount, hasUsage: sessionLineCount > 0 || measurementCount > 0 };
+    }),
+
   deleteTemplate: protectedProcedure
     .use(requirePermission("canManageTareWeights"))
-    .input(z.object({ templateId: z.string().uuid() }))
+    .input(z.object({ templateId: z.string().uuid(), force: z.boolean().default(false) }))
     .mutation(async ({ ctx, input }) => {
       const template = await ctx.prisma.bottleTemplate.findUniqueOrThrow({
         where: { id: input.templateId },
@@ -74,6 +96,20 @@ export const scaleRouter = router({
       if (template.businessId && template.businessId !== ctx.user.businessId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Template belongs to another business" });
       }
+
+      // Check for references if not forcing
+      if (!input.force) {
+        const sessionLineCount = await ctx.prisma.inventorySessionLine.count({
+          where: { bottleTemplateId: input.templateId },
+        });
+        if (sessionLineCount > 0) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: `This template is used in ${sessionLineCount} session line${sessionLineCount !== 1 ? "s" : ""}. Are you sure you want to remove it?`,
+          });
+        }
+      }
+
       return ctx.prisma.bottleTemplate.update({
         where: { id: input.templateId },
         data: { enabled: false },

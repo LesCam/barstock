@@ -46,14 +46,16 @@ export function TareWeightEditModal({
     return unsubscribe;
   }, [scaleConnected]);
 
-  function handleReadFromScale() {
+  function handleReadAsEmpty() {
     if (liveWeight == null) return;
-    const rounded = String(Math.round(liveWeight));
-    if (activeTab === "tare") {
-      setTareValue(rounded);
-    } else {
-      setFullValue(rounded);
-    }
+    setTareValue(String(Math.round(liveWeight)));
+    setActiveTab("tare");
+  }
+
+  function handleReadAsFull() {
+    if (liveWeight == null) return;
+    setFullValue(String(Math.round(liveWeight)));
+    setActiveTab("full");
   }
 
   const tareG = parseInt(tareValue) || 0;
@@ -137,17 +139,29 @@ export function TareWeightEditModal({
 
           {/* Read from Scale */}
           {scaleConnected && (
-            <TouchableOpacity
-              style={[styles.scaleBtn, liveWeight == null && styles.scaleBtnDisabled]}
-              onPress={handleReadFromScale}
-              disabled={liveWeight == null}
-            >
-              <Text style={styles.scaleBtnText}>
-                {liveWeight != null
-                  ? `Read from Scale (${liveWeight.toFixed(1)}g)`
-                  : "Waiting for scale..."}
-              </Text>
-            </TouchableOpacity>
+            <View>
+              {liveWeight != null && (
+                <Text style={styles.scaleReading}>
+                  Scale: {liveWeight.toFixed(1)} g
+                </Text>
+              )}
+              <View style={styles.scaleButtonRow}>
+                <TouchableOpacity
+                  style={[styles.scaleBtn, styles.scaleBtnEmpty, liveWeight == null && styles.scaleBtnDisabled]}
+                  onPress={handleReadAsEmpty}
+                  disabled={liveWeight == null}
+                >
+                  <Text style={styles.scaleBtnText}>Weigh Empty Bottle</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.scaleBtn, styles.scaleBtnFull, liveWeight == null && styles.scaleBtnDisabled]}
+                  onPress={handleReadAsFull}
+                  disabled={liveWeight == null}
+                >
+                  <Text style={styles.scaleBtnText}>Weigh Full Bottle</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
 
           {/* Keypad */}
@@ -250,19 +264,36 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 4,
   },
+  scaleReading: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#16a34a",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  scaleButtonRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
   scaleBtn: {
-    backgroundColor: "#16a34a",
+    flex: 1,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: "center",
-    marginBottom: 12,
+  },
+  scaleBtnEmpty: {
+    backgroundColor: "#2563eb",
+  },
+  scaleBtnFull: {
+    backgroundColor: "#16a34a",
   },
   scaleBtnDisabled: {
     opacity: 0.4,
   },
   scaleBtnText: {
     color: "#fff",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
   },
   actions: {
