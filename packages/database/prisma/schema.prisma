@@ -251,9 +251,11 @@ model InventoryItem {
   barcode    String?
   vendorSku  String?            @map("vendor_sku")
   baseUom    UomT               @map("base_uom")
-  packSize   Decimal?           @map("pack_size")
-  packUom    UomT?              @map("pack_uom")
-  active     Boolean            @default(true)
+  packSize      Decimal?           @map("pack_size")
+  packUom       UomT?              @map("pack_uom")
+  containerSize Decimal?           @map("container_size")
+  containerUom  UomT?              @map("container_uom")
+  active        Boolean            @default(true)
   createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz()
 
   location           Location             @relation(fields: [locationId], references: [id])

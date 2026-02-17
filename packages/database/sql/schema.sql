@@ -540,3 +540,10 @@ alter table users add column if not exists pin char(4);
 
 alter table businesses add column if not exists logo_url text;
 alter table businesses add column if not exists logo_key text;
+
+-- ===========================
+-- v1.8 PATCH: CONTAINER SIZE / UOM ON INVENTORY ITEMS
+-- ===========================
+
+alter table inventory_items add column if not exists container_size numeric;
+alter table inventory_items add column if not exists container_uom uom_t;

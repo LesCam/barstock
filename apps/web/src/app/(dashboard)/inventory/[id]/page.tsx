@@ -49,6 +49,8 @@ export default function InventoryDetailPage({
   const [editVendorSku, setEditVendorSku] = useState("");
   const [editPackSize, setEditPackSize] = useState("");
   const [editPackUom, setEditPackUom] = useState("");
+  const [editContainerSize, setEditContainerSize] = useState("");
+  const [editContainerUom, setEditContainerUom] = useState("");
 
   // --- Add price state ---
   const [showAddPrice, setShowAddPrice] = useState(false);
@@ -82,6 +84,8 @@ export default function InventoryDetailPage({
     setEditVendorSku(item.vendorSku ?? "");
     setEditPackSize(item.packSize != null ? String(item.packSize) : "");
     setEditPackUom(item.packUom ?? "");
+    setEditContainerSize(item.containerSize != null ? String(item.containerSize) : "");
+    setEditContainerUom(item.containerUom ?? "");
     setEditing(true);
   }
 
@@ -95,6 +99,8 @@ export default function InventoryDetailPage({
       vendorSku: editVendorSku.trim() || null,
       packSize: editPackSize ? Number(editPackSize) : null,
       packUom: editPackUom ? (editPackUom as any) : null,
+      containerSize: editContainerSize ? Number(editContainerSize) : null,
+      containerUom: editContainerUom ? (editContainerUom as any) : null,
     });
   }
 
@@ -200,7 +206,10 @@ export default function InventoryDetailPage({
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Base UOM</label>
+                <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                  Base UOM
+                  <span title="How you count this item in inventory. Use 'Units' for bottles/cans, 'Oz' or 'mL' for draft lines." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+                </label>
                 <select
                   value={editBaseUom}
                   onChange={(e) => setEditBaseUom(e.target.value)}
@@ -230,7 +239,10 @@ export default function InventoryDetailPage({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Pack Size</label>
+                <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                  Pack Size
+                  <span title="Number of items per case or pack. E.g. 12 for a case of 12 bottles." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+                </label>
                 <input
                   type="number"
                   value={editPackSize}
@@ -239,10 +251,41 @@ export default function InventoryDetailPage({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Pack UOM</label>
+                <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                  Pack UOM
+                  <span title="Unit for the pack count. Usually 'Units' (bottles, cans)." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+                </label>
                 <select
                   value={editPackUom}
                   onChange={(e) => setEditPackUom(e.target.value)}
+                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+                >
+                  <option value="">None</option>
+                  {Object.entries(UOM_LABELS).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                  Container Size
+                  <span title="Volume or weight of a single container. E.g. 750 for a 750mL bottle." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+                </label>
+                <input
+                  type="number"
+                  value={editContainerSize}
+                  onChange={(e) => setEditContainerSize(e.target.value)}
+                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                  Container UOM
+                  <span title="Unit for the container size. E.g. 'mL' for a 750mL bottle, 'Oz' for a 12oz can." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+                </label>
+                <select
+                  value={editContainerUom}
+                  onChange={(e) => setEditContainerUom(e.target.value)}
                   className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
                 >
                   <option value="">None</option>
@@ -296,6 +339,14 @@ export default function InventoryDetailPage({
             <div>
               <dt className="text-[#EAF0FF]/60">Pack UOM</dt>
               <dd className="text-[#EAF0FF]">{item.packUom ? (UOM_LABELS[item.packUom] ?? item.packUom) : "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-[#EAF0FF]/60">Container Size</dt>
+              <dd className="text-[#EAF0FF]">{item.containerSize != null ? String(item.containerSize) : "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-[#EAF0FF]/60">Container UOM</dt>
+              <dd className="text-[#EAF0FF]">{item.containerUom ? (UOM_LABELS[item.containerUom] ?? item.containerUom) : "—"}</dd>
             </div>
             <div>
               <dt className="text-[#EAF0FF]/60">ID</dt>

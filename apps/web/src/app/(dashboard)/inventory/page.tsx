@@ -55,6 +55,8 @@ export default function InventoryPage() {
   const [newVendorSku, setNewVendorSku] = useState("");
   const [newPackSize, setNewPackSize] = useState("");
   const [newPackUom, setNewPackUom] = useState<string>("");
+  const [newContainerSize, setNewContainerSize] = useState("");
+  const [newContainerUom, setNewContainerUom] = useState<string>("");
 
   const createMut = trpc.inventory.create.useMutation({
     onSuccess: () => {
@@ -73,6 +75,8 @@ export default function InventoryPage() {
     setNewVendorSku("");
     setNewPackSize("");
     setNewPackUom("");
+    setNewContainerSize("");
+    setNewContainerUom("");
   }
 
   function handleCreate() {
@@ -86,6 +90,8 @@ export default function InventoryPage() {
       vendorSku: newVendorSku.trim() || undefined,
       packSize: newPackSize ? Number(newPackSize) : undefined,
       packUom: newPackUom ? (newPackUom as any) : undefined,
+      containerSize: newContainerSize ? Number(newContainerSize) : undefined,
+      containerUom: newContainerUom ? (newContainerUom as any) : undefined,
     });
   }
 
@@ -173,7 +179,10 @@ export default function InventoryPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Base UOM</label>
+              <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                Base UOM
+                <span title="How you count this item in inventory. Use 'Units' for bottles/cans, 'Oz' or 'mL' for draft lines." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+              </label>
               <select
                 value={newBaseUom}
                 onChange={(e) => setNewBaseUom(e.target.value)}
@@ -205,20 +214,55 @@ export default function InventoryPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Pack Size</label>
+              <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                Pack Size
+                <span title="Number of items per case or pack. E.g. 12 for a case of 12 bottles." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+              </label>
               <input
                 type="number"
                 value={newPackSize}
                 onChange={(e) => setNewPackSize(e.target.value)}
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
-                placeholder="e.g. 24"
+                placeholder="e.g. 12"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Pack UOM</label>
+              <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                Pack UOM
+                <span title="Unit for the pack count. Usually 'Units' (bottles, cans)." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+              </label>
               <select
                 value={newPackUom}
                 onChange={(e) => setNewPackUom(e.target.value)}
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+              >
+                <option value="">None</option>
+                {Object.entries(UOM_LABELS).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                Container Size
+                <span title="Volume or weight of a single container. E.g. 750 for a 750mL bottle." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+              </label>
+              <input
+                type="number"
+                value={newContainerSize}
+                onChange={(e) => setNewContainerSize(e.target.value)}
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+                placeholder="e.g. 750"
+              />
+            </div>
+            <div>
+              <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
+                Container UOM
+                <span title="Unit for the container size. E.g. 'mL' for a 750mL bottle, 'Oz' for a 12oz can." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
+              </label>
+              <select
+                value={newContainerUom}
+                onChange={(e) => setNewContainerUom(e.target.value)}
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
               >
                 <option value="">None</option>

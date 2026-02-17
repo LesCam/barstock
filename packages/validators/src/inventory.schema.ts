@@ -10,6 +10,8 @@ export const inventoryItemCreateSchema = z.object({
   baseUom: z.nativeEnum(UOM),
   packSize: z.number().positive().optional(),
   packUom: z.nativeEnum(UOM).optional(),
+  containerSize: z.number().positive().optional(),
+  containerUom: z.nativeEnum(UOM).optional(),
 });
 
 export const inventoryItemUpdateSchema = z.object({
@@ -20,6 +22,8 @@ export const inventoryItemUpdateSchema = z.object({
   baseUom: z.nativeEnum(UOM).optional(),
   packSize: z.number().positive().nullable().optional(),
   packUom: z.nativeEnum(UOM).nullable().optional(),
+  containerSize: z.number().positive().nullable().optional(),
+  containerUom: z.nativeEnum(UOM).nullable().optional(),
   active: z.boolean().optional(),
 });
 
