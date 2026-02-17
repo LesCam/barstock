@@ -9,6 +9,8 @@ interface TareWeightEditModalProps {
   currentTareWeightG?: number;
   currentFullWeightG?: number;
   containerSizeMl: number;
+  /** Stored density from previous measurements */
+  densityGPerMl?: number | null;
   /** When true, name and container size are editable (used for new template creation) */
   editable?: boolean;
   onSave: (emptyBottleWeightG: number, fullBottleWeightG: number, name?: string, containerSizeMl?: number) => void;
@@ -25,6 +27,7 @@ export function TareWeightEditModal({
   currentTareWeightG,
   currentFullWeightG,
   containerSizeMl,
+  densityGPerMl,
   editable,
   onSave,
   onCancel,
@@ -237,6 +240,11 @@ export function TareWeightEditModal({
                 <Text style={styles.containerInfo}>
                   Container: {containerSizeMl} ml
                 </Text>
+                {densityGPerMl != null && (
+                  <Text style={styles.densityInfo}>
+                    Density: {densityGPerMl.toFixed(3)} g/ml
+                  </Text>
+                )}
               </View>
 
               {/* Read from Scale */}
@@ -367,6 +375,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#999",
     marginTop: 4,
+  },
+  densityInfo: {
+    fontSize: 12,
+    color: "#2563eb",
+    marginTop: 2,
   },
   fieldLabel: {
     fontSize: 13,
