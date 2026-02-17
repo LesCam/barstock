@@ -232,8 +232,9 @@ function EmailLogin({
   const emailLoginMutation = trpc.auth.login.useMutation({
     async onSuccess(data) {
       try {
+        // signIn sets the auth token and fetches user profile
         await signIn(data.accessToken, data.refreshToken);
-        // Store business config for future PIN logins
+        // Store business config for future PIN logins BEFORE navigation
         const userStr = await AsyncStorage.getItem("authUser");
         if (userStr) {
           const user = JSON.parse(userStr);
@@ -245,7 +246,8 @@ function EmailLogin({
             logoUrl = biz.logoUrl ?? null;
             slug = biz.slug ?? null;
           } catch {}
-          await AsyncStorage.setItem(
+          // Fire and forget — don't block navigation
+          AsyncStorage.setItem(
             BUSINESS_CONFIG_KEY,
             JSON.stringify({
               id: user.businessId,
@@ -353,19 +355,17 @@ export default function LoginScreen() {
         setMode("pin");
 
         // Refresh logo from server in background (public endpoint, no auth needed)
-        if (slug) {
-          try {
-            const biz = await trpcVanilla.businesses.getBySlug.query({ slug });
-            const freshLogoUrl = biz.logoUrl ?? null;
-            if (freshLogoUrl !== (savedLogoUrl ?? null)) {
-              setLogoUrl(freshLogoUrl);
-              await AsyncStorage.setItem(
-                BUSINESS_CONFIG_KEY,
-                JSON.stringify({ id, name, slug, logoUrl: freshLogoUrl })
-              );
-            }
-          } catch {}
-        }
+        try {
+          const biz = await trpcVanilla.businesses.getPublicInfo.query({ businessId: id });
+          const freshLogoUrl = biz.logoUrl ?? null;
+          if (freshLogoUrl !== (savedLogoUrl ?? null)) {
+            setLogoUrl(freshLogoUrl);
+            await AsyncStorage.setItem(
+              BUSINESS_CONFIG_KEY,
+              JSON.stringify({ id, name, slug: biz.slug, logoUrl: freshLogoUrl })
+            );
+          }
+        } catch {}
       } else {
         setMode("email");
       }
