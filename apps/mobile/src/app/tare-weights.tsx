@@ -120,23 +120,42 @@ export default function TareWeightsScreen() {
 
   function handleEditSave(emptyBottleWeightG: number, fullBottleWeightG: number) {
     if (!editingTemplate) return;
+    // Calculate actual density when both weights are measured
+    const containerMl = Number(editingTemplate.containerSizeMl);
+    const liquidG = fullBottleWeightG - emptyBottleWeightG;
+    const densityGPerMl = (liquidG > 0 && containerMl > 0) ? liquidG / containerMl : undefined;
     updateMutation.mutate({
       templateId: editingTemplate.id,
       emptyBottleWeightG,
       fullBottleWeightG,
+      densityGPerMl,
     });
   }
 
-  function handleAddSave(emptyBottleWeightG: number, fullBottleWeightG: number) {
+  const updateItemMutation = trpc.inventory.update.useMutation();
+
+  function handleAddSave(emptyBottleWeightG: number, fullBottleWeightG: number, name?: string, containerSizeMl?: number) {
     if (!addingItem) return;
-    const containerSizeMl = Number(addingItem.containerSize) || 750;
+    const sizeMl = containerSizeMl ?? (Number(addingItem.containerSize) || 750);
+
+    // Update inventory item name/container if changed
+    const originalSizeMl = Number(addingItem.containerSize) || 750;
+    if (name && (name !== addingItem.name || sizeMl !== originalSizeMl)) {
+      updateItemMutation.mutate({ id: addingItem.id, name, containerSize: sizeMl });
+    }
+
+    // Calculate actual density when both weights are provided
+    const liquidG = fullBottleWeightG - emptyBottleWeightG;
+    const densityGPerMl = (liquidG > 0 && sizeMl > 0) ? liquidG / sizeMl : undefined;
+
     createMutation.mutate({
       businessId: user?.businessId,
       locationId,
       inventoryItemId: addingItem.id,
-      containerSizeMl,
+      containerSizeMl: sizeMl,
       emptyBottleWeightG,
       fullBottleWeightG,
+      densityGPerMl,
     });
   }
 
@@ -280,10 +299,11 @@ export default function TareWeightsScreen() {
         />
       )}
 
-      {/* Add (new template) modal */}
+      {/* Add (new template) modal — editable name & container */}
       {addingItem && (
         <TareWeightEditModal
           visible
+          editable
           itemName={addingItem.name}
           containerSizeMl={Number(addingItem.containerSize) || 750}
           onSave={handleAddSave}
@@ -294,6 +314,7 @@ export default function TareWeightsScreen() {
       {/* Quick-create from scan (item not found) */}
       {creatingFromScan && (
         <CreateItemFromScanModal
+          key={creatingFromScan.barcode}
           barcode={creatingFromScan.barcode}
           locationId={locationId}
           onSuccess={() => {
