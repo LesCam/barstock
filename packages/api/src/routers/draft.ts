@@ -146,7 +146,8 @@ export const draftRouter = router({
     .input(z.object({ locationId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       ctx.prisma.pourProfile.findMany({
-        where: { locationId: input.locationId, active: true },
+        where: { locationId: input.locationId },
+        orderBy: { name: "asc" },
       })
     ),
 
@@ -158,4 +159,33 @@ export const draftRouter = router({
       oz: z.number().positive(),
     }))
     .mutation(({ ctx, input }) => ctx.prisma.pourProfile.create({ data: input })),
+
+  updatePourProfile: protectedProcedure
+    .use(requireRole("manager"))
+    .input(z.object({
+      id: z.string().uuid(),
+      name: z.string().min(1).optional(),
+      oz: z.number().positive().optional(),
+      active: z.boolean().optional(),
+    }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return ctx.prisma.pourProfile.update({ where: { id }, data });
+    }),
+
+  deletePourProfile: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const refs = await ctx.prisma.pOSItemMapping.count({
+        where: { pourProfileId: input.id, active: true },
+      });
+      if (refs > 0) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Cannot delete pour profile — it has active POS item mappings.",
+        });
+      }
+      return ctx.prisma.pourProfile.delete({ where: { id: input.id } });
+    }),
 });

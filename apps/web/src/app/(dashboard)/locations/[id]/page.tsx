@@ -55,6 +55,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const { data: stats } = trpc.locations.stats.useQuery({ locationId: id });
   const { data: barAreas = [] } = trpc.areas.listBarAreas.useQuery({ locationId: id });
   const { data: tapLines = [] } = trpc.draft.listTapLines.useQuery({ locationId: id });
+  const { data: pourProfiles = [] } = trpc.draft.listPourProfiles.useQuery({ locationId: id });
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
@@ -104,9 +105,19 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [editTapBarAreaId, setEditTapBarAreaId] = useState("");
   const [tapDeleteError, setTapDeleteError] = useState<string | null>(null);
 
+  // Pour profiles state
+  const [addingProfile, setAddingProfile] = useState(false);
+  const [newProfileName, setNewProfileName] = useState("");
+  const [newProfileOz, setNewProfileOz] = useState("");
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [editProfileName, setEditProfileName] = useState("");
+  const [editProfileOz, setEditProfileOz] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
+
   const utils = trpc.useUtils();
   const invalidateAreas = () => utils.areas.listBarAreas.invalidate({ locationId: id });
   const invalidateTaps = () => utils.draft.listTapLines.invalidate({ locationId: id });
+  const invalidateProfiles = () => utils.draft.listPourProfiles.invalidate({ locationId: id });
 
   const updateMutation = trpc.locations.update.useMutation({
     onSuccess: () => {
@@ -149,6 +160,19 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const deleteTapMut = trpc.draft.deleteTapLine.useMutation({
     onSuccess: () => { invalidateTaps(); setTapDeleteError(null); },
     onError: (err) => setTapDeleteError(err.message),
+  });
+
+  const createProfileMut = trpc.draft.createPourProfile.useMutation({
+    onSuccess: () => { invalidateProfiles(); setAddingProfile(false); setNewProfileName(""); setNewProfileOz(""); },
+    onError: (err) => setProfileError(err.message),
+  });
+  const updateProfileMut = trpc.draft.updatePourProfile.useMutation({
+    onSuccess: () => { invalidateProfiles(); setEditingProfileId(null); },
+    onError: (err) => setProfileError(err.message),
+  });
+  const deleteProfileMut = trpc.draft.deletePourProfile.useMutation({
+    onSuccess: () => { invalidateProfiles(); setProfileError(null); },
+    onError: (err) => setProfileError(err.message),
   });
 
   function toggleArea(areaId: string) {
@@ -801,6 +825,165 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             </div>
           );
         })()}
+      </div>
+
+      {/* Pour Profiles */}
+      <div className="mt-4 rounded-lg border border-white/10 bg-[#16283F] p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">
+            Pour Profiles
+            {pourProfiles.length > 0 && (
+              <span className="ml-2 text-sm font-normal text-[#EAF0FF]/40">({pourProfiles.length})</span>
+            )}
+          </h2>
+          {canEdit && !addingProfile && (
+            <button
+              onClick={() => setAddingProfile(true)}
+              className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#D4A43C]"
+            >
+              + Add Profile
+            </button>
+          )}
+        </div>
+
+        {profileError && (
+          <div className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            {profileError}
+            <button onClick={() => setProfileError(null)} className="ml-2 underline">Dismiss</button>
+          </div>
+        )}
+
+        {addingProfile && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              createProfileMut.mutate({
+                locationId: id,
+                name: newProfileName.trim(),
+                oz: parseFloat(newProfileOz),
+              });
+            }}
+            className="mb-3 flex items-end gap-2 rounded-md border border-white/10 bg-[#0B1623] p-3"
+          >
+            <div className="flex-1">
+              <label className="block text-xs text-[#EAF0FF]/60">Name</label>
+              <input
+                type="text"
+                value={newProfileName}
+                onChange={(e) => setNewProfileName(e.target.value)}
+                required
+                autoFocus
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#16283F] px-2 py-1.5 text-sm text-[#EAF0FF]"
+                placeholder="e.g. 16oz Pint"
+              />
+            </div>
+            <div className="w-24">
+              <label className="block text-xs text-[#EAF0FF]/60">Size (oz)</label>
+              <input
+                type="number"
+                value={newProfileOz}
+                onChange={(e) => setNewProfileOz(e.target.value)}
+                required
+                min="0.1"
+                step="any"
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#16283F] px-2 py-1.5 text-sm text-[#EAF0FF]"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={createProfileMut.isPending}
+              className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+            >
+              {createProfileMut.isPending ? "Adding..." : "Add"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAddingProfile(false); setNewProfileName(""); setNewProfileOz(""); }}
+              className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-[#EAF0FF]/60 hover:bg-[#16283F]/60"
+            >
+              Cancel
+            </button>
+          </form>
+        )}
+
+        {pourProfiles.length === 0 && !addingProfile && (
+          <p className="text-sm text-[#EAF0FF]/40">No pour profiles defined yet.</p>
+        )}
+
+        <div className="space-y-1">
+          {pourProfiles.map((profile) => {
+            const isEditing = editingProfileId === profile.id;
+
+            if (isEditing) {
+              return (
+                <form
+                  key={profile.id}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    updateProfileMut.mutate({
+                      id: profile.id,
+                      name: editProfileName.trim(),
+                      oz: parseFloat(editProfileOz),
+                    });
+                  }}
+                  className="flex items-center gap-2 rounded-md border border-white/10 bg-[#0B1623] p-2"
+                >
+                  <input
+                    type="text"
+                    value={editProfileName}
+                    onChange={(e) => setEditProfileName(e.target.value)}
+                    required
+                    autoFocus
+                    className="flex-1 rounded-md border border-white/10 bg-[#16283F] px-2 py-1 text-sm text-[#EAF0FF]"
+                  />
+                  <input
+                    type="number"
+                    value={editProfileOz}
+                    onChange={(e) => setEditProfileOz(e.target.value)}
+                    required
+                    min="0.1"
+                    step="any"
+                    className="w-20 rounded-md border border-white/10 bg-[#16283F] px-2 py-1 text-sm text-[#EAF0FF]"
+                  />
+                  <button type="submit" disabled={updateProfileMut.isPending} className="text-sm text-[#E9B44C] hover:underline disabled:opacity-50">
+                    {updateProfileMut.isPending ? "Saving..." : "Save"}
+                  </button>
+                  <button type="button" onClick={() => setEditingProfileId(null)} className="text-sm text-[#EAF0FF]/60 hover:underline">
+                    Cancel
+                  </button>
+                </form>
+              );
+            }
+
+            return (
+              <div key={profile.id} className="flex items-center gap-2 rounded-md border border-white/10 bg-[#0B1623] p-2">
+                <span className={`flex-1 text-sm ${profile.active ? "text-[#EAF0FF]" : "text-[#EAF0FF]/40 line-through"}`}>
+                  {profile.name} ({Number(profile.oz)}oz)
+                </span>
+                {canEdit && (
+                  <button
+                    onClick={() => {
+                      setEditingProfileId(profile.id);
+                      setEditProfileName(profile.name);
+                      setEditProfileOz(String(Number(profile.oz)));
+                    }}
+                    className="text-sm text-[#E9B44C] hover:underline"
+                  >
+                    Edit
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    onClick={() => { if (confirm(`Delete pour profile "${profile.name}"?`)) deleteProfileMut.mutate({ id: profile.id }); }}
+                    className="text-sm text-red-400 hover:underline"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
