@@ -54,6 +54,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const { data: location } = trpc.locations.getById.useQuery({ locationId: id });
   const { data: stats } = trpc.locations.stats.useQuery({ locationId: id });
   const { data: barAreas = [] } = trpc.areas.listBarAreas.useQuery({ locationId: id });
+  const { data: tapLines = [] } = trpc.draft.listTapLines.useQuery({ locationId: id });
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
@@ -94,8 +95,18 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [newSubAreaSort, setNewSubAreaSort] = useState(0);
   const [areaDeleteError, setAreaDeleteError] = useState<string | null>(null);
 
+  // Tap lines state
+  const [addingTap, setAddingTap] = useState(false);
+  const [newTapName, setNewTapName] = useState("");
+  const [newTapBarAreaId, setNewTapBarAreaId] = useState("");
+  const [editingTapId, setEditingTapId] = useState<string | null>(null);
+  const [editTapName, setEditTapName] = useState("");
+  const [editTapBarAreaId, setEditTapBarAreaId] = useState("");
+  const [tapDeleteError, setTapDeleteError] = useState<string | null>(null);
+
   const utils = trpc.useUtils();
   const invalidateAreas = () => utils.areas.listBarAreas.invalidate({ locationId: id });
+  const invalidateTaps = () => utils.draft.listTapLines.invalidate({ locationId: id });
 
   const updateMutation = trpc.locations.update.useMutation({
     onSuccess: () => {
@@ -106,9 +117,11 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
   const createBarAreaMut = trpc.areas.createBarArea.useMutation({
     onSuccess: () => { invalidateAreas(); setAddingBarArea(false); setNewBarAreaName(""); },
+    onError: (err) => setAreaDeleteError(err.message),
   });
   const updateBarAreaMut = trpc.areas.updateBarArea.useMutation({
     onSuccess: () => { invalidateAreas(); setEditingBarAreaId(null); },
+    onError: (err) => setAreaDeleteError(err.message),
   });
   const deleteBarAreaMut = trpc.areas.deleteBarArea.useMutation({
     onSuccess: () => { invalidateAreas(); setAreaDeleteError(null); },
@@ -123,6 +136,19 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const deleteSubAreaMut = trpc.areas.deleteSubArea.useMutation({
     onSuccess: () => { invalidateAreas(); setAreaDeleteError(null); },
     onError: (err) => setAreaDeleteError(err.message),
+  });
+
+  const createTapMut = trpc.draft.createTapLine.useMutation({
+    onSuccess: () => { invalidateTaps(); setAddingTap(false); setNewTapName(""); setNewTapBarAreaId(""); },
+    onError: (err) => setTapDeleteError(err.message),
+  });
+  const updateTapMut = trpc.draft.updateTapLine.useMutation({
+    onSuccess: () => { invalidateTaps(); setEditingTapId(null); },
+    onError: (err) => setTapDeleteError(err.message),
+  });
+  const deleteTapMut = trpc.draft.deleteTapLine.useMutation({
+    onSuccess: () => { invalidateTaps(); setTapDeleteError(null); },
+    onError: (err) => setTapDeleteError(err.message),
   });
 
   function toggleArea(areaId: string) {
@@ -589,6 +615,192 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             );
           })}
         </div>
+      </div>
+
+      {/* Tap Lines */}
+      <div className="mt-4 rounded-lg border border-white/10 bg-[#16283F] p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Tap Lines</h2>
+          {canEdit && !addingTap && (
+            <button
+              onClick={() => setAddingTap(true)}
+              className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#D4A43C]"
+            >
+              + Add Tap
+            </button>
+          )}
+        </div>
+
+        {tapDeleteError && (
+          <div className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            {tapDeleteError}
+            <button onClick={() => setTapDeleteError(null)} className="ml-2 underline">Dismiss</button>
+          </div>
+        )}
+
+        {addingTap && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              createTapMut.mutate({
+                locationId: id,
+                name: newTapName.trim(),
+                ...(newTapBarAreaId ? { barAreaId: newTapBarAreaId } : {}),
+              });
+            }}
+            className="mb-3 flex items-end gap-2 rounded-md border border-white/10 bg-[#0B1623] p-3"
+          >
+            <div className="flex-1">
+              <label className="block text-xs text-[#EAF0FF]/60">Name</label>
+              <input
+                type="text"
+                value={newTapName}
+                onChange={(e) => setNewTapName(e.target.value)}
+                required
+                autoFocus
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#16283F] px-2 py-1.5 text-sm text-[#EAF0FF]"
+                placeholder="e.g. Tap 1"
+              />
+            </div>
+            <div className="w-40">
+              <label className="block text-xs text-[#EAF0FF]/60">Bar Area</label>
+              <select
+                value={newTapBarAreaId}
+                onChange={(e) => setNewTapBarAreaId(e.target.value)}
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#16283F] px-2 py-1.5 text-sm text-[#EAF0FF]"
+              >
+                <option value="">None</option>
+                {barAreas.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={createTapMut.isPending}
+              className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+            >
+              {createTapMut.isPending ? "Adding..." : "Add"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAddingTap(false); setNewTapName(""); setNewTapBarAreaId(""); }}
+              className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-[#EAF0FF]/60 hover:bg-[#16283F]/60"
+            >
+              Cancel
+            </button>
+          </form>
+        )}
+
+        {tapLines.length === 0 && !addingTap && (
+          <p className="text-sm text-[#EAF0FF]/40">No tap lines defined yet.</p>
+        )}
+
+        {tapLines.length > 0 && (() => {
+          const grouped = new Map<string, { name: string; taps: typeof tapLines }>();
+          for (const tap of tapLines) {
+            const key = tap.barAreaId ?? "__unassigned__";
+            const groupName = tap.barArea?.name ?? "Unassigned";
+            if (!grouped.has(key)) grouped.set(key, { name: groupName, taps: [] });
+            grouped.get(key)!.taps.push(tap);
+          }
+          // Sort: named areas first (alphabetical), "Unassigned" last
+          const entries = [...grouped.entries()].sort(([a], [b]) => {
+            if (a === "__unassigned__") return 1;
+            if (b === "__unassigned__") return -1;
+            return grouped.get(a)!.name.localeCompare(grouped.get(b)!.name);
+          });
+
+          return (
+            <div className="space-y-3">
+              {entries.map(([groupKey, { name: groupName, taps }]) => (
+                <div key={groupKey}>
+                  <h3 className="mb-1 text-sm font-medium text-[#EAF0FF]/60">{groupName}</h3>
+                  <div className="space-y-1">
+                    {taps.map((tap) => {
+                      const activeAssignment = tap.tapAssignments[0];
+                      const kegName = activeAssignment?.kegInstance?.inventoryItem?.name;
+                      const isEditing = editingTapId === tap.id;
+
+                      if (isEditing) {
+                        return (
+                          <form
+                            key={tap.id}
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              updateTapMut.mutate({
+                                id: tap.id,
+                                name: editTapName.trim(),
+                                barAreaId: editTapBarAreaId || null,
+                              });
+                            }}
+                            className="flex items-center gap-2 rounded-md border border-white/10 bg-[#0B1623] p-2"
+                          >
+                            <input
+                              type="text"
+                              value={editTapName}
+                              onChange={(e) => setEditTapName(e.target.value)}
+                              required
+                              autoFocus
+                              className="flex-1 rounded-md border border-white/10 bg-[#16283F] px-2 py-1 text-sm text-[#EAF0FF]"
+                            />
+                            <select
+                              value={editTapBarAreaId}
+                              onChange={(e) => setEditTapBarAreaId(e.target.value)}
+                              className="w-36 rounded-md border border-white/10 bg-[#16283F] px-2 py-1 text-sm text-[#EAF0FF]"
+                            >
+                              <option value="">None</option>
+                              {barAreas.map((a) => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                              ))}
+                            </select>
+                            <button type="submit" disabled={updateTapMut.isPending} className="text-sm text-[#E9B44C] hover:underline disabled:opacity-50">
+                              {updateTapMut.isPending ? "Saving..." : "Save"}
+                            </button>
+                            <button type="button" onClick={() => setEditingTapId(null)} className="text-sm text-[#EAF0FF]/60 hover:underline">
+                              Cancel
+                            </button>
+                          </form>
+                        );
+                      }
+
+                      return (
+                        <div key={tap.id} className="flex items-center gap-2 rounded-md border border-white/10 bg-[#0B1623] p-2">
+                          <span className="flex-1 text-sm text-[#EAF0FF]">
+                            {tap.name}
+                            {kegName && (
+                              <span className="ml-2 text-[#EAF0FF]/50">— {kegName} (keg)</span>
+                            )}
+                          </span>
+                          {canEdit && (
+                            <button
+                              onClick={() => {
+                                setEditingTapId(tap.id);
+                                setEditTapName(tap.name);
+                                setEditTapBarAreaId(tap.barAreaId ?? "");
+                              }}
+                              className="text-sm text-[#E9B44C] hover:underline"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => { if (confirm(`Delete tap line "${tap.name}"?`)) deleteTapMut.mutate({ id: tap.id }); }}
+                              className="text-sm text-red-400 hover:underline"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

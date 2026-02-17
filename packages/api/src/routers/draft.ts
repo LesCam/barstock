@@ -1,5 +1,6 @@
 import { router, protectedProcedure, requireRole } from "../trpc";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { KegStatus } from "@barstock/types";
 
 export const draftRouter = router({
@@ -60,6 +61,7 @@ export const draftRouter = router({
       ctx.prisma.tapLine.findMany({
         where: { locationId: input.locationId },
         include: {
+          barArea: { select: { id: true, name: true } },
           tapAssignments: {
             where: { effectiveEndTs: null },
             include: {
@@ -69,13 +71,48 @@ export const draftRouter = router({
             },
           },
         },
+        orderBy: { name: "asc" },
       })
     ),
 
   createTapLine: protectedProcedure
     .use(requireRole("manager"))
-    .input(z.object({ locationId: z.string().uuid(), name: z.string().min(1) }))
+    .input(z.object({
+      locationId: z.string().uuid(),
+      name: z.string().min(1),
+      barAreaId: z.string().uuid().optional(),
+    }))
     .mutation(({ ctx, input }) => ctx.prisma.tapLine.create({ data: input })),
+
+  updateTapLine: protectedProcedure
+    .use(requireRole("manager"))
+    .input(z.object({
+      id: z.string().uuid(),
+      name: z.string().min(1).optional(),
+      barAreaId: z.string().uuid().nullable().optional(),
+    }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return ctx.prisma.tapLine.update({ where: { id }, data });
+    }),
+
+  deleteTapLine: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const refs = await Promise.all([
+        ctx.prisma.tapAssignment.count({ where: { tapLineId: input.id } }),
+        ctx.prisma.consumptionEvent.count({ where: { tapLineId: input.id } }),
+        ctx.prisma.inventorySessionLine.count({ where: { tapLineId: input.id } }),
+      ]);
+      if (refs.some((c) => c > 0)) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Cannot delete tap line — it has existing assignments, consumption events, or session lines.",
+        });
+      }
+      return ctx.prisma.tapLine.delete({ where: { id: input.id } });
+    }),
 
   // ── Tap Assignments ────────────────
   assignTap: protectedProcedure
