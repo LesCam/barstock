@@ -1,3 +1,4 @@
+import "@/lib/polyfills";
 import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
