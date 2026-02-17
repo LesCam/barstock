@@ -24,6 +24,26 @@ const TIMEZONES = [
 
 const ADMIN_ROLES = ["platform_admin", "business_admin", "manager"];
 
+function formatPhone(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits[0] === "1") {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return raw;
+}
+
+function formatPhoneInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length === 0) return "";
+  if (digits.length <= 3) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 export default function LocationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: session } = useSession();
@@ -52,7 +72,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       setCity(location.city ?? "");
       setProvince(location.province ?? "");
       setPostalCode(location.postalCode ?? "");
-      setPhone(location.phone ?? "");
+      setPhone(formatPhoneInput(location.phone ?? ""));
     }
   }, [location]);
 
@@ -121,7 +141,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
           </div>
           <div>
             <dt className="text-[#EAF0FF]/60">Phone</dt>
-            <dd className="font-medium">{location.phone || "—"}</dd>
+            <dd className="font-medium">{formatPhone(location.phone)}</dd>
           </div>
         </dl>
       </div>
@@ -228,9 +248,9 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               <input
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
                 className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
-                placeholder="(555) 123-4567"
+                placeholder="(555) 555-5555"
               />
             </div>
             <div className="flex gap-2">
@@ -252,7 +272,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                   setCity(location.city ?? "");
                   setProvince(location.province ?? "");
                   setPostalCode(location.postalCode ?? "");
-                  setPhone(location.phone ?? "");
+                  setPhone(formatPhoneInput(location.phone ?? ""));
                 }}
                 className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
               >

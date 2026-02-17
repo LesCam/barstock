@@ -2,6 +2,16 @@ import { z } from "zod";
 
 const slugRegex = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
 
+/** Accepts any format, strips to digits, validates 10 digits (or 11 starting with 1) */
+const phoneSchema = z
+  .string()
+  .transform((val) => val.replace(/\D/g, ""))
+  .refine(
+    (digits) => digits.length === 10 || (digits.length === 11 && digits[0] === "1"),
+    { message: "Phone must be 10 digits, e.g. (555) 555-5555" }
+  )
+  .transform((digits) => (digits.length === 11 ? digits.slice(1) : digits));
+
 export const businessCreateSchema = z.object({
   name: z.string().min(1).max(255),
   slug: z
@@ -10,7 +20,7 @@ export const businessCreateSchema = z.object({
     .max(63)
     .regex(slugRegex, "Lowercase alphanumeric and hyphens only, 2-63 chars"),
   contactEmail: z.string().email().optional(),
-  contactPhone: z.string().max(50).optional(),
+  contactPhone: phoneSchema.optional(),
   address: z.string().max(500).optional(),
 });
 
@@ -23,7 +33,7 @@ export const businessUpdateSchema = z.object({
     .regex(slugRegex, "Lowercase alphanumeric and hyphens only, 2-63 chars")
     .optional(),
   contactEmail: z.string().email().nullish(),
-  contactPhone: z.string().max(50).nullish(),
+  contactPhone: phoneSchema.nullish(),
   address: z.string().max(500).nullish(),
   logoUrl: z.string().nullish(),
   active: z.boolean().optional(),
@@ -38,7 +48,7 @@ export const locationCreateSchema = z.object({
   city: z.string().max(255).optional(),
   province: z.string().max(255).optional(),
   postalCode: z.string().max(20).optional(),
-  phone: z.string().max(50).optional(),
+  phone: phoneSchema.optional(),
 });
 
 export const locationUpdateSchema = z.object({
@@ -49,7 +59,7 @@ export const locationUpdateSchema = z.object({
   city: z.string().max(255).nullish(),
   province: z.string().max(255).nullish(),
   postalCode: z.string().max(20).nullish(),
-  phone: z.string().max(50).nullish(),
+  phone: phoneSchema.nullish(),
 });
 
 // ─── Bar Areas ──────────────────────────────────────────────
