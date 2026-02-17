@@ -210,14 +210,15 @@ model User {
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
-  location          Location           @relation(fields: [locationId], references: [id])
-  business          Business           @relation(fields: [businessId], references: [id])
-  userLocations     UserLocation[]
-  createdSessions   InventorySession[] @relation("SessionCreatedBy")
-  closedSessions    InventorySession[] @relation("SessionClosedBy")
-  bottleMeasurements BottleMeasurement[]
-  auditLogs         AuditLog[]
-  notifications     Notification[]
+  location              Location              @relation(fields: [locationId], references: [id])
+  business              Business              @relation(fields: [businessId], references: [id])
+  userLocations         UserLocation[]
+  createdSessions       InventorySession[]    @relation("SessionCreatedBy")
+  closedSessions        InventorySession[]    @relation("SessionClosedBy")
+  bottleMeasurements    BottleMeasurement[]
+  auditLogs             AuditLog[]
+  notifications         Notification[]
+  passwordResetTokens   PasswordResetToken[]
 
   @@map("users")
 }
@@ -706,4 +707,18 @@ model ArtworkPhoto {
 
   @@index([artworkId], map: "ix_artwork_photos_artwork")
   @@map("artwork_photos")
+}
+
+// ─── Password Reset ─────────────────────────────────────────
+
+model PasswordResetToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  expiresAt DateTime @map("expires_at") @db.Timestamptz()
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }

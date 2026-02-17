@@ -1,8 +1,9 @@
 import { router, publicProcedure, protectedProcedure } from "../trpc";
 import { requireRole } from "../trpc";
-import { loginSchema, refreshTokenSchema, userCreateSchema, userUpdateSchema, userLocationCreateSchema } from "@barstock/validators";
+import { loginSchema, refreshTokenSchema, userCreateSchema, userUpdateSchema, userLocationCreateSchema, forgotPasswordSchema, resetPasswordSchema } from "@barstock/validators";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import crypto from "crypto";
 import {
   verifyPassword,
   hashPassword,
@@ -112,4 +113,67 @@ export const authRouter = router({
         where: { userId_locationId: input },
       })
     ),
+
+  requestPasswordReset: publicProcedure
+    .input(forgotPasswordSchema)
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { email: input.email },
+      });
+
+      // Always return success to avoid leaking user existence
+      if (!user) {
+        return { success: true };
+      }
+
+      // Delete any existing tokens for this user
+      await ctx.prisma.passwordResetToken.deleteMany({
+        where: { userId: user.id },
+      });
+
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await ctx.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          token,
+          expiresAt,
+        },
+      });
+
+      const resetUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${token}`;
+      console.log(`\n[PASSWORD RESET] Reset link for ${input.email}:\n${resetUrl}\n`);
+
+      return { success: true };
+    }),
+
+  resetPassword: publicProcedure
+    .input(resetPasswordSchema)
+    .mutation(async ({ ctx, input }) => {
+      const resetToken = await ctx.prisma.passwordResetToken.findUnique({
+        where: { token: input.token },
+      });
+
+      if (!resetToken || resetToken.expiresAt < new Date()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid or expired reset token",
+        });
+      }
+
+      const passwordHash = await hashPassword(input.password);
+
+      await ctx.prisma.$transaction([
+        ctx.prisma.user.update({
+          where: { id: resetToken.userId },
+          data: { passwordHash },
+        }),
+        ctx.prisma.passwordResetToken.delete({
+          where: { id: resetToken.id },
+        }),
+      ]);
+
+      return { success: true };
+    }),
 });

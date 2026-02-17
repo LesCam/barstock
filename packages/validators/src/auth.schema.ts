@@ -30,8 +30,19 @@ export const userLocationCreateSchema = z.object({
   role: z.nativeEnum(Role),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string(),
+  password: z.string().min(8),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
 export type UserCreateInput = z.infer<typeof userCreateSchema>;
 export type UserUpdateInput = z.infer<typeof userUpdateSchema>;
 export type UserLocationCreateInput = z.infer<typeof userLocationCreateSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

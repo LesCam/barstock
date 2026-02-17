@@ -1,1 +1,16 @@
 @import "tailwindcss";
+
+:root {
+  --gold: #E9B44C;
+  --gold-dark: #C8922E;
+  --navy-bg: #0B1623;
+  --navy-card: rgba(10,14,20,0.72);
+  --text-primary: #EAF0FF;
+  --text-muted: rgba(234,240,255,0.72);
+  --border-subtle: rgba(255,255,255,0.10);
+  --radius-card: 24px;
+  --radius-input: 14px;
+  --radius-button: 14px;
+  --shadow-card: 0 20px 60px rgba(0,0,0,0.55);
+  --font-primary: Inter, SF Pro, system-ui, sans-serif;
+}

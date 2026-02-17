@@ -23,6 +23,7 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: "📈" },
   { href: "/audit", label: "Audit Log", icon: "🔍" },
   { href: "/art", label: "Art Gallery", icon: "🎨" },
+  { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
 function formatRole(role: string): string {
@@ -38,13 +39,8 @@ export function Sidebar({ user }: SidebarProps) {
   return (
     <aside className="flex w-64 flex-col border-r bg-white">
       <div className="border-b p-4">
-        <h2 className="text-lg font-bold text-gray-900">BarStock</h2>
+        <h2 className="text-lg font-bold text-gray-900">{user.businessName || "Dashboard"}</h2>
         <p className="mt-1 truncate text-xs text-gray-500">{user.email}</p>
-        {user.businessName && (
-          <p className="mt-0.5 truncate text-xs font-medium text-gray-700">
-            {user.businessName}
-          </p>
-        )}
         {user.highestRole && (
           <span className="mt-1 inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
             {formatRole(user.highestRole)}
@@ -106,13 +102,14 @@ export function Sidebar({ user }: SidebarProps) {
         )}
       </nav>
 
-      <div className="border-t p-3">
+      <div className="border-t p-3 pb-12">
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
           className="w-full rounded-md px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-100"
         >
           Sign out
         </button>
+        <p className="mt-2 px-3 text-xs text-gray-400">Powered by Barstock</p>
       </div>
     </aside>
   );

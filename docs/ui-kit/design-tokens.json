@@ -1,0 +1,24 @@
+{
+  "colors": {
+    "primary_gold": "#E9B44C",
+    "primary_gold_dark": "#C8922E",
+    "navy_bg": "#0B1623",
+    "navy_card": "rgba(10,14,20,0.72)",
+    "text_primary": "#EAF0FF",
+    "text_muted": "rgba(234,240,255,0.72)",
+    "border_subtle": "rgba(255,255,255,0.10)"
+  },
+  "typography": {
+    "font_primary": "Inter, SF Pro, system-ui, sans-serif",
+    "font_weight_regular": 400,
+    "font_weight_bold": 700
+  },
+  "radius": {
+    "card": "24px",
+    "input": "14px",
+    "button": "14px"
+  },
+  "shadow": {
+    "card": "0 20px 60px rgba(0,0,0,0.55)"
+  }
+}
