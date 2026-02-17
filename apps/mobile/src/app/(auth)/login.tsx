@@ -7,6 +7,7 @@ import {
   Alert,
   StyleSheet,
   ImageBackground,
+  Image,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -14,7 +15,7 @@ import {
   Animated,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { trpc } from "@/lib/trpc";
+import { trpc, trpcVanilla, API_URL } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 
 const { width } = Dimensions.get("window");
@@ -45,10 +46,12 @@ const BUSINESS_CONFIG_KEY = "businessConfig";
 function PinLogin({
   businessName,
   businessId,
+  logoUrl,
   onSwitchToEmail,
 }: {
   businessName: string;
   businessId: string;
+  logoUrl: string | null;
   onSwitchToEmail: () => void;
 }) {
   const [pin, setPin] = useState("");
@@ -118,12 +121,20 @@ function PinLogin({
     >
       <View style={styles.overlay}>
         <View style={styles.pinContainer}>
-          {/* Business icon placeholder */}
-          <View style={styles.logoBox}>
-            <Text style={styles.logoText}>
-              {businessName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
+          {/* Business logo or letter placeholder */}
+          {logoUrl ? (
+            <Image
+              source={{ uri: `${API_URL}${logoUrl}` }}
+              style={styles.logoImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.logoBox}>
+              <Text style={styles.logoText}>
+                {businessName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
 
           <Text style={styles.businessName}>{businessName}</Text>
           <Text style={styles.subtitle}>Enter your 4-digit PIN</Text>
@@ -226,11 +237,18 @@ function EmailLogin({
         const userStr = await AsyncStorage.getItem("authUser");
         if (userStr) {
           const user = JSON.parse(userStr);
+          // Fetch business logo URL
+          let logoUrl: string | null = null;
+          try {
+            const biz = await trpcVanilla.businesses.getById.query({ businessId: user.businessId });
+            logoUrl = biz.logoUrl ?? null;
+          } catch {}
           await AsyncStorage.setItem(
             BUSINESS_CONFIG_KEY,
             JSON.stringify({
               id: user.businessId,
               name: user.businessName || "Your Business",
+              logoUrl,
             })
           );
         }
@@ -320,13 +338,15 @@ export default function LoginScreen() {
   const [mode, setMode] = useState<"loading" | "pin" | "email">("loading");
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState("");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(BUSINESS_CONFIG_KEY).then((config) => {
       if (config) {
-        const { id, name } = JSON.parse(config);
+        const { id, name, logoUrl: savedLogoUrl } = JSON.parse(config);
         setBusinessId(id);
         setBusinessName(name);
+        setLogoUrl(savedLogoUrl ?? null);
         setMode("pin");
       } else {
         setMode("email");
@@ -343,6 +363,7 @@ export default function LoginScreen() {
       <PinLogin
         businessName={businessName}
         businessId={businessId}
+        logoUrl={logoUrl}
         onSwitchToEmail={() => setMode("email")}
       />
     );
@@ -386,6 +407,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(233, 180, 76, 0.3)",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 12,
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 16,
     marginBottom: 12,
   },
   logoText: {

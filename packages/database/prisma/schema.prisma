@@ -155,6 +155,8 @@ model Business {
   contactEmail String?  @map("contact_email")
   contactPhone String?  @map("contact_phone")
   address      String?
+  logoUrl      String?  @map("logo_url")
+  logoKey      String?  @map("logo_key")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
 

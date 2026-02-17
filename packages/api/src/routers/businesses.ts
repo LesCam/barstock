@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
 import { businessCreateSchema, businessUpdateSchema } from "@barstock/validators";
+import { createStorageAdapter } from "../services/storage";
 import { z } from "zod";
 
 export const businessesRouter = router({
@@ -70,7 +71,7 @@ export const businessesRouter = router({
     .query(async ({ ctx, input }) => {
       const business = await ctx.prisma.business.findUnique({
         where: { slug: input.slug },
-        select: { id: true, name: true, slug: true },
+        select: { id: true, name: true, slug: true, logoUrl: true },
       });
       if (!business) {
         throw new TRPCError({
@@ -79,5 +80,38 @@ export const businessesRouter = router({
         });
       }
       return business;
+    }),
+
+  uploadLogo: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(
+      z.object({
+        businessId: z.string().uuid(),
+        base64Data: z.string(),
+        filename: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const buffer = Buffer.from(input.base64Data, "base64");
+      const key = `logos/${input.businessId}/${Date.now()}-${input.filename}`;
+      const storage = createStorageAdapter();
+
+      // Delete old logo if exists
+      const existing = await ctx.prisma.business.findUnique({
+        where: { id: input.businessId },
+        select: { logoKey: true },
+      });
+      if (existing?.logoKey) {
+        await storage.delete(existing.logoKey);
+      }
+
+      const logoUrl = await storage.upload(buffer, key);
+      await ctx.prisma.business.update({
+        where: { id: input.businessId },
+        data: { logoUrl, logoKey: key },
+      });
+
+      return { logoUrl };
     }),
 });

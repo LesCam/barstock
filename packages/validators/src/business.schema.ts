@@ -25,6 +25,7 @@ export const businessUpdateSchema = z.object({
   contactEmail: z.string().email().nullish(),
   contactPhone: z.string().max(50).nullish(),
   address: z.string().max(500).nullish(),
+  logoUrl: z.string().nullish(),
   active: z.boolean().optional(),
 });
 

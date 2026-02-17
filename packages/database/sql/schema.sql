@@ -533,3 +533,10 @@ alter table users add column if not exists first_name text;
 alter table users add column if not exists last_name text;
 alter table users add column if not exists phone text;
 alter table users add column if not exists pin char(4);
+
+-- ===========================
+-- v1.7 PATCH: BUSINESS LOGO
+-- ===========================
+
+alter table businesses add column if not exists logo_url text;
+alter table businesses add column if not exists logo_key text;

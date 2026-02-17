@@ -54,6 +54,7 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
   const [city, setCity] = useState("");
   const [province, setProvince] = useState("");
   const [postalCode, setPostalCode] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (business) {
@@ -74,6 +75,27 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
       setEditing(false);
     },
   });
+
+  const uploadLogoMutation = trpc.businesses.uploadLogo.useMutation({
+    onSuccess: () => {
+      utils.businesses.getById.invalidate({ businessId });
+      setUploading(false);
+    },
+    onError: () => setUploading(false),
+  });
+
+  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      uploadLogoMutation.mutate({ businessId, base64Data: base64, filename: file.name });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -101,6 +123,36 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
           >
             Edit
           </button>
+        )}
+      </div>
+
+      {/* Logo */}
+      <div className="mb-4 flex items-center gap-4">
+        {business.logoUrl ? (
+          <img
+            src={business.logoUrl}
+            alt={`${business.name} logo`}
+            className="h-16 w-16 rounded-lg object-cover border border-white/10"
+          />
+        ) : (
+          <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-[#E9B44C]/30 bg-[#E9B44C]/15 text-2xl font-bold text-[#E9B44C]">
+            {business.name.charAt(0).toUpperCase()}
+          </div>
+        )}
+        {canEdit && editing && (
+          <label className="cursor-pointer rounded-md border border-white/10 px-3 py-1.5 text-sm text-[#EAF0FF]/80 hover:bg-white/5">
+            {uploading ? "Uploading..." : "Upload Logo"}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleLogoUpload}
+              className="hidden"
+              disabled={uploading}
+            />
+          </label>
+        )}
+        {uploadLogoMutation.error && (
+          <p className="text-sm text-red-600">{uploadLogoMutation.error.message}</p>
         )}
       </div>
 
