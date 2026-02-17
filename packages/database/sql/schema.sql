@@ -561,4 +561,7 @@ end $$;
 -- ===========================
 
 alter table locations add column if not exists address text;
+alter table locations add column if not exists city text;
+alter table locations add column if not exists province text;
+alter table locations add column if not exists postal_code text;
 alter table locations add column if not exists phone text;

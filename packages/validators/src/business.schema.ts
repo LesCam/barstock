@@ -35,6 +35,9 @@ export const locationCreateSchema = z.object({
   closeoutHour: z.number().int().min(0).max(23).default(4),
   businessId: z.string().uuid(),
   address: z.string().max(500).optional(),
+  city: z.string().max(255).optional(),
+  province: z.string().max(255).optional(),
+  postalCode: z.string().max(20).optional(),
   phone: z.string().max(50).optional(),
 });
 
@@ -43,6 +46,9 @@ export const locationUpdateSchema = z.object({
   timezone: z.string().optional(),
   closeoutHour: z.number().int().min(0).max(23).optional(),
   address: z.string().max(500).nullish(),
+  city: z.string().max(255).nullish(),
+  province: z.string().max(255).nullish(),
+  postalCode: z.string().max(20).nullish(),
   phone: z.string().max(50).nullish(),
 });
 

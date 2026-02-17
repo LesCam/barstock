@@ -38,6 +38,9 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [timezone, setTimezone] = useState("");
   const [closeoutHour, setCloseoutHour] = useState(0);
   const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [province, setProvince] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const [phone, setPhone] = useState("");
 
   useEffect(() => {
@@ -46,6 +49,9 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       setTimezone(location.timezone);
       setCloseoutHour(location.closeoutHour);
       setAddress(location.address ?? "");
+      setCity(location.city ?? "");
+      setProvince(location.province ?? "");
+      setPostalCode(location.postalCode ?? "");
       setPhone(location.phone ?? "");
     }
   }, [location]);
@@ -66,6 +72,9 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       timezone,
       closeoutHour,
       address: address.trim() || null,
+      city: city.trim() || null,
+      province: province.trim() || null,
+      postalCode: postalCode.trim() || null,
       phone: phone.trim() || null,
     });
   }
@@ -90,7 +99,34 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         <StatCard label="Timezone" value={location.timezone} />
       </div>
 
+      {/* Contact Info — always visible */}
       <div className="mt-8 rounded-lg border border-white/10 bg-[#16283F] p-5">
+        <h2 className="mb-3 text-lg font-semibold">Contact &amp; Address</h2>
+        <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <dt className="text-[#EAF0FF]/60">Street Address</dt>
+            <dd className="font-medium">{location.address || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-[#EAF0FF]/60">City</dt>
+            <dd className="font-medium">{location.city || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-[#EAF0FF]/60">Province / State</dt>
+            <dd className="font-medium">{location.province || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-[#EAF0FF]/60">Postal / Zip Code</dt>
+            <dd className="font-medium">{location.postalCode || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-[#EAF0FF]/60">Phone</dt>
+            <dd className="font-medium">{location.phone || "—"}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-white/10 bg-[#16283F] p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Location Details</h2>
           {canEdit && !editing && (
@@ -146,14 +182,46 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#EAF0FF]/80">Address</label>
+              <label className="block text-sm font-medium text-[#EAF0FF]/80">Street Address</label>
               <input
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
-                placeholder="123 Main St, City, Province"
+                placeholder="123 Main St"
               />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <label className="block text-sm font-medium text-[#EAF0FF]/80">City</label>
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+                  placeholder="Montreal"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#EAF0FF]/80">Province / State</label>
+                <input
+                  type="text"
+                  value={province}
+                  onChange={(e) => setProvince(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+                  placeholder="QC"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#EAF0FF]/80">Postal / Zip Code</label>
+                <input
+                  type="text"
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+                  placeholder="H2X 1Y4"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-[#EAF0FF]/80">Phone</label>
@@ -181,6 +249,9 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                   setTimezone(location.timezone);
                   setCloseoutHour(location.closeoutHour);
                   setAddress(location.address ?? "");
+                  setCity(location.city ?? "");
+                  setProvince(location.province ?? "");
+                  setPostalCode(location.postalCode ?? "");
                   setPhone(location.phone ?? "");
                 }}
                 className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
@@ -194,14 +265,6 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
           </form>
         ) : (
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-[#EAF0FF]/60">Address</dt>
-              <dd className="font-medium">{location.address || "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-[#EAF0FF]/60">Phone</dt>
-              <dd className="font-medium">{location.phone || "—"}</dd>
-            </div>
             <div>
               <dt className="text-[#EAF0FF]/60">Closeout Hour</dt>
               <dd className="font-medium">{location.closeoutHour}:00</dd>

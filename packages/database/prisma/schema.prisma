@@ -180,8 +180,11 @@ model Location {
   name        String
   timezone    String   @default("America/Montreal")
   closeoutHour Int     @default(4) @map("closeout_hour")
-  address     String?
-  phone       String?
+  address    String?
+  city       String?
+  province   String?
+  postalCode String?  @map("postal_code")
+  phone      String?
   businessId  String   @map("business_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
