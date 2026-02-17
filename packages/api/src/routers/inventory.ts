@@ -39,6 +39,14 @@ export const inventoryRouter = router({
     .input(priceHistoryCreateSchema)
     .mutation(({ ctx, input }) => ctx.prisma.priceHistory.create({ data: input })),
 
+  getByBarcode: protectedProcedure
+    .input(z.object({ locationId: z.string().uuid(), barcode: z.string() }))
+    .query(({ ctx, input }) =>
+      ctx.prisma.inventoryItem.findFirst({
+        where: { locationId: input.locationId, barcode: input.barcode, active: true },
+      })
+    ),
+
   onHand: protectedProcedure
     .input(onHandQuerySchema)
     .query(({ ctx, input }) => {
