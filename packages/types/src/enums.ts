@@ -27,6 +27,7 @@ export const UOM = {
   oz: "oz",
   ml: "ml",
   grams: "grams",
+  L: "L",
 } as const;
 export type UOM = (typeof UOM)[keyof typeof UOM];
 

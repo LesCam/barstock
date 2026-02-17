@@ -23,11 +23,8 @@ const UOM_LABELS: Record<string, string> = {
   oz: "Oz",
   ml: "mL",
   grams: "Grams",
+  L: "L",
 };
-
-function baseUomForType(type: string): string {
-  return type === InventoryItemType.keg_beer ? UOM.oz : UOM.units;
-}
 
 export default function InventoryPage() {
   const router = useRouter();
@@ -85,7 +82,7 @@ export default function InventoryPage() {
       locationId,
       name: newName.trim(),
       type: newType as any,
-      baseUom: baseUomForType(newType) as any,
+      baseUom: UOM.units as any,
       barcode: newBarcode.trim() || undefined,
       vendorSku: newVendorSku.trim() || undefined,
       packSize: newPackSize ? Number(newPackSize) : undefined,

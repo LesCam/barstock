@@ -11,7 +11,7 @@
  * Ported from: backend/app/services/depletion_service.py
  */
 
-import { Prisma } from "@prisma/client";
+import { Prisma, UomT } from "@prisma/client";
 import type { ExtendedPrismaClient } from "@barstock/database";
 
 export interface DepletionStats {
@@ -256,7 +256,7 @@ export class DepletionEngine {
   async correctEvent(
     originalEventId: string,
     newQuantityDelta: number,
-    newUom: "units" | "oz" | "ml" | "grams",
+    newUom: UomT,
     reason: string
   ): Promise<[string, string]> {
     const original = await this.prisma.consumptionEvent.findUnique({

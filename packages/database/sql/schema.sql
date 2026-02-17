@@ -547,3 +547,11 @@ alter table businesses add column if not exists logo_key text;
 
 alter table inventory_items add column if not exists container_size numeric;
 alter table inventory_items add column if not exists container_uom uom_t;
+
+-- ===========================
+-- v1.9 PATCH: ADD LITERS TO UOM ENUM
+-- ===========================
+
+do $$ begin
+  alter type uom_t add value if not exists 'L';
+end $$;

@@ -36,6 +36,7 @@ enum UomT {
   oz
   ml
   grams
+  L
 
   @@map("uom_t")
 }
