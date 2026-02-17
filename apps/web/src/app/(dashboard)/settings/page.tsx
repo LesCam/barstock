@@ -88,12 +88,22 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      uploadLogoMutation.mutate({ businessId, base64Data: base64, filename: file.name });
+
+    const MAX = 256;
+    const img = new window.Image();
+    img.onload = () => {
+      const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      const base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+      const outName = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+      uploadLogoMutation.mutate({ businessId, base64Data: base64, filename: outName });
     };
-    reader.readAsDataURL(file);
+    img.src = URL.createObjectURL(file);
     e.target.value = "";
   }
 
@@ -132,16 +142,18 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
           <img
             src={business.logoUrl}
             alt={`${business.name} logo`}
-            className="h-16 w-16 rounded-lg object-cover border border-white/10"
+            width={64}
+            height={64}
+            className="h-16 w-16 shrink-0 rounded-lg object-cover border border-white/10"
           />
         ) : (
           <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-[#E9B44C]/30 bg-[#E9B44C]/15 text-2xl font-bold text-[#E9B44C]">
             {business.name.charAt(0).toUpperCase()}
           </div>
         )}
-        {canEdit && editing && (
+        {canEdit && (
           <label className="cursor-pointer rounded-md border border-white/10 px-3 py-1.5 text-sm text-[#EAF0FF]/80 hover:bg-white/5">
-            {uploading ? "Uploading..." : "Upload Logo"}
+            {uploading ? "Uploading..." : business.logoUrl ? "Change Logo" : "Upload Logo"}
             <input
               type="file"
               accept="image/*"

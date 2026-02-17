@@ -237,17 +237,20 @@ function EmailLogin({
         const userStr = await AsyncStorage.getItem("authUser");
         if (userStr) {
           const user = JSON.parse(userStr);
-          // Fetch business logo URL
+          // Fetch business details (logo, slug) for PIN screen
           let logoUrl: string | null = null;
+          let slug: string | null = null;
           try {
             const biz = await trpcVanilla.businesses.getById.query({ businessId: user.businessId });
             logoUrl = biz.logoUrl ?? null;
+            slug = biz.slug ?? null;
           } catch {}
           await AsyncStorage.setItem(
             BUSINESS_CONFIG_KEY,
             JSON.stringify({
               id: user.businessId,
               name: user.businessName || "Your Business",
+              slug,
               logoUrl,
             })
           );
@@ -341,13 +344,28 @@ export default function LoginScreen() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem(BUSINESS_CONFIG_KEY).then((config) => {
+    AsyncStorage.getItem(BUSINESS_CONFIG_KEY).then(async (config) => {
       if (config) {
-        const { id, name, logoUrl: savedLogoUrl } = JSON.parse(config);
+        const { id, name, slug, logoUrl: savedLogoUrl } = JSON.parse(config);
         setBusinessId(id);
         setBusinessName(name);
         setLogoUrl(savedLogoUrl ?? null);
         setMode("pin");
+
+        // Refresh logo from server in background (public endpoint, no auth needed)
+        if (slug) {
+          try {
+            const biz = await trpcVanilla.businesses.getBySlug.query({ slug });
+            const freshLogoUrl = biz.logoUrl ?? null;
+            if (freshLogoUrl !== (savedLogoUrl ?? null)) {
+              setLogoUrl(freshLogoUrl);
+              await AsyncStorage.setItem(
+                BUSINESS_CONFIG_KEY,
+                JSON.stringify({ id, name, slug, logoUrl: freshLogoUrl })
+              );
+            }
+          } catch {}
+        }
       } else {
         setMode("email");
       }
