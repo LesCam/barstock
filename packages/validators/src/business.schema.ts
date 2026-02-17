@@ -34,12 +34,16 @@ export const locationCreateSchema = z.object({
   timezone: z.string().default("America/Montreal"),
   closeoutHour: z.number().int().min(0).max(23).default(4),
   businessId: z.string().uuid(),
+  address: z.string().max(500).optional(),
+  phone: z.string().max(50).optional(),
 });
 
 export const locationUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   timezone: z.string().optional(),
   closeoutHour: z.number().int().min(0).max(23).optional(),
+  address: z.string().max(500).nullish(),
+  phone: z.string().max(50).nullish(),
 });
 
 // ─── Bar Areas ──────────────────────────────────────────────

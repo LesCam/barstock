@@ -555,3 +555,10 @@ alter table inventory_items add column if not exists container_uom uom_t;
 do $$ begin
   alter type uom_t add value if not exists 'L';
 end $$;
+
+-- ===========================
+-- v1.10 PATCH: ADDRESS + PHONE ON LOCATIONS
+-- ===========================
+
+alter table locations add column if not exists address text;
+alter table locations add column if not exists phone text;

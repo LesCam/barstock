@@ -37,12 +37,16 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState("");
   const [closeoutHour, setCloseoutHour] = useState(0);
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
 
   useEffect(() => {
     if (location) {
       setName(location.name);
       setTimezone(location.timezone);
       setCloseoutHour(location.closeoutHour);
+      setAddress(location.address ?? "");
+      setPhone(location.phone ?? "");
     }
   }, [location]);
 
@@ -56,7 +60,14 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    updateMutation.mutate({ locationId: id, name: name.trim(), timezone, closeoutHour });
+    updateMutation.mutate({
+      locationId: id,
+      name: name.trim(),
+      timezone,
+      closeoutHour,
+      address: address.trim() || null,
+      phone: phone.trim() || null,
+    });
   }
 
   if (!location) return <div className="text-[#EAF0FF]/60">Loading...</div>;
@@ -134,6 +145,26 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-[#EAF0FF]/80">Address</label>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
+                placeholder="123 Main St, City, Province"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#EAF0FF]/80">Phone</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:w-1/2"
+                placeholder="(555) 123-4567"
+              />
+            </div>
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -149,6 +180,8 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                   setName(location.name);
                   setTimezone(location.timezone);
                   setCloseoutHour(location.closeoutHour);
+                  setAddress(location.address ?? "");
+                  setPhone(location.phone ?? "");
                 }}
                 className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
               >
@@ -161,6 +194,14 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
           </form>
         ) : (
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-[#EAF0FF]/60">Address</dt>
+              <dd className="font-medium">{location.address || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-[#EAF0FF]/60">Phone</dt>
+              <dd className="font-medium">{location.phone || "—"}</dd>
+            </div>
             <div>
               <dt className="text-[#EAF0FF]/60">Closeout Hour</dt>
               <dd className="font-medium">{location.closeoutHour}:00</dd>
