@@ -53,7 +53,8 @@ export function ItemSearchBar({
     return list.filter(
       (i) =>
         i.name.toLowerCase().includes(q) ||
-        (i.barcode && i.barcode.includes(q))
+        (i.barcode && i.barcode.includes(q)) ||
+        (i.containerSize != null && String(Number(i.containerSize)).includes(q))
     );
   }, [items, query, itemTypeFilter]);
 
@@ -127,6 +128,7 @@ export function ItemSearchBar({
                 <Text style={styles.resultName}>{item.name}</Text>
                 <Text style={styles.resultMeta}>
                   {item.type.replace("_", " ")}
+                  {item.containerSize != null ? ` · ${Number(item.containerSize)}ml` : ""}
                   {item.barcode ? ` · ${item.barcode}` : ""}
                 </Text>
               </TouchableOpacity>
