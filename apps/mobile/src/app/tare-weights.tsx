@@ -5,18 +5,17 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  Modal,
   Alert,
   StyleSheet,
 } from "react-native";
+// Note: Scanner and Add-search use absolute-positioned overlays instead of Modal
+// to avoid iOS Modal stacking conflicts that prevent subsequent modals from presenting.
 import { useAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 import { TareWeightEditModal } from "@/components/TareWeightEditModal";
 import { CreateItemFromScanModal } from "@/components/CreateItemFromScanModal";
-
-const DEFAULT_DENSITY = 0.95;
 
 interface TemplateRow {
   id: string;
@@ -66,7 +65,6 @@ export default function TareWeightsScreen() {
     onSuccess: () => utils.scale.listTemplates.invalidate({ locationId }),
     onError: (error, variables) => {
       if (error.data?.code === "PRECONDITION_FAILED") {
-        // Template has references — ask user to confirm force delete
         Alert.alert(
           "Template In Use",
           error.message + "\n\nThis is a soft delete — historical data will be preserved.",
@@ -148,9 +146,12 @@ export default function TareWeightsScreen() {
   }
 
   async function handleScan(barcode: string) {
+    // Close scanner first — it's a plain View overlay, no Modal dismiss needed
     setShowScanner(false);
+
     const allTemplates = (templates as TemplateRow[]) ?? [];
     const found = allTemplates.find((t) => t.inventoryItem.barcode === barcode);
+
     if (found) {
       const idx = filteredTemplates.findIndex((t) => t.id === found.id);
       if (idx >= 0) {
@@ -161,28 +162,25 @@ export default function TareWeightsScreen() {
         "Already Exists",
         `"${found.inventoryItem.name}" already has a tare weight of ${tareG} g.`,
         [
-          {
-            text: "Edit",
-            onPress: () => setEditingTemplate(found),
-          },
+          { text: "Edit", onPress: () => setEditingTemplate(found) },
           { text: "OK", style: "cancel" },
         ]
       );
-    } else {
-      // Not found — try to look up the item; if no item exists, offer quick-create
-      try {
-        const item = await utils.inventory.getByBarcode.fetch({
-          locationId,
-          barcode,
-        });
-        if (item) {
-          setAddingItem(item as SelectedItem);
-        } else {
-          setCreatingFromScan({ barcode });
-        }
-      } catch {
+      return;
+    }
+
+    try {
+      const item = await utils.inventory.getByBarcode.fetch({
+        locationId,
+        barcode,
+      });
+      if (item) {
+        setAddingItem(item as SelectedItem);
+      } else {
         setCreatingFromScan({ barcode });
       }
+    } catch {
+      setCreatingFromScan({ barcode });
     }
   }
 
@@ -269,34 +267,6 @@ export default function TareWeightsScreen() {
         <Text style={styles.addBtnText}>+ Add New Bottle</Text>
       </TouchableOpacity>
 
-      {/* Add search modal */}
-      <Modal visible={showAddSearch} animationType="slide" transparent>
-        <View style={styles.addBackdrop}>
-          <View style={styles.addSheet}>
-            <View style={styles.addSheetHeader}>
-              <Text style={styles.addSheetTitle}>Select Item</Text>
-              <TouchableOpacity onPress={() => setShowAddSearch(false)}>
-                <Text style={styles.addSheetClose}>&#x2715;</Text>
-              </TouchableOpacity>
-            </View>
-            <ItemSearchBar
-              locationId={locationId}
-              onItemSelected={(item) => handleItemSelected(item as SelectedItem)}
-              itemTypeFilter={["liquor", "wine"]}
-              placeholder="Search liquor/wine items..."
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Barcode scanner */}
-      <Modal visible={showScanner} animationType="slide">
-        <BarcodeScanner
-          onScan={handleScan}
-          onClose={() => setShowScanner(false)}
-        />
-      </Modal>
-
       {/* Edit modal */}
       {editingTemplate && (
         <TareWeightEditModal
@@ -332,6 +302,38 @@ export default function TareWeightsScreen() {
           }}
           onCancel={() => setCreatingFromScan(null)}
         />
+      )}
+
+      {/* Add search — full-screen overlay instead of Modal */}
+      {showAddSearch && (
+        <View style={styles.fullScreenOverlay}>
+          <View style={styles.addBackdrop}>
+            <View style={styles.addSheet}>
+              <View style={styles.addSheetHeader}>
+                <Text style={styles.addSheetTitle}>Select Item</Text>
+                <TouchableOpacity onPress={() => setShowAddSearch(false)}>
+                  <Text style={styles.addSheetClose}>&#x2715;</Text>
+                </TouchableOpacity>
+              </View>
+              <ItemSearchBar
+                locationId={locationId}
+                onItemSelected={(item) => handleItemSelected(item as SelectedItem)}
+                itemTypeFilter={["liquor", "wine"]}
+                placeholder="Search liquor/wine items..."
+              />
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Barcode scanner — full-screen overlay instead of Modal to avoid iOS Modal conflicts */}
+      {showScanner && (
+        <View style={styles.fullScreenOverlay}>
+          <BarcodeScanner
+            onScan={handleScan}
+            onClose={() => setShowScanner(false)}
+          />
+        </View>
       )}
     </View>
   );
@@ -459,6 +461,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  fullScreenOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
   },
   addBackdrop: {
     flex: 1,
