@@ -14,11 +14,9 @@ export default function SessionsTab() {
     <View style={styles.container}>
       <TouchableOpacity
         style={styles.newButton}
-        onPress={() => {
-          /* TODO: create session then navigate */
-        }}
+        onPress={() => router.push("/count/new")}
       >
-        <Text style={styles.newButtonText}>Start New Session</Text>
+        <Text style={styles.newButtonText}>Start Inventory Count</Text>
       </TouchableOpacity>
 
       {isLoading ? (
