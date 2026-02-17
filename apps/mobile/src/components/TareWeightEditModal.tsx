@@ -242,7 +242,7 @@ export function TareWeightEditModal({
                 </Text>
                 {densityGPerMl != null && (
                   <Text style={styles.densityInfo}>
-                    Density: {densityGPerMl.toFixed(3)} g/ml
+                    Density: {Number(densityGPerMl).toFixed(3)} g/ml
                   </Text>
                 )}
               </View>
