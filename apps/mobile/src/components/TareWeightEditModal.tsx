@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, Modal, StyleSheet } from "react-native";
 import { NumericKeypad } from "./NumericKeypad";
+import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
 
 interface TareWeightEditModalProps {
   visible: boolean;
@@ -32,6 +33,28 @@ export function TareWeightEditModal({
   const [fullValue, setFullValue] = useState(
     currentFullWeightG != null ? String(Math.round(currentFullWeightG)) : ""
   );
+  const [liveWeight, setLiveWeight] = useState<number | null>(null);
+  const scaleConnected = scaleManager.isConnected;
+
+  useEffect(() => {
+    if (!scaleConnected) return;
+    const unsubscribe = scaleManager.onReading((reading: ScaleReading) => {
+      if (reading.stable) {
+        setLiveWeight(reading.weightGrams);
+      }
+    });
+    return unsubscribe;
+  }, [scaleConnected]);
+
+  function handleReadFromScale() {
+    if (liveWeight == null) return;
+    const rounded = String(Math.round(liveWeight));
+    if (activeTab === "tare") {
+      setTareValue(rounded);
+    } else {
+      setFullValue(rounded);
+    }
+  }
 
   const tareG = parseInt(tareValue) || 0;
   const fullG = parseInt(fullValue) || 0;
@@ -87,24 +110,22 @@ export function TareWeightEditModal({
             {activeTab === "tare" ? (
               <>
                 <Text style={styles.weightValue}>
-                  {tareG > 0 ? (tareG / 1000).toFixed(3) : "0.000"} kg
+                  {tareG > 0 ? tareG : "0"} g
                 </Text>
-                <Text style={styles.weightGrams}>{tareG} g</Text>
                 {tareG > 0 && (
                   <Text style={styles.autoCalc}>
-                    Full bottle: ~{(autoFullG / 1000).toFixed(3)} kg (auto)
+                    Full bottle: ~{Math.round(autoFullG)} g (auto)
                   </Text>
                 )}
               </>
             ) : (
               <>
                 <Text style={styles.weightValue}>
-                  {fullG > 0 ? (fullG / 1000).toFixed(3) : "0.000"} kg
+                  {fullG > 0 ? fullG : "0"} g
                 </Text>
-                <Text style={styles.weightGrams}>{fullG} g</Text>
                 {fullG > 0 && autoTareG > 0 && (
                   <Text style={styles.autoCalc}>
-                    Tare weight: ~{(autoTareG / 1000).toFixed(3)} kg (auto)
+                    Tare weight: ~{Math.round(autoTareG)} g (auto)
                   </Text>
                 )}
               </>
@@ -113,6 +134,21 @@ export function TareWeightEditModal({
               Container: {containerSizeMl} ml
             </Text>
           </View>
+
+          {/* Read from Scale */}
+          {scaleConnected && (
+            <TouchableOpacity
+              style={[styles.scaleBtn, liveWeight == null && styles.scaleBtnDisabled]}
+              onPress={handleReadFromScale}
+              disabled={liveWeight == null}
+            >
+              <Text style={styles.scaleBtnText}>
+                {liveWeight != null
+                  ? `Read from Scale (${liveWeight.toFixed(1)}g)`
+                  : "Waiting for scale..."}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Keypad */}
           <NumericKeypad
@@ -213,6 +249,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#999",
     marginTop: 4,
+  },
+  scaleBtn: {
+    backgroundColor: "#16a34a",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  scaleBtnDisabled: {
+    opacity: 0.4,
+  },
+  scaleBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
   },
   actions: {
     flexDirection: "row",

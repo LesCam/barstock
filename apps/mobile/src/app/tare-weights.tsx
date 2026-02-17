@@ -137,10 +137,10 @@ export default function TareWeightsScreen() {
       if (idx >= 0) {
         flatListRef.current?.scrollToIndex({ index: idx, animated: true });
       }
-      const tareKg = (Number(found.emptyBottleWeightG) / 1000).toFixed(3);
+      const tareG = Math.round(Number(found.emptyBottleWeightG));
       Alert.alert(
         "Already Exists",
-        `"${found.inventoryItem.name}" already has a tare weight of ${tareKg} kg.`,
+        `"${found.inventoryItem.name}" already has a tare weight of ${tareG} g.`,
         [
           {
             text: "Edit",
@@ -228,7 +228,7 @@ export default function TareWeightsScreen() {
               onPress={() => setEditingTemplate(item)}
             >
               <Text style={styles.weightText}>
-                {(Number(item.emptyBottleWeightG) / 1000).toFixed(3)} kg
+                {Math.round(Number(item.emptyBottleWeightG))} g
               </Text>
               <Text style={styles.editIcon}>&#x270E;</Text>
             </TouchableOpacity>
