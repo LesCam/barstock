@@ -36,7 +36,7 @@ function RootNavigator() {
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
-        name="session/[id]"
+        name="session/[id]/index"
         options={{ title: "Session", headerBackTitle: "Back" }}
       />
     </Stack>
