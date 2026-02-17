@@ -40,6 +40,29 @@ export const authRouter = router({
     };
   }),
 
+  loginWithPin: publicProcedure
+    .input(z.object({ pin: z.string().length(4), businessId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findFirst({
+        where: { pin: input.pin, businessId: input.businessId, isActive: true },
+      });
+
+      if (!user) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid PIN" });
+      }
+
+      const payload = await buildUserPayload(ctx.prisma, user.id);
+      const accessToken = createAccessToken(payload);
+      const refreshToken = createRefreshToken(payload);
+
+      return {
+        accessToken,
+        refreshToken,
+        tokenType: "bearer",
+        expiresIn: 1800,
+      };
+    }),
+
   refresh: publicProcedure
     .input(refreshTokenSchema)
     .mutation(async ({ ctx, input }) => {
@@ -60,6 +83,14 @@ export const authRouter = router({
     .use(requireRole("business_admin"))
     .input(userCreateSchema)
     .mutation(async ({ ctx, input }) => {
+      if (input.pin) {
+        const existing = await ctx.prisma.user.findFirst({
+          where: { pin: input.pin, businessId: input.businessId, isActive: true },
+        });
+        if (existing) {
+          throw new TRPCError({ code: "CONFLICT", message: "PIN already in use by another staff member" });
+        }
+      }
       const passwordHash = await hashPassword(input.password);
       return ctx.prisma.user.create({
         data: {
@@ -127,7 +158,17 @@ export const authRouter = router({
       if (data.firstName !== undefined) updateData.firstName = data.firstName;
       if (data.lastName !== undefined) updateData.lastName = data.lastName;
       if (data.phone !== undefined) updateData.phone = data.phone;
-      if (data.pin !== undefined) updateData.pin = data.pin;
+      if (data.pin !== undefined) {
+        if (data.pin) {
+          const existing = await ctx.prisma.user.findFirst({
+            where: { pin: data.pin, businessId: ctx.user.businessId, isActive: true, id: { not: userId } },
+          });
+          if (existing) {
+            throw new TRPCError({ code: "CONFLICT", message: "PIN already in use by another staff member" });
+          }
+        }
+        updateData.pin = data.pin;
+      }
       return ctx.prisma.user.update({ where: { id: userId }, data: updateData });
     }),
 
