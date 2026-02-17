@@ -30,6 +30,9 @@ const SKALE_COMMAND_CHARACTERISTIC_UUID = "0000ef80-0000-1000-8000-00805f9b34fb"
 // Skale 2 commands
 const SKALE_CMD_TARE = 0x10;
 const SKALE_CMD_UNIT_GRAMS = 0x03;
+const SKALE_CMD_DISPLAY_WEIGHT = 0xec;
+
+const KEEPALIVE_INTERVAL_MS = 30_000;
 
 type ScaleType = "standard" | "skale2";
 
@@ -94,6 +97,7 @@ export class ScaleManager {
   private connectedDevice: Device | null = null;
   private scaleType: ScaleType | null = null;
   private monitorSubscription: Subscription | null = null;
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Scan for nearby BLE devices (5 s).
@@ -151,9 +155,9 @@ export class ScaleManager {
     this.scaleType = await this.detectScaleType(device);
 
     if (this.scaleType === "skale2") {
-      // Set Skale 2 to grams mode
       await this.sendSkaleCommand(device, SKALE_CMD_UNIT_GRAMS);
       this.monitorSkale2(device, deviceId);
+      this.startKeepalive();
     } else {
       this.monitorStandard(device, deviceId);
     }
@@ -244,6 +248,22 @@ export class ScaleManager {
     }
   }
 
+  private startKeepalive(): void {
+    this.stopKeepalive();
+    this.keepaliveTimer = setInterval(() => {
+      if (this.connectedDevice && this.scaleType === "skale2") {
+        this.sendSkaleCommand(this.connectedDevice, SKALE_CMD_DISPLAY_WEIGHT).catch(() => {});
+      }
+    }, KEEPALIVE_INTERVAL_MS);
+  }
+
+  private stopKeepalive(): void {
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
+    }
+  }
+
   /** Tare (zero) the Skale 2. */
   async tare(): Promise<void> {
     if (this.connectedDevice && this.scaleType === "skale2") {
@@ -255,6 +275,7 @@ export class ScaleManager {
   async disconnect(): Promise<void> {
     if (!this.connectedDeviceId) return;
 
+    this.stopKeepalive();
     this.monitorSubscription?.remove();
     this.monitorSubscription = null;
 
