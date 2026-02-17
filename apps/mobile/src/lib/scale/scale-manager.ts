@@ -20,9 +20,18 @@ export interface ScaleReading {
 
 export type ScaleListener = (reading: ScaleReading) => void;
 
-// Weight Scale Service (0x181D) and Weight Measurement characteristic (0x2A9D)
-const WEIGHT_SERVICE_UUID = "0000181d-0000-1000-8000-00805f9b34fb";
-const WEIGHT_CHARACTERISTIC_UUID = "00002a9d-0000-1000-8000-00805f9b34fb";
+// Standard BLE Weight Scale Service (0x181D)
+const STANDARD_WEIGHT_SERVICE_UUID = "0000181d-0000-1000-8000-00805f9b34fb";
+const STANDARD_WEIGHT_CHARACTERISTIC_UUID = "00002a9d-0000-1000-8000-00805f9b34fb";
+
+// Skale 2 custom UUIDs
+const SKALE_WEIGHT_CHARACTERISTIC_UUID = "0000ef81-0000-1000-8000-00805f9b34fb";
+const SKALE_COMMAND_CHARACTERISTIC_UUID = "0000ef80-0000-1000-8000-00805f9b34fb";
+// Skale 2 commands
+const SKALE_CMD_TARE = 0x10;
+const SKALE_CMD_UNIT_GRAMS = 0x03;
+
+type ScaleType = "standard" | "skale2";
 
 let _manager: BleManager | null = null;
 
@@ -82,6 +91,8 @@ async function requestBlePermissions(): Promise<void> {
 export class ScaleManager {
   private listeners: Set<ScaleListener> = new Set();
   private connectedDeviceId: string | null = null;
+  private connectedDevice: Device | null = null;
+  private scaleType: ScaleType | null = null;
   private monitorSubscription: Subscription | null = null;
 
   /**
@@ -111,6 +122,20 @@ export class ScaleManager {
     });
   }
 
+  /** Detect whether this is a Skale 2 or standard BLE weight scale. */
+  private async detectScaleType(device: Device): Promise<ScaleType> {
+    const services = await device.services();
+    for (const service of services) {
+      const chars = await service.characteristics();
+      for (const char of chars) {
+        if (char.uuid.toLowerCase() === SKALE_WEIGHT_CHARACTERISTIC_UUID) {
+          return "skale2";
+        }
+      }
+    }
+    return "standard";
+  }
+
   /**
    * Connect to a specific scale device and start listening for weight readings.
    */
@@ -122,11 +147,68 @@ export class ScaleManager {
     await device.discoverAllServicesAndCharacteristics();
 
     this.connectedDeviceId = deviceId;
+    this.connectedDevice = device;
+    this.scaleType = await this.detectScaleType(device);
 
-    // Monitor weight characteristic
+    if (this.scaleType === "skale2") {
+      // Set Skale 2 to grams mode
+      await this.sendSkaleCommand(device, SKALE_CMD_UNIT_GRAMS);
+      this.monitorSkale2(device, deviceId);
+    } else {
+      this.monitorStandard(device, deviceId);
+    }
+  }
+
+  private async monitorSkale2(device: Device, deviceId: string): Promise<void> {
+    // Find the service that contains the Skale weight characteristic
+    const services = await device.services();
+    let serviceUUID: string | null = null;
+    for (const service of services) {
+      const chars = await service.characteristics();
+      for (const char of chars) {
+        if (char.uuid.toLowerCase() === SKALE_WEIGHT_CHARACTERISTIC_UUID) {
+          serviceUUID = service.uuid;
+          break;
+        }
+      }
+      if (serviceUUID) break;
+    }
+
+    if (!serviceUUID) {
+      throw new Error("Could not find Skale 2 weight characteristic");
+    }
+
     this.monitorSubscription = device.monitorCharacteristicForService(
-      WEIGHT_SERVICE_UUID,
-      WEIGHT_CHARACTERISTIC_UUID,
+      serviceUUID,
+      SKALE_WEIGHT_CHARACTERISTIC_UUID,
+      (error, characteristic) => {
+        if (error || !characteristic?.value) return;
+
+        const buf = Buffer.from(characteristic.value, "base64");
+        if (buf.length < 3) return;
+
+        // Skale 2 format: byte 0 = flags, bytes 1-2 = weight as uint16 LE (tenths of grams)
+        const raw = buf.readUInt16LE(1);
+        const weightGrams = raw / 10.0;
+        const stable = buf[0] === 0x00;
+
+        const reading: ScaleReading = {
+          weightGrams: Math.max(0, weightGrams),
+          stable,
+          deviceId,
+          deviceName: device.name || "Skale 2",
+          timestamp: new Date(),
+        };
+
+        this.listeners.forEach((listener) => listener(reading));
+      }
+    );
+  }
+
+  private monitorStandard(device: Device, deviceId: string): void {
+    this.monitorSubscription = device.monitorCharacteristicForService(
+      STANDARD_WEIGHT_SERVICE_UUID,
+      STANDARD_WEIGHT_CHARACTERISTIC_UUID,
       (error, characteristic) => {
         if (error || !characteristic?.value) return;
 
@@ -147,6 +229,28 @@ export class ScaleManager {
     );
   }
 
+  /** Send a command byte to the Skale 2. */
+  private async sendSkaleCommand(device: Device, command: number): Promise<void> {
+    const data = Buffer.from([command]).toString("base64");
+    const services = await device.services();
+    for (const service of services) {
+      const chars = await service.characteristics();
+      for (const char of chars) {
+        if (char.uuid.toLowerCase() === SKALE_COMMAND_CHARACTERISTIC_UUID) {
+          await char.writeWithoutResponse(data);
+          return;
+        }
+      }
+    }
+  }
+
+  /** Tare (zero) the Skale 2. */
+  async tare(): Promise<void> {
+    if (this.connectedDevice && this.scaleType === "skale2") {
+      await this.sendSkaleCommand(this.connectedDevice, SKALE_CMD_TARE);
+    }
+  }
+
   /** Disconnect from current scale. */
   async disconnect(): Promise<void> {
     if (!this.connectedDeviceId) return;
@@ -157,6 +261,8 @@ export class ScaleManager {
     const manager = getManager();
     await manager.cancelDeviceConnection(this.connectedDeviceId);
     this.connectedDeviceId = null;
+    this.connectedDevice = null;
+    this.scaleType = null;
   }
 
   onReading(listener: ScaleListener): () => void {
@@ -166,6 +272,10 @@ export class ScaleManager {
 
   get isConnected() {
     return this.connectedDeviceId !== null;
+  }
+
+  get currentScaleType() {
+    return this.scaleType;
   }
 }
 

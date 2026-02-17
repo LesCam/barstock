@@ -12,7 +12,11 @@
       "bundleIdentifier": "com.barstock.app",
       "infoPlist": {
         "NSCameraUsageDescription": "BarStock uses the camera to scan barcodes for inventory counting.",
-        "NSBluetoothAlwaysUsageDescription": "BarStock connects to Bluetooth scales for bottle weighing."
+        "NSBluetoothAlwaysUsageDescription": "BarStock connects to Bluetooth scales for bottle weighing.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       }
     },
     "android": {
@@ -20,12 +24,34 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.barstock.app",
-      "permissions": ["CAMERA", "BLUETOOTH", "BLUETOOTH_ADMIN", "BLUETOOTH_CONNECT", "BLUETOOTH_SCAN"]
+      "permissions": [
+        "CAMERA",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
     },
     "plugins": [
       "expo-router",
       "expo-camera",
-      ["react-native-ble-plx", { "neverForLocation": true }]
-    ]
+      [
+        "react-native-ble-plx",
+        {
+          "neverForLocation": true
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "52eb4767-125b-40a0-9c2c-d28e99abcc9f"
+      }
+    }
   }
 }

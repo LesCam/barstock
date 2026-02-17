@@ -88,8 +88,7 @@ export default function ConnectScaleScreen() {
   }, []);
 
   const formatWeight = (reading: ScaleReading) => {
-    const oz = (reading.weightGrams / 28.3495).toFixed(1);
-    return `${oz} oz`;
+    return `${reading.weightGrams.toFixed(1)} g`;
   };
 
   return (
