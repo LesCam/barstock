@@ -38,9 +38,29 @@ export const scaleRouter = router({
       fullBottleWeightG: z.number().positive(),
       densityGPerMl: z.number().positive().optional(),
     }))
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.bottleTemplate.create({ data: input })
-    ),
+    .mutation(async ({ ctx, input }) => {
+      // Reactivate existing soft-deleted template or reject if already active
+      const existing = await ctx.prisma.bottleTemplate.findFirst({
+        where: { inventoryItemId: input.inventoryItemId, locationId: input.locationId ?? null },
+      });
+      if (existing && existing.enabled) {
+        throw new TRPCError({ code: "CONFLICT", message: "A template already exists for this item." });
+      }
+      if (existing) {
+        // Reactivate the soft-deleted template with updated values
+        return ctx.prisma.bottleTemplate.update({
+          where: { id: existing.id },
+          data: {
+            enabled: true,
+            containerSizeMl: input.containerSizeMl,
+            emptyBottleWeightG: input.emptyBottleWeightG,
+            fullBottleWeightG: input.fullBottleWeightG,
+            densityGPerMl: input.densityGPerMl ?? null,
+          },
+        });
+      }
+      return ctx.prisma.bottleTemplate.create({ data: input });
+    }),
 
   updateTemplate: protectedProcedure
     .use(requirePermission("canManageTareWeights"))

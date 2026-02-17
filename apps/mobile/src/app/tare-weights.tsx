@@ -294,7 +294,7 @@ export default function TareWeightsScreen() {
           currentTareWeightG={Number(editingTemplate.emptyBottleWeightG)}
           currentFullWeightG={Number(editingTemplate.fullBottleWeightG)}
           containerSizeMl={Number(editingTemplate.containerSizeMl)}
-          densityGPerMl={editingTemplate.densityGPerMl}
+          densityGPerMl={editingTemplate.densityGPerMl != null ? Number(editingTemplate.densityGPerMl) : null}
           onSave={handleEditSave}
           onCancel={() => setEditingTemplate(null)}
         />
