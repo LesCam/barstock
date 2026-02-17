@@ -42,7 +42,10 @@ export default function SettingsTab() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Scale</Text>
-        <TouchableOpacity style={styles.card}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push("/connect-scale")}
+        >
           <Text style={styles.rowText}>Connect Bluetooth Scale</Text>
         </TouchableOpacity>
         {canManageTareWeights && (

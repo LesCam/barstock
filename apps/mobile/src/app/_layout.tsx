@@ -45,6 +45,10 @@ function RootNavigator() {
         options={{ title: "Connect Scale", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="connect-scale"
+        options={{ title: "Connect Scale", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
         name="tare-weights"
         options={{ title: "Tare Weights", headerBackTitle: "Back" }}
       />
