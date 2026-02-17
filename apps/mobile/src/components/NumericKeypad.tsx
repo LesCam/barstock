@@ -4,7 +4,21 @@ interface NumericKeypadProps {
   value: string;
   onChange: (value: string) => void;
   maxLength?: number;
+  showSublabels?: boolean;
 }
+
+const SUBLABELS: Record<string, string> = {
+  "1": "",
+  "2": "ABC",
+  "3": "DEF",
+  "4": "GHI",
+  "5": "JKL",
+  "6": "MNO",
+  "7": "PQRS",
+  "8": "TUV",
+  "9": "WXYZ",
+  "0": "",
+};
 
 const KEYS = [
   ["1", "2", "3"],
@@ -13,7 +27,7 @@ const KEYS = [
   ["C", "0", "⌫"],
 ];
 
-export function NumericKeypad({ value, onChange, maxLength = 6 }: NumericKeypadProps) {
+export function NumericKeypad({ value, onChange, maxLength = 6, showSublabels = false }: NumericKeypadProps) {
   function handlePress(key: string) {
     if (key === "C") {
       onChange("");
@@ -50,6 +64,9 @@ export function NumericKeypad({ value, onChange, maxLength = 6 }: NumericKeypadP
               >
                 {key}
               </Text>
+              {showSublabels && SUBLABELS[key] !== undefined && (
+                <Text style={styles.sublabel}>{SUBLABELS[key]}</Text>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -85,5 +102,13 @@ const styles = StyleSheet.create({
   keyActionText: {
     fontSize: 22,
     color: "#8899AA",
+  },
+  sublabel: {
+    fontSize: 10,
+    color: "#5A6A7A",
+    fontWeight: "500",
+    letterSpacing: 1.5,
+    marginTop: 1,
+    height: 14,
   },
 });

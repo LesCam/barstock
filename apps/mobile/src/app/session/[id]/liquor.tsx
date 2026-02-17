@@ -1,11 +1,12 @@
 import { useState, useCallback, useMemo } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Switch, StyleSheet, Alert } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, Switch, Modal, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 import { ScaleConnector } from "@/components/ScaleConnector";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
 import type { ScaleReading } from "@/lib/scale/scale-manager";
 
 interface SelectedItem {
@@ -28,6 +29,7 @@ export default function LiquorWeighScreen() {
   const [manualWeight, setManualWeight] = useState("");
   const [scaleWeight, setScaleWeight] = useState<number | null>(null);
   const [submittedCount, setSubmittedCount] = useState(0);
+  const [showScanner, setShowScanner] = useState(false);
 
   const { data: templates } = trpc.scale.listTemplates.useQuery(
     { locationId: selectedLocationId! },
@@ -56,6 +58,25 @@ export default function LiquorWeighScreen() {
       setScaleWeight(reading.weightGrams);
     }
   }, []);
+
+  async function handleRescan(barcode: string) {
+    setShowScanner(false);
+    try {
+      const item = await utils.inventory.getByBarcode.fetch({
+        locationId: selectedLocationId!,
+        barcode,
+      });
+      if (item) {
+        setSelectedItem(item as SelectedItem);
+        setScaleWeight(null);
+        setManualWeight("");
+      } else {
+        Alert.alert("Not Found", `No item found for barcode ${barcode}`);
+      }
+    } catch {
+      Alert.alert("Not Found", `No item found for barcode ${barcode}`);
+    }
+  }
 
   async function handleSubmit() {
     if (!selectedItem || grossWeightG == null || grossWeightG <= 0) return;
@@ -136,19 +157,19 @@ export default function LiquorWeighScreen() {
           <>
             {/* Item Card */}
             <View style={styles.itemCard}>
-              <View style={styles.itemCardHeader}>
-                <Text style={styles.itemName}>{selectedItem.name}</Text>
-                <View style={styles.typeBadge}>
-                  <Text style={styles.typeBadgeText}>
-                    {selectedItem.type.replace("_", " ")}
+              <Text style={styles.itemName}>{selectedItem.name}</Text>
+              <View style={styles.itemCardRow}>
+                {selectedItem.containerSize != null && (
+                  <Text style={styles.itemMetaDetail}>
+                    {String(Number(selectedItem.containerSize))} ml
                   </Text>
-                </View>
+                )}
+                {selectedItem.barcode && (
+                  <Text style={styles.itemMetaDetail}>
+                    #{selectedItem.barcode}
+                  </Text>
+                )}
               </View>
-              {selectedItem.containerSize != null && (
-                <Text style={styles.itemMeta}>
-                  Container: {String(Number(selectedItem.containerSize))}ml
-                </Text>
-              )}
             </View>
 
             {!matchedTemplate && (
@@ -211,52 +232,139 @@ export default function LiquorWeighScreen() {
                   </View>
                 ) : (
                   <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Weight (grams)</Text>
-                    <View style={styles.quantityDisplay}>
-                      <Text style={styles.quantityValue}>{manualWeight || "0"}</Text>
-                      <Text style={styles.quantityLabel}>grams</Text>
+                    {/* Weight Display — kg formatted */}
+                    <Text style={styles.sectionLabel}>Manual Weight Input</Text>
+                    <View style={styles.weightDisplay}>
+                      <Text style={styles.weightDisplayValue}>
+                        {manualWeight
+                          ? (parseInt(manualWeight, 10) / 1000).toFixed(3)
+                          : "0.000"}
+                      </Text>
+                      <Text style={styles.weightDisplayUnit}>kg</Text>
                     </View>
+
+                    {/* Calculation Display */}
+                    {calcQuery.data && (
+                      <View style={styles.calcSection}>
+                        <Text style={styles.calcInline}>
+                          ~{calcQuery.data.liquidOz} oz  ≈  {calcQuery.data.percentRemaining}% Full
+                        </Text>
+                        <View style={styles.progressRow}>
+                          <View style={styles.progressTrack}>
+                            <View
+                              style={[
+                                styles.progressFill,
+                                { width: `${Math.min(100, Math.max(0, calcQuery.data.percentRemaining))}%` },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.progressLabel}>
+                            {calcQuery.data.percentRemaining}%
+                          </Text>
+                        </View>
+                        <Text style={styles.ozLeftText}>
+                          ~ {calcQuery.data.liquidOz} oz left
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Rescan / Enter Manually buttons */}
+                    <View style={styles.switchRow}>
+                      <TouchableOpacity
+                        style={styles.switchBtn}
+                        onPress={() => setShowScanner(true)}
+                      >
+                        <Text style={styles.switchBtnText}>Rescan</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.switchBtn}
+                        onPress={() => {
+                          setSelectedItem(null);
+                          setManualWeight("");
+                        }}
+                      >
+                        <Text style={styles.switchBtnText}>Enter Manually</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Keypad */}
                     <NumericKeypad
                       value={manualWeight}
                       onChange={setManualWeight}
                       maxLength={5}
+                      showSublabels
                     />
+
+                    {/* Submit */}
+                    <TouchableOpacity
+                      style={[
+                        styles.submitBtn,
+                        (grossWeightG == null || grossWeightG <= 0 || isPending) &&
+                          styles.submitBtnDisabled,
+                      ]}
+                      onPress={handleSubmit}
+                      disabled={grossWeightG == null || grossWeightG <= 0 || isPending}
+                    >
+                      <Text style={styles.submitBtnText}>
+                        {isPending ? "Submitting..." : "Submit"}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 )}
 
-                {/* Calculation Result */}
-                {calcQuery.data && (
-                  <View style={styles.calcCard}>
-                    <Text style={styles.calcTitle}>Liquid Remaining</Text>
-                    <Text style={styles.calcValue}>
-                      {calcQuery.data.liquidMl}ml ({calcQuery.data.liquidOz}oz)
-                    </Text>
-                    <Text style={styles.calcPercent}>
-                      {calcQuery.data.percentRemaining}% remaining
-                    </Text>
-                  </View>
+                {/* Scale mode: Calculation + Submit outside the manual branch */}
+                {!useManual && (
+                  <>
+                    {calcQuery.data && (
+                      <View style={styles.calcSection}>
+                        <Text style={styles.calcInline}>
+                          ~{calcQuery.data.liquidOz} oz  ≈  {calcQuery.data.percentRemaining}% Full
+                        </Text>
+                        <View style={styles.progressRow}>
+                          <View style={styles.progressTrack}>
+                            <View
+                              style={[
+                                styles.progressFill,
+                                { width: `${Math.min(100, Math.max(0, calcQuery.data.percentRemaining))}%` },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.progressLabel}>
+                            {calcQuery.data.percentRemaining}%
+                          </Text>
+                        </View>
+                        <Text style={styles.ozLeftText}>
+                          ~ {calcQuery.data.liquidOz} oz left
+                        </Text>
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={[
+                        styles.submitBtn,
+                        (grossWeightG == null || grossWeightG <= 0 || isPending) &&
+                          styles.submitBtnDisabled,
+                      ]}
+                      onPress={handleSubmit}
+                      disabled={grossWeightG == null || grossWeightG <= 0 || isPending}
+                    >
+                      <Text style={styles.submitBtnText}>
+                        {isPending ? "Submitting..." : "Submit"}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
                 )}
-
-                {/* Submit */}
-                <TouchableOpacity
-                  style={[
-                    styles.submitBtn,
-                    (grossWeightG == null || grossWeightG <= 0 || isPending) &&
-                      styles.submitBtnDisabled,
-                  ]}
-                  onPress={handleSubmit}
-                  disabled={grossWeightG == null || grossWeightG <= 0 || isPending}
-                >
-                  <Text style={styles.submitBtnText}>
-                    {isPending
-                      ? "Submitting..."
-                      : `Submit — ${grossWeightG ?? 0}g`}
-                  </Text>
-                </TouchableOpacity>
               </>
             )}
           </>
         )}
+
+        {/* Barcode Scanner Modal for Rescan */}
+        <Modal visible={showScanner} animationType="slide">
+          <BarcodeScanner
+            onScan={handleRescan}
+            onClose={() => setShowScanner(false)}
+          />
+        </Modal>
       </ScrollView>
 
       {/* Running Tally */}
@@ -295,32 +403,19 @@ const styles = StyleSheet.create({
     padding: 16,
     marginTop: 16,
   },
-  itemCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
   itemName: {
     fontSize: 18,
     fontWeight: "600",
     color: "#EAF0FF",
-    flex: 1,
   },
-  typeBadge: {
-    backgroundColor: "#1E3550",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  itemCardRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 4,
   },
-  typeBadgeText: {
-    color: "#8899AA",
-    fontSize: 11,
-    textTransform: "capitalize",
-  },
-  itemMeta: {
+  itemMetaDetail: {
     color: "#5A6A7A",
     fontSize: 13,
-    marginTop: 4,
   },
   warningBox: {
     backgroundColor: "#3B2A1A",
@@ -391,31 +486,83 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
-  calcCard: {
+  weightDisplay: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  weightDisplayValue: {
+    fontSize: 48,
+    fontWeight: "bold",
+    color: "#EAF0FF",
+  },
+  weightDisplayUnit: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: "#5A6A7A",
+    marginLeft: 8,
+  },
+  calcSection: {
     backgroundColor: "#16283F",
     borderRadius: 12,
     padding: 16,
-    marginTop: 16,
+    marginBottom: 16,
+  },
+  calcInline: {
+    color: "#EAF0FF",
+    fontSize: 15,
+    fontWeight: "500",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  progressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 10,
+    backgroundColor: "#1E3550",
+    borderRadius: 5,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#2BA8A0",
+    borderRadius: 5,
+  },
+  progressLabel: {
+    color: "#2BA8A0",
+    fontSize: 14,
+    fontWeight: "600",
+    minWidth: 40,
+    textAlign: "right",
+  },
+  ozLeftText: {
+    color: "#5A6A7A",
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  switchRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  switchBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2E4560",
     alignItems: "center",
   },
-  calcTitle: {
+  switchBtnText: {
     color: "#8899AA",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  calcValue: {
-    color: "#EAF0FF",
-    fontSize: 24,
-    fontWeight: "bold",
-    marginTop: 6,
-  },
-  calcPercent: {
-    color: "#E9B44C",
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 4,
   },
   submitBtn: {
     backgroundColor: "#E9B44C",
