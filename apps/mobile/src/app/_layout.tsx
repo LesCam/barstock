@@ -40,6 +40,10 @@ function RootNavigator() {
         name="session/[id]/index"
         options={{ title: "Session", headerBackTitle: "Back" }}
       />
+      <Stack.Screen
+        name="session/[id]/connect-scale"
+        options={{ title: "Connect Scale", headerBackTitle: "Back" }}
+      />
     </Stack>
   );
 }

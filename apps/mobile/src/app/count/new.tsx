@@ -58,7 +58,10 @@ export default function NewCountScreen() {
         sessionType: "shift",
         startedTs: new Date(),
       });
-      router.replace(`/session/${session.id}/${method}`);
+      const route = method === "liquor"
+        ? `/session/${session.id}/connect-scale`
+        : `/session/${session.id}/${method}`;
+      router.replace(route);
     } catch (e: any) {
       Alert.alert("Error", e.message ?? "Failed to create session");
     } finally {

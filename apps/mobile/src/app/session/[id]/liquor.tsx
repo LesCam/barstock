@@ -19,12 +19,12 @@ interface SelectedItem {
 }
 
 export default function LiquorWeighScreen() {
-  const { id: sessionId } = useLocalSearchParams<{ id: string }>();
+  const { id: sessionId, manual } = useLocalSearchParams<{ id: string; manual?: string }>();
   const { selectedLocationId } = useAuth();
   const utils = trpc.useUtils();
 
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
-  const [useManual, setUseManual] = useState(false);
+  const [useManual, setUseManual] = useState(manual === "1");
   const [manualWeight, setManualWeight] = useState("");
   const [scaleWeight, setScaleWeight] = useState<number | null>(null);
   const [submittedCount, setSubmittedCount] = useState(0);
