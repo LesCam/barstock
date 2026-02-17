@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+
+type SortKey = "itemName" | "itemType" | "variance" | "variancePercent" | "valueImpact";
+type SortDir = "asc" | "desc";
 
 export default function ReportsPage() {
   const { data: session } = useSession();
@@ -13,6 +16,10 @@ export default function ReportsPage() {
     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     to: new Date().toISOString().split("T")[0],
   });
+
+  const [filter, setFilter] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("itemName");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const { data: variance } = trpc.reports.variance.useQuery(
     {
@@ -27,6 +34,52 @@ export default function ReportsPage() {
     { locationId: locationId! },
     { enabled: !!locationId }
   );
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const sortedItems = useMemo(() => {
+    const lc = filter.toLowerCase();
+    const filtered = variance?.items.filter((item) =>
+      item.itemName.toLowerCase().includes(lc) ||
+      (item.itemType ?? "").toLowerCase().includes(lc)
+    );
+    if (!filtered) return [];
+    return [...filtered].sort((a, b) => {
+      const aVal = a[sortKey];
+      const bVal = b[sortKey];
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        const cmp = aVal.toLowerCase().localeCompare(bVal.toLowerCase());
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      const aNum = (aVal as number) ?? 0;
+      const bNum = (bVal as number) ?? 0;
+      return sortDir === "asc" ? aNum - bNum : bNum - aNum;
+    });
+  }, [variance, filter, sortKey, sortDir]);
+
+  function SortHeader({ label, field, className }: { label: string; field: SortKey; className?: string }) {
+    const active = sortKey === field;
+    return (
+      <th
+        className={`cursor-pointer select-none px-4 py-3 hover:text-gray-700 ${className ?? ""}`}
+        onClick={() => toggleSort(field)}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}
+          <span className={`text-xs ${active ? "text-blue-600" : "text-gray-300"}`}>
+            {active ? (sortDir === "asc" ? "▲" : "▼") : "▲"}
+          </span>
+        </span>
+      </th>
+    );
+  }
 
   return (
     <div>
@@ -69,22 +122,33 @@ export default function ReportsPage() {
         <h2 className="mb-3 text-lg font-semibold">
           Variance Report — ${(variance?.totalVarianceValue ?? 0).toFixed(2)} impact
         </h2>
+
+        <input
+          type="text"
+          placeholder="Search items... (e.g. wine, Captain Morgan)"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="mb-4 w-full max-w-sm rounded-md border px-3 py-2 text-sm"
+        />
+
         <div className="overflow-x-auto rounded-lg border bg-white">
           <table className="w-full text-left text-sm">
             <thead className="border-b bg-gray-50 text-xs uppercase text-gray-500">
               <tr>
-                <th className="px-4 py-3">Item</th>
+                <SortHeader label="Item" field="itemName" />
+                <SortHeader label="Type" field="itemType" />
                 <th className="px-4 py-3">Theoretical</th>
                 <th className="px-4 py-3">Actual</th>
-                <th className="px-4 py-3">Variance</th>
-                <th className="px-4 py-3">%</th>
-                <th className="px-4 py-3">Value Impact</th>
+                <SortHeader label="Variance" field="variance" />
+                <SortHeader label="%" field="variancePercent" />
+                <SortHeader label="Value Impact" field="valueImpact" />
               </tr>
             </thead>
             <tbody className="divide-y">
-              {variance?.items.map((item) => (
+              {sortedItems.map((item) => (
                 <tr key={item.inventoryItemId} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium">{item.itemName}</td>
+                  <td className="px-4 py-3">{(item as any).itemType?.replace("_", " ") ?? "—"}</td>
                   <td className="px-4 py-3">{item.theoretical.toFixed(1)}</td>
                   <td className="px-4 py-3">{item.actual.toFixed(1)}</td>
                   <td
@@ -100,6 +164,13 @@ export default function ReportsPage() {
                   </td>
                 </tr>
               ))}
+              {sortedItems.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                    {filter ? "No items match your search." : "No variance data for this period."}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+
+type SortKey = "name" | "type";
+type SortDir = "asc" | "desc";
 
 export default function InventoryPage() {
   const { data: session } = useSession();
@@ -20,14 +23,52 @@ export default function InventoryPage() {
   );
 
   const [filter, setFilter] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const filteredItems = items?.filter(
-    (item) =>
-      item.name.toLowerCase().includes(filter.toLowerCase()) ||
-      item.type.toLowerCase().includes(filter.toLowerCase())
-  );
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const sortedItems = useMemo(() => {
+    const filtered = items?.filter(
+      (item) =>
+        item.name.toLowerCase().includes(filter.toLowerCase()) ||
+        item.type.toLowerCase().includes(filter.toLowerCase())
+    );
+    if (!filtered) return [];
+    return [...filtered].sort((a, b) => {
+      const aVal = a[sortKey].toLowerCase();
+      const bVal = b[sortKey].toLowerCase();
+      if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [items, filter, sortKey, sortDir]);
 
   const onHandMap = new Map(onHand?.map((o) => [o.inventoryItemId, o]) ?? []);
+
+  function SortHeader({ label, field }: { label: string; field: SortKey }) {
+    const active = sortKey === field;
+    return (
+      <th
+        className="cursor-pointer select-none px-4 py-3 hover:text-gray-700"
+        onClick={() => toggleSort(field)}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}
+          <span className={`text-xs ${active ? "text-blue-600" : "text-gray-300"}`}>
+            {active ? (sortDir === "asc" ? "▲" : "▼") : "▲"}
+          </span>
+        </span>
+      </th>
+    );
+  }
 
   return (
     <div>
@@ -50,8 +91,8 @@ export default function InventoryPage() {
           <table className="w-full text-left text-sm">
             <thead className="border-b bg-gray-50 text-xs uppercase text-gray-500">
               <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Type</th>
+                <SortHeader label="Name" field="name" />
+                <SortHeader label="Type" field="type" />
                 <th className="px-4 py-3">UOM</th>
                 <th className="px-4 py-3">On Hand</th>
                 <th className="px-4 py-3">Value</th>
@@ -59,7 +100,7 @@ export default function InventoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filteredItems?.map((item) => {
+              {sortedItems.map((item) => {
                 const oh = onHandMap.get(item.id);
                 return (
                   <tr key={item.id} className="hover:bg-gray-50">

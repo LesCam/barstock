@@ -10,6 +10,7 @@ import type { ExtendedPrismaClient } from "@barstock/database";
 export interface VarianceItem {
   inventoryItemId: string;
   itemName: string;
+  itemType: string;
   theoretical: number;
   actual: number;
   variance: number;
@@ -107,6 +108,7 @@ export class VarianceService {
       items.push({
         inventoryItemId: item.id,
         itemName: item.name,
+        itemType: item.type,
         theoretical: Math.abs(theoretical),
         actual: Math.abs(actual),
         variance,
