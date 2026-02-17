@@ -112,7 +112,7 @@ function PinLogin({
 
   return (
     <ImageBackground
-      source={require("../../../../assets/images/bar-shelves.jpg")}
+      source={require("../../../assets/images/bar-shelves.jpg")}
       style={styles.bg}
       resizeMode="cover"
     >
@@ -245,7 +245,7 @@ function EmailLogin({
 
   return (
     <ImageBackground
-      source={require("../../../../assets/images/bar-shelves.jpg")}
+      source={require("../../../assets/images/bar-shelves.jpg")}
       style={styles.bg}
       resizeMode="cover"
     >
