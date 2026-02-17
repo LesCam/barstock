@@ -163,6 +163,7 @@ model Business {
 
   locations        Location[]
   users            User[]
+  kegSizes         KegSize[]
   bottleTemplates  BottleTemplate[]
   auditLogs        AuditLog[]
   businessSettings BusinessSettings?
@@ -295,10 +296,12 @@ model PriceHistory {
 // ─── Draft Beer ──────────────────────────────────────────────
 
 model KegSize {
-  id      String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name    String
-  totalOz Decimal @map("total_oz")
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String  @map("business_id") @db.Uuid
+  name       String
+  totalOz    Decimal @map("total_oz")
 
+  business     Business      @relation(fields: [businessId], references: [id])
   kegInstances KegInstance[]
 
   @@map("keg_sizes")

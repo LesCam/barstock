@@ -6,13 +6,19 @@ import { KegStatus } from "@barstock/types";
 export const draftRouter = router({
   // ── Keg Sizes ──────────────────────
   listKegSizes: protectedProcedure.query(({ ctx }) =>
-    ctx.prisma.kegSize.findMany()
+    ctx.prisma.kegSize.findMany({
+      where: { businessId: ctx.user!.businessId },
+    })
   ),
 
   createKegSize: protectedProcedure
     .use(requireRole("business_admin"))
     .input(z.object({ name: z.string().min(1), totalOz: z.number().positive() }))
-    .mutation(({ ctx, input }) => ctx.prisma.kegSize.create({ data: input })),
+    .mutation(({ ctx, input }) =>
+      ctx.prisma.kegSize.create({
+        data: { ...input, businessId: ctx.user!.businessId },
+      })
+    ),
 
   // ── Keg Instances ──────────────────
   listKegs: protectedProcedure

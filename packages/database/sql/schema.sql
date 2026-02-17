@@ -96,6 +96,7 @@ create index if not exists ix_price_history_item_from on price_history(inventory
 -- Draft
 create table if not exists keg_sizes (
   id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id),
   name text not null,
   total_oz numeric not null check (total_oz > 0)
 );
@@ -565,3 +566,11 @@ alter table locations add column if not exists city text;
 alter table locations add column if not exists province text;
 alter table locations add column if not exists postal_code text;
 alter table locations add column if not exists phone text;
+
+-- ===========================
+-- v1.11 PATCH: SCOPE KEG SIZES TO BUSINESS
+-- ===========================
+
+alter table keg_sizes add column if not exists business_id uuid references businesses(id);
+update keg_sizes set business_id = (select id from businesses limit 1) where business_id is null;
+alter table keg_sizes alter column business_id set not null;
