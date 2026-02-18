@@ -50,7 +50,7 @@ export default function GuideItemDetail() {
         <Image
           source={{ uri: imgUrl }}
           style={styles.heroImage}
-          contentFit="cover"
+          contentFit="contain"
           transition={200}
         />
       ) : (

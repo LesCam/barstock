@@ -113,7 +113,7 @@ export default function GuideTab() {
                   <Image
                     source={{ uri: imgUrl }}
                     style={styles.image}
-                    contentFit="cover"
+                    contentFit="contain"
                     transition={200}
                   />
                 ) : (

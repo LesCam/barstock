@@ -96,7 +96,17 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>

@@ -164,11 +164,11 @@ export default function GuideItemDetailPage() {
       <div className="mb-6">
         <div className="flex gap-3">
           {item.imageUrl ? (
-            <div className="relative">
+            <div className="relative inline-block max-h-96 max-w-sm rounded-lg bg-[#16283F]">
               <img
                 src={item.imageUrl}
                 alt={item.inventoryItem.name}
-                className="h-64 w-64 rounded-lg object-cover"
+                className="max-h-96 max-w-sm rounded-lg object-contain"
               />
               <button
                 onClick={() =>

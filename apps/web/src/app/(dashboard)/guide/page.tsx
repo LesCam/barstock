@@ -487,7 +487,7 @@ export default function ProductGuidePage() {
                   <img
                     src={item.imageUrl}
                     alt={item.inventoryItem.name}
-                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                    className="h-full w-full object-contain transition-transform group-hover:scale-105"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-4xl text-[#EAF0FF]/30">
