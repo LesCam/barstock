@@ -200,6 +200,15 @@ function SaleInfo({ artworkId, businessId }: { artworkId: string; businessId: st
         label="Date"
         value={new Date(sale.soldAt).toLocaleDateString()}
       />
+      {sale.recordedBy && (
+        <InfoRow
+          label="Recorded By"
+          value={
+            [sale.recordedBy.firstName, sale.recordedBy.lastName].filter(Boolean).join(" ")
+            || sale.recordedBy.email
+          }
+        />
+      )}
       <InfoRow
         label="Pub Cut"
         value={formatPrice(sale.pubCutCents)}

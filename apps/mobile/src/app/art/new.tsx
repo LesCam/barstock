@@ -22,6 +22,13 @@ const PAYOUT_METHODS = [
   { label: "Cheque", value: "cheque" },
   { label: "Cash", value: "cash" },
   { label: "Other", value: "other" },
+  { label: "None", value: "none" },
+] as const;
+
+const NO_PAYOUT_REASONS = [
+  "Artist agreed",
+  "Donation",
+  "Display only",
 ] as const;
 
 function formatPrice(cents: number): string {
@@ -44,6 +51,7 @@ export default function CreateArtworkScreen() {
   const [newArtistEmail, setNewArtistEmail] = useState("");
   const [newArtistPhone, setNewArtistPhone] = useState("");
   const [newArtistPayout, setNewArtistPayout] = useState<string>("etransfer");
+  const [newArtistNoPayoutReason, setNewArtistNoPayoutReason] = useState<string>("Artist agreed");
   const [newArtistBio, setNewArtistBio] = useState("");
   const [newArtistNotes, setNewArtistNotes] = useState("");
 
@@ -82,6 +90,7 @@ export default function CreateArtworkScreen() {
     setNewArtistEmail("");
     setNewArtistPhone("");
     setNewArtistPayout("etransfer");
+    setNewArtistNoPayoutReason("Artist agreed");
     setNewArtistBio("");
     setNewArtistNotes("");
   }
@@ -213,6 +222,29 @@ export default function CreateArtworkScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+            {newArtistPayout === "none" && (
+              <View style={styles.reasonPills}>
+                {NO_PAYOUT_REASONS.map((reason) => (
+                  <TouchableOpacity
+                    key={reason}
+                    style={[
+                      styles.payoutPill,
+                      newArtistNoPayoutReason === reason && styles.payoutPillActive,
+                    ]}
+                    onPress={() => setNewArtistNoPayoutReason(reason)}
+                  >
+                    <Text
+                      style={[
+                        styles.payoutPillText,
+                        newArtistNoPayoutReason === reason && styles.payoutPillTextActive,
+                      ]}
+                    >
+                      {reason}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Bio</Text>
@@ -243,14 +275,20 @@ export default function CreateArtworkScreen() {
             ]}
             disabled={createArtist.isPending || !newArtistName.trim()}
             onPress={() => {
+              const isNoPayout = newArtistPayout === "none";
+              const noteParts = [
+                isNoPayout ? `No payout: ${newArtistNoPayoutReason}` : "",
+                newArtistNotes.trim(),
+              ].filter(Boolean).join("\n");
+
               createArtist.mutate({
                 businessId: user!.businessId,
                 name: newArtistName.trim(),
                 contactEmail: newArtistEmail.trim() || undefined,
                 contactPhone: newArtistPhone.trim() || undefined,
-                payoutMethod: newArtistPayout as any,
+                payoutMethod: isNoPayout ? undefined : (newArtistPayout as any),
                 bio: newArtistBio.trim() || undefined,
-                notes: newArtistNotes.trim() || undefined,
+                notes: noteParts || undefined,
               });
             }}
             activeOpacity={0.7}
@@ -571,6 +609,12 @@ const styles = StyleSheet.create({
   },
   payoutPillText: { fontSize: 14, fontWeight: "500", color: "#EAF0FF" },
   payoutPillTextActive: { color: "#0B1623" },
+  reasonPills: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+    marginTop: 10,
+  },
   submitButton: {
     backgroundColor: "#E9B44C",
     paddingVertical: 16,
