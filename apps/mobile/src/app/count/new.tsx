@@ -11,6 +11,7 @@ import {
 import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
+import type { VarianceReason } from "@barstock/types";
 
 type CountMethod = "liquor" | "packaged" | "draft";
 
@@ -42,26 +43,34 @@ export default function NewCountScreen() {
   const { selectedLocationId } = useAuth();
   const [creating, setCreating] = useState<CountMethod | null>(null);
 
+  const utils = trpc.useUtils();
   const createSession = trpc.sessions.create.useMutation();
+  const closeMutation = trpc.sessions.close.useMutation({
+    onSuccess() {
+      Alert.alert("Session Closed", "Adjustments have been created.");
+      utils.sessions.list.invalidate();
+    },
+    onError(error: { message: string }) {
+      Alert.alert("Error", error.message);
+    },
+  });
 
   const { data: openSessions } = trpc.sessions.list.useQuery(
     { locationId: selectedLocationId!, openOnly: true },
     { enabled: !!selectedLocationId, refetchOnMount: "always" }
   );
 
-  const handleSelect = async (method: CountMethod) => {
+  const handleSelect = async (_method: CountMethod) => {
     if (creating || !selectedLocationId) return;
-    setCreating(method);
+    setCreating(_method);
     try {
       const session = await createSession.mutateAsync({
         locationId: selectedLocationId,
         sessionType: "shift",
         startedTs: new Date(),
       });
-      const route = method === "liquor"
-        ? `/session/${session.id}/connect-scale`
-        : `/session/${session.id}/${method}`;
-      router.push(route);
+      // Navigate to session detail — user picks area there before counting
+      router.push(`/session/${session.id}`);
     } catch (e: any) {
       Alert.alert("Error", e.message ?? "Failed to create session");
     } finally {
@@ -127,14 +136,13 @@ export default function NewCountScreen() {
           <Text style={styles.openWarning}>
             Starting a new count will close the open session below.
           </Text>
-          {openSessions.map((s) => (
-            <TouchableOpacity
-              key={s.id}
-              style={styles.resumeCard}
-              activeOpacity={0.7}
-              onPress={() => router.push(`/session/${s.id}`)}
-            >
-              <View style={{ flex: 1 }}>
+          {openSessions.map((s: any) => (
+            <View key={s.id} style={styles.resumeCard}>
+              <TouchableOpacity
+                style={{ flex: 1 }}
+                activeOpacity={0.7}
+                onPress={() => router.push(`/session/${s.id}`)}
+              >
                 <Text style={styles.resumeType}>{s.sessionType}</Text>
                 <Text style={styles.resumeDate}>
                   {new Date(s.startedTs).toLocaleString()}
@@ -142,9 +150,38 @@ export default function NewCountScreen() {
                 <Text style={styles.resumeCount}>
                   {s._count.lines} items counted
                 </Text>
+              </TouchableOpacity>
+              <View style={styles.resumeActions}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => router.push(`/session/${s.id}`)}
+                >
+                  <Text style={styles.resumeArrow}>Resume</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  disabled={closeMutation.isPending}
+                  onPress={() =>
+                    Alert.alert(
+                      "Close Session",
+                      `Close this session with ${s._count.lines} items counted?`,
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Close",
+                          style: "destructive",
+                          onPress: () => closeMutation.mutate({ sessionId: s.id }),
+                        },
+                      ]
+                    )
+                  }
+                >
+                  <Text style={styles.closeText}>
+                    {closeMutation.isPending ? "Closing..." : "Close"}
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.resumeArrow}>Resume &gt;</Text>
-            </TouchableOpacity>
+            </View>
           ))}
         </>
       )}
@@ -234,10 +271,20 @@ const styles = StyleSheet.create({
     color: "#6B7FA0",
     marginTop: 2,
   },
+  resumeActions: {
+    alignItems: "flex-end",
+    gap: 12,
+    marginLeft: 12,
+  },
   resumeArrow: {
     fontSize: 14,
     fontWeight: "600",
     color: "#42A5F5",
+  },
+  closeText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#dc2626",
   },
   openWarning: {
     fontSize: 13,

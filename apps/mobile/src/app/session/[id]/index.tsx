@@ -55,6 +55,58 @@ export default function SessionDetailScreen() {
     { enabled: !!selectedLocationId }
   );
 
+  // Live expected items for currently selected area
+  const { data: expectedItems } = trpc.sessions.expectedItemsForArea.useQuery(
+    {
+      locationId: selectedLocationId!,
+      barAreaId: selectedAreaId!,
+      subAreaId: selectedSubAreaId ?? undefined,
+    },
+    { enabled: !!selectedLocationId && !!selectedAreaId }
+  );
+
+  // Compute which expected items have been counted in this session
+  const expectedChecklist = useMemo(() => {
+    if (!expectedItems || !session?.lines) return [];
+    const countedItemIds = new Set(
+      session.lines
+        .filter((l: any) =>
+          selectedSubAreaId
+            ? l.subArea?.id === selectedSubAreaId
+            : l.subArea?.barArea?.id === selectedAreaId
+        )
+        .map((l: any) => l.inventoryItemId)
+    );
+    return expectedItems.map((item: any) => ({
+      ...item,
+      counted: countedItemIds.has(item.inventoryItemId),
+    }));
+  }, [expectedItems, session?.lines, selectedAreaId, selectedSubAreaId]);
+
+  const expectedTotal = expectedChecklist.length;
+  const expectedCounted = expectedChecklist.filter((i: any) => i.counted).length;
+
+  function handleExpectedItemTap(item: { inventoryItemId: string; name: string; type: string }) {
+    if (!areaSelected) return;
+    const params = `subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}&itemId=${item.inventoryItemId}`;
+
+    if (item.type === "liquor" || item.type === "wine") {
+      Alert.alert(item.name, "How do you want to count this?", [
+        {
+          text: "Weigh Bottle",
+          onPress: () => router.push(`/session/${id}/liquor?${params}` as any),
+        },
+        {
+          text: "Full Unit Count",
+          onPress: () => router.push(`/session/${id}/packaged?${params}` as any),
+        },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    } else {
+      router.push(`/session/${id}/packaged?${params}` as any);
+    }
+  }
+
   const closeMutation = trpc.sessions.close.useMutation({
     onSuccess() {
       setShowVerification(false);
@@ -301,7 +353,7 @@ export default function SessionDetailScreen() {
         </View>
       )}
 
-      {/* Count Method Actions */}
+      {/* Count actions — for new items not on expected list */}
       {isOpen && (
         <View style={styles.actions}>
           <TouchableOpacity
@@ -313,7 +365,18 @@ export default function SessionDetailScreen() {
               )
             }
           >
-            <Text style={styles.actionText}>Packaged Count</Text>
+            <Text style={styles.actionText}>Count New Item</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
+            disabled={!areaSelected}
+            onPress={() =>
+              router.push(
+                `/session/${id}/liquor?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
+              )
+            }
+          >
+            <Text style={styles.actionText}>Weigh Bottle</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
@@ -326,32 +389,43 @@ export default function SessionDetailScreen() {
           >
             <Text style={styles.actionText}>Draft Verify</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
-            disabled={!areaSelected}
-            onPress={() =>
-              router.push(
-                `/session/${id}/liquor?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
-              )
-            }
-          >
-            <Text style={styles.actionText}>Liquor Weigh</Text>
-          </TouchableOpacity>
         </View>
       )}
 
-      {/* Transfer button */}
-      {isOpen && (
-        <TouchableOpacity
-          style={styles.transferBtn}
-          onPress={() =>
-            router.push(
-              `/transfer?sessionId=${id}&locationId=${selectedLocationId}` as any
+      {/* Expected Items Checklist */}
+      {isOpen && expectedTotal > 0 && (
+        <View style={styles.expectedSection}>
+          <Text style={styles.expectedTitle}>
+            Expected in {areaLabel} — {expectedCounted}/{expectedTotal}
+          </Text>
+          {expectedChecklist.map((item: any) =>
+            item.counted ? (
+              <View
+                key={item.inventoryItemId}
+                style={[styles.expectedRow, styles.expectedRowCounted]}
+              >
+                <View style={[styles.expectedCheck, styles.expectedCheckDone]}>
+                  <Text style={styles.expectedCheckmark}>✓</Text>
+                </View>
+                <Text style={[styles.expectedName, styles.expectedNameCounted]}>
+                  {item.name}
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                key={item.inventoryItemId}
+                style={styles.expectedRow}
+                onPress={() => handleExpectedItemTap(item)}
+              >
+                <View style={styles.expectedCheck} />
+                <Text style={styles.expectedName}>{item.name}</Text>
+                <Text style={styles.expectedType}>
+                  {item.type.replace("_", " ")}
+                </Text>
+              </TouchableOpacity>
             )
-          }
-        >
-          <Text style={styles.transferBtnText}>Transfer Items</Text>
-        </TouchableOpacity>
+          )}
+        </View>
       )}
 
       {/* Counted Items — grouped by area */}
@@ -360,6 +434,7 @@ export default function SessionDetailScreen() {
       </Text>
 
       <SectionList
+        style={styles.itemList}
         sections={groupedLines}
         keyExtractor={(line) => line.id}
         renderSectionHeader={({ section }) => (
@@ -391,17 +466,29 @@ export default function SessionDetailScreen() {
         }
       />
 
-      {/* Close Session */}
+      {/* Footer actions */}
       {isOpen && (
-        <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={handleCloseSession}
-          disabled={closeMutation.isPending}
-        >
-          <Text style={styles.closeBtnText}>
-            {closeMutation.isPending ? "Closing..." : "Close Session"}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={styles.transferBtn}
+            onPress={() =>
+              router.push(
+                `/transfer?sessionId=${id}&locationId=${selectedLocationId}` as any
+              )
+            }
+          >
+            <Text style={styles.transferBtnText}>Transfer Items</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={handleCloseSession}
+            disabled={closeMutation.isPending}
+          >
+            <Text style={styles.closeBtnText}>
+              {closeMutation.isPending ? "Closing..." : "Close Session"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Verification Modal */}
@@ -591,9 +678,68 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 10,
   },
   transferBtnText: { color: "#2BA8A0", fontSize: 14, fontWeight: "600" },
+
+  // Footer
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: "#1E3550",
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+
+  // Item list
+  itemList: { flex: 1 },
+
+  // Expected items checklist
+  expectedSection: {
+    backgroundColor: "#12293E",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  expectedTitle: {
+    color: "#E9B44C",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 10,
+  },
+  expectedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  expectedRowCounted: { opacity: 0.5 },
+  expectedCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: "#5A6A7A",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  expectedCheckDone: {
+    borderColor: "#2BA8A0",
+    backgroundColor: "#2BA8A0",
+  },
+  expectedCheckmark: { color: "#fff", fontSize: 12, fontWeight: "bold" },
+  expectedName: { color: "#EAF0FF", fontSize: 14, flex: 1 },
+  expectedType: {
+    color: "#5A6A7A",
+    fontSize: 11,
+    textTransform: "capitalize",
+    marginLeft: 8,
+  },
+  expectedNameCounted: {
+    textDecorationLine: "line-through",
+    color: "#5A6A7A",
+  },
 
   // Section list
   sectionTitle: {

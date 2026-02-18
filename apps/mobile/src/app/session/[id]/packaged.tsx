@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { trpc } from "@/lib/trpc";
@@ -19,10 +19,11 @@ interface SelectedItem {
 type CountType = "individual" | "full_pack";
 
 export default function PackagedCountScreen() {
-  const { id: sessionId, subAreaId, areaName } = useLocalSearchParams<{
+  const { id: sessionId, subAreaId, areaName, itemId } = useLocalSearchParams<{
     id: string;
     subAreaId?: string;
     areaName?: string;
+    itemId?: string;
   }>();
   const { selectedLocationId } = useAuth();
   const utils = trpc.useUtils();
@@ -31,6 +32,17 @@ export default function PackagedCountScreen() {
   const [countType, setCountType] = useState<CountType>("individual");
   const [quantity, setQuantity] = useState("");
   const [submittedCount, setSubmittedCount] = useState(0);
+
+  // Auto-select item if passed via route params
+  const { data: preselectedItem } = trpc.inventory.getById.useQuery(
+    { id: itemId! },
+    { enabled: !!itemId }
+  );
+  useEffect(() => {
+    if (preselectedItem && !selectedItem) {
+      setSelectedItem(preselectedItem as SelectedItem);
+    }
+  }, [preselectedItem]);
 
   const addLineMutation = trpc.sessions.addLine.useMutation({
     onSuccess() {

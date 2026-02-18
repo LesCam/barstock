@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { View, Text, TouchableOpacity, ScrollView, Switch, Modal, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { trpc } from "@/lib/trpc";
@@ -21,11 +21,12 @@ interface SelectedItem {
 }
 
 export default function LiquorWeighScreen() {
-  const { id: sessionId, manual, subAreaId, areaName } = useLocalSearchParams<{
+  const { id: sessionId, manual, subAreaId, areaName, itemId } = useLocalSearchParams<{
     id: string;
     manual?: string;
     subAreaId?: string;
     areaName?: string;
+    itemId?: string;
   }>();
   const { selectedLocationId } = useAuth();
   const utils = trpc.useUtils();
@@ -39,6 +40,17 @@ export default function LiquorWeighScreen() {
   const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
 
   const canTare = usePermission("canManageTareWeights");
+
+  // Auto-select item if passed via route params
+  const { data: preselectedItem } = trpc.inventory.getById.useQuery(
+    { id: itemId! },
+    { enabled: !!itemId }
+  );
+  useEffect(() => {
+    if (preselectedItem && !selectedItem) {
+      setSelectedItem(preselectedItem as SelectedItem);
+    }
+  }, [preselectedItem]);
 
   const { data: templates } = trpc.scale.listTemplates.useQuery(
     { locationId: selectedLocationId! },
