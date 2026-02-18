@@ -24,8 +24,8 @@ interface BarArea {
 interface UncountedItem {
   inventoryItemId: string;
   name: string;
-  countingMethod: string;
-  categoryName: string;
+  countingMethod: string | null;
+  categoryName: string | null;
   baseUom: string;
   subAreaName: string;
   acknowledged: boolean;

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.28.6",
+    "@barstock/api": "workspace:*",
     "@barstock/types": "workspace:*",
     "@barstock/validators": "workspace:*",
     "@expo/metro-runtime": "~6.1.2",

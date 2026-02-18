@@ -22,10 +22,10 @@ import { scaleManager } from "@/lib/scale/scale-manager";
 interface TemplateRow {
   id: string;
   inventoryItemId: string;
-  containerSizeMl: number;
-  emptyBottleWeightG: number | null;
-  fullBottleWeightG: number | null;
-  densityGPerMl: number | null;
+  containerSizeMl: unknown;
+  emptyBottleWeightG: unknown;
+  fullBottleWeightG: unknown;
+  densityGPerMl: unknown;
   inventoryItem: { name: string; barcode: string | null; category?: { id: string; name: string; countingMethod: string } | null };
 }
 

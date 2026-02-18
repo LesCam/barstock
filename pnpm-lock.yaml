@@ -20,6 +20,9 @@ importers:
       '@babel/runtime':
         specifier: ^7.28.6
         version: 7.28.6
+      '@barstock/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@barstock/types':
         specifier: workspace:*
         version: link:../../packages/types
