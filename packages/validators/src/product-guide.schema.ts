@@ -88,13 +88,40 @@ export const guideItemDeleteSchema = z.object({
   locationId: z.string().uuid(),
 });
 
+// ─── Reorder / Delete Category / Bulk Import ────────────────
+
+export const guideCategoryReorderSchema = z.object({
+  locationId: z.string().uuid(),
+  items: z.array(z.object({ id: z.string().uuid(), sortOrder: z.number().int().min(0) })),
+});
+
+export const guideItemReorderSchema = z.object({
+  locationId: z.string().uuid(),
+  items: z.array(z.object({ id: z.string().uuid(), sortOrder: z.number().int().min(0) })),
+});
+
+export const guideCategoryDeleteSchema = z.object({
+  id: z.string().uuid(),
+  locationId: z.string().uuid(),
+});
+
+export const guideItemBulkCreateSchema = z.object({
+  locationId: z.string().uuid(),
+  categoryId: z.string().uuid(),
+  inventoryItemIds: z.array(z.string().uuid()).min(1),
+});
+
 // ─── Types ──────────────────────────────────────────────────
 
 export type GuideCategoryCreateInput = z.infer<typeof guideCategoryCreateSchema>;
 export type GuideCategoryUpdateInput = z.infer<typeof guideCategoryUpdateSchema>;
 export type GuideCategoryListInput = z.infer<typeof guideCategoryListSchema>;
+export type GuideCategoryReorderInput = z.infer<typeof guideCategoryReorderSchema>;
+export type GuideCategoryDeleteInput = z.infer<typeof guideCategoryDeleteSchema>;
 export type GuideItemCreateInput = z.infer<typeof guideItemCreateSchema>;
 export type GuideItemUpdateInput = z.infer<typeof guideItemUpdateSchema>;
 export type GuideItemListInput = z.infer<typeof guideItemListSchema>;
 export type GuideItemGetInput = z.infer<typeof guideItemGetSchema>;
 export type GuideItemDeleteInput = z.infer<typeof guideItemDeleteSchema>;
+export type GuideItemReorderInput = z.infer<typeof guideItemReorderSchema>;
+export type GuideItemBulkCreateInput = z.infer<typeof guideItemBulkCreateSchema>;

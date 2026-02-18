@@ -8,6 +8,8 @@ import {
   guideCategoryCreateSchema,
   guideCategoryUpdateSchema,
   guideCategoryListSchema,
+  guideCategoryReorderSchema,
+  guideCategoryDeleteSchema,
   guideItemCreateSchema,
   guideItemUpdateSchema,
   guideItemListSchema,
@@ -15,6 +17,8 @@ import {
   guideItemUploadImageSchema,
   guideItemRemoveImageSchema,
   guideItemDeleteSchema,
+  guideItemReorderSchema,
+  guideItemBulkCreateSchema,
 } from "@barstock/validators";
 import { ProductGuideService } from "../services/product-guide.service";
 
@@ -45,6 +49,24 @@ export const productGuideRouter = router({
     .mutation(async ({ ctx, input }) => {
       const service = new ProductGuideService(ctx.prisma);
       return service.updateCategory(input, ctx.user.userId);
+    }),
+
+  reorderCategories: protectedProcedure
+    .use(requireRole("manager"))
+    .use(requireLocationAccess())
+    .input(guideCategoryReorderSchema)
+    .mutation(async ({ ctx, input }) => {
+      const service = new ProductGuideService(ctx.prisma);
+      return service.reorderCategories(input, ctx.user.userId);
+    }),
+
+  deleteCategory: protectedProcedure
+    .use(requireRole("manager"))
+    .use(requireLocationAccess())
+    .input(guideCategoryDeleteSchema)
+    .mutation(async ({ ctx, input }) => {
+      const service = new ProductGuideService(ctx.prisma);
+      return service.deleteCategory(input, ctx.user.userId);
     }),
 
   // ─── Items ────────────────────────────────────────────────
@@ -115,5 +137,23 @@ export const productGuideRouter = router({
     .mutation(async ({ ctx, input }) => {
       const service = new ProductGuideService(ctx.prisma);
       return service.deleteItem(input.id, input.locationId, ctx.user.userId);
+    }),
+
+  reorderItems: protectedProcedure
+    .use(requireRole("manager"))
+    .use(requireLocationAccess())
+    .input(guideItemReorderSchema)
+    .mutation(async ({ ctx, input }) => {
+      const service = new ProductGuideService(ctx.prisma);
+      return service.reorderItems(input, ctx.user.userId);
+    }),
+
+  bulkCreateItems: protectedProcedure
+    .use(requireRole("manager"))
+    .use(requireLocationAccess())
+    .input(guideItemBulkCreateSchema)
+    .mutation(async ({ ctx, input }) => {
+      const service = new ProductGuideService(ctx.prisma);
+      return service.bulkCreateItems(input, ctx.user.userId);
     }),
 });

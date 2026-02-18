@@ -1,9 +1,174 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// ─── Sortable Category Pill ──────────────────────────────────
+
+function SortableCategoryPill({
+  cat,
+  isSelected,
+  onSelect,
+  onEdit,
+  onToggle,
+  onDelete,
+}: {
+  cat: any;
+  isSelected: boolean;
+  onSelect: () => void;
+  onEdit: () => void;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: cat.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="group relative flex items-center gap-1">
+      <span
+        {...attributes}
+        {...listeners}
+        className="cursor-grab text-xs text-[#EAF0FF]/20 hover:text-[#EAF0FF]/60 active:cursor-grabbing"
+        title="Drag to reorder"
+      >
+        ⠿
+      </span>
+      <button
+        onClick={onSelect}
+        className={`rounded-full px-3 py-1 text-sm font-medium ${
+          isSelected
+            ? "bg-[#E9B44C] text-[#0B1623]"
+            : cat.active
+              ? "bg-white/5 text-[#EAF0FF]/80 hover:bg-[#16283F]"
+              : "bg-white/5 text-[#EAF0FF]/30 hover:bg-[#16283F]"
+        }`}
+      >
+        {cat.name}
+        <span className="ml-1 text-xs opacity-60">({cat._count.items})</span>
+      </button>
+      <button
+        onClick={onEdit}
+        className="hidden text-xs text-[#EAF0FF]/40 hover:text-[#E9B44C] group-hover:inline"
+        title="Edit"
+      >
+        ✏️
+      </button>
+      <button
+        onClick={onToggle}
+        className="hidden text-xs text-[#EAF0FF]/40 hover:text-[#E9B44C] group-hover:inline"
+        title={cat.active ? "Deactivate" : "Activate"}
+      >
+        {cat.active ? "👁️" : "👁️‍🗨️"}
+      </button>
+      {cat._count.items === 0 && (
+        <button
+          onClick={onDelete}
+          className="hidden text-xs text-[#EAF0FF]/40 hover:text-red-400 group-hover:inline"
+          title="Delete"
+        >
+          🗑️
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Sortable Item Card ──────────────────────────────────────
+
+function SortableItemCard({ item }: { item: any }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const prices = Array.isArray(item.prices)
+    ? (item.prices as { label: string; price: number }[])
+    : [];
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      <span
+        {...attributes}
+        {...listeners}
+        className="absolute left-1 top-1 z-10 cursor-grab rounded bg-black/40 px-1 text-xs text-white/40 opacity-0 transition-opacity hover:text-white/80 group-hover:opacity-100 active:cursor-grabbing [.group:hover_&]:opacity-100"
+        title="Drag to reorder"
+        style={{ opacity: isDragging ? 1 : undefined }}
+      >
+        ⠿
+      </span>
+      <Link
+        href={`/guide/${item.id}`}
+        className={`group block rounded-lg border border-white/10 bg-[#16283F] shadow-sm transition-shadow hover:shadow-md ${
+          !item.active ? "opacity-50" : ""
+        }`}
+      >
+        <div className="aspect-square w-full overflow-hidden rounded-t-lg bg-[#16283F]/60">
+          {item.imageUrl ? (
+            <img
+              src={item.imageUrl}
+              alt={item.inventoryItem.name}
+              className="h-full w-full object-contain transition-transform group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-4xl text-[#EAF0FF]/30">
+              🍷
+            </div>
+          )}
+        </div>
+        <div className="p-3">
+          <h3 className="truncate text-sm font-semibold text-[#EAF0FF]">
+            {item.inventoryItem.name}
+          </h3>
+          <p className="truncate text-xs text-[#EAF0FF]/60">
+            {item.category.name}
+          </p>
+          <p className="mt-1 text-xs capitalize text-[#5A6A7A]">
+            {item.inventoryItem.category?.name ?? ""}
+          </p>
+          {prices.length > 0 && (
+            <p className="mt-1 text-sm font-semibold text-[#E9B44C]">
+              {prices.length === 1
+                ? `$${Number(prices[0].price).toFixed(2)}`
+                : `$${Number(Math.min(...prices.map((p) => p.price))).toFixed(2)}+`}
+            </p>
+          )}
+        </div>
+      </Link>
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────
 
 export default function ProductGuidePage() {
   const { data: session } = useSession();
@@ -27,7 +192,21 @@ export default function ProductGuidePage() {
   const [itemVintage, setItemVintage] = useState("");
   const [itemVarietal, setItemVarietal] = useState("");
 
+  // Bulk import state
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
+  const [bulkSearch, setBulkSearch] = useState("");
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+
+  // Delete confirmation
+  const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
+
   const utils = trpc.useUtils();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const { data: categories, isLoading: loadingCats } =
     trpc.productGuide.listCategories.useQuery(
@@ -68,6 +247,26 @@ export default function ProductGuidePage() {
     },
   });
 
+  const deleteCategory = trpc.productGuide.deleteCategory.useMutation({
+    onSuccess: () => {
+      utils.productGuide.listCategories.invalidate();
+      setDeletingCategoryId(null);
+      if (selectedCategoryId === deletingCategoryId) setSelectedCategoryId(null);
+    },
+    onError: (err) => {
+      alert(err.message);
+      setDeletingCategoryId(null);
+    },
+  });
+
+  const reorderCategories = trpc.productGuide.reorderCategories.useMutation({
+    onSuccess: () => utils.productGuide.listCategories.invalidate(),
+  });
+
+  const reorderItems = trpc.productGuide.reorderItems.useMutation({
+    onSuccess: () => utils.productGuide.listItems.invalidate(),
+  });
+
   const createItem = trpc.productGuide.createItem.useMutation({
     onSuccess: () => {
       utils.productGuide.listItems.invalidate();
@@ -84,11 +283,38 @@ export default function ProductGuidePage() {
     },
   });
 
+  const bulkCreateItems = trpc.productGuide.bulkCreateItems.useMutation({
+    onSuccess: () => {
+      utils.productGuide.listItems.invalidate();
+      utils.productGuide.listCategories.invalidate();
+      setShowBulkImport(false);
+      setBulkCategoryId("");
+      setBulkSearch("");
+      setBulkSelected(new Set());
+    },
+  });
+
   const filteredInventory = inventoryItems?.filter(
     (i: any) =>
       i.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
       (i.category?.name ?? "").toLowerCase().includes(inventorySearch.toLowerCase())
   );
+
+  // Items already in the guide (for bulk import exclusion)
+  const existingInventoryIds = useMemo(() => {
+    if (!items) return new Set<string>();
+    return new Set(items.map((i: any) => i.inventoryItemId));
+  }, [items]);
+
+  const bulkFilteredInventory = useMemo(() => {
+    if (!inventoryItems) return [];
+    return inventoryItems.filter(
+      (i: any) =>
+        !existingInventoryIds.has(i.id) &&
+        (i.name.toLowerCase().includes(bulkSearch.toLowerCase()) ||
+          (i.category?.name ?? "").toLowerCase().includes(bulkSearch.toLowerCase()))
+    );
+  }, [inventoryItems, bulkSearch, existingInventoryIds]);
 
   function startEditCategory(cat: any) {
     setEditingCategory(cat.id);
@@ -120,6 +346,56 @@ export default function ProductGuidePage() {
       active: !cat.active,
     });
   }
+
+  function handleDeleteCategory(catId: string) {
+    if (deletingCategoryId === catId) {
+      deleteCategory.mutate({ id: catId, locationId: locationId! });
+    } else {
+      setDeletingCategoryId(catId);
+    }
+  }
+
+  function handleCategoryDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !categories) return;
+
+    const oldIndex = categories.findIndex((c: any) => c.id === active.id);
+    const newIndex = categories.findIndex((c: any) => c.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(categories, oldIndex, newIndex);
+    reorderCategories.mutate({
+      locationId: locationId!,
+      items: reordered.map((c: any, i: number) => ({ id: c.id, sortOrder: i })),
+    });
+  }
+
+  function handleItemDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !items) return;
+
+    const oldIndex = items.findIndex((i: any) => i.id === active.id);
+    const newIndex = items.findIndex((i: any) => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(items, oldIndex, newIndex);
+    reorderItems.mutate({
+      locationId: locationId!,
+      items: reordered.map((i: any, idx: number) => ({ id: i.id, sortOrder: idx })),
+    });
+  }
+
+  function toggleBulkItem(id: string) {
+    setBulkSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const categoryIds = categories?.map((c: any) => c.id) ?? [];
+  const itemIds = items?.map((i: any) => i.id) ?? [];
 
   return (
     <div>
@@ -187,6 +463,30 @@ export default function ProductGuidePage() {
           </div>
         )}
 
+        {/* Delete confirmation */}
+        {deletingCategoryId && (
+          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-900/20 p-3">
+            <p className="text-sm text-[#EAF0FF]">
+              Delete category &quot;{categories?.find((c: any) => c.id === deletingCategoryId)?.name}&quot;?
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => deleteCategory.mutate({ id: deletingCategoryId, locationId: locationId! })}
+                disabled={deleteCategory.isPending}
+                className="rounded-md bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                {deleteCategory.isPending ? "Deleting..." : "Confirm Delete"}
+              </button>
+              <button
+                onClick={() => setDeletingCategoryId(null)}
+                className="rounded-md border border-white/10 px-3 py-1 text-sm text-[#EAF0FF]/60 hover:bg-[#16283F]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setSelectedCategoryId(null)}
@@ -201,55 +501,135 @@ export default function ProductGuidePage() {
           {loadingCats ? (
             <span className="text-sm text-[#EAF0FF]/40">Loading...</span>
           ) : (
-            categories?.map((cat: any) => (
-              <div key={cat.id} className="group relative flex items-center gap-1">
-                <button
-                  onClick={() => setSelectedCategoryId(cat.id)}
-                  className={`rounded-full px-3 py-1 text-sm font-medium ${
-                    selectedCategoryId === cat.id
-                      ? "bg-[#E9B44C] text-[#0B1623]"
-                      : cat.active
-                        ? "bg-white/5 text-[#EAF0FF]/80 hover:bg-[#16283F]"
-                        : "bg-white/5 text-[#EAF0FF]/30 hover:bg-[#16283F]"
-                  }`}
-                >
-                  {cat.name}
-                  <span className="ml-1 text-xs opacity-60">({cat._count.items})</span>
-                </button>
-                <button
-                  onClick={() => startEditCategory(cat)}
-                  className="hidden text-xs text-[#EAF0FF]/40 hover:text-[#E9B44C] group-hover:inline"
-                  title="Edit"
-                >
-                  ✏️
-                </button>
-                <button
-                  onClick={() => handleToggleCategory(cat)}
-                  className="hidden text-xs text-[#EAF0FF]/40 hover:text-[#E9B44C] group-hover:inline"
-                  title={cat.active ? "Deactivate" : "Activate"}
-                >
-                  {cat.active ? "👁️" : "👁️‍🗨️"}
-                </button>
-              </div>
-            ))
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleCategoryDragEnd}
+            >
+              <SortableContext items={categoryIds} strategy={horizontalListSortingStrategy}>
+                {categories?.map((cat: any) => (
+                  <SortableCategoryPill
+                    key={cat.id}
+                    cat={cat}
+                    isSelected={selectedCategoryId === cat.id}
+                    onSelect={() => setSelectedCategoryId(cat.id)}
+                    onEdit={() => startEditCategory(cat)}
+                    onToggle={() => handleToggleCategory(cat)}
+                    onDelete={() => handleDeleteCategory(cat.id)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       </div>
 
-      {/* Add Item */}
+      {/* Add Item / Bulk Import buttons */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase text-[#EAF0FF]/60">
           Items {selectedCategoryId && categories ? `— ${categories.find((c: any) => c.id === selectedCategoryId)?.name}` : ""}
         </h2>
         {categories && categories.length > 0 && (
-          <button
-            onClick={() => setShowItemForm(true)}
-            className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
-          >
-            + Item
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowBulkImport(true)}
+              className="rounded-md border border-[#E9B44C] px-3 py-1.5 text-sm font-medium text-[#E9B44C] hover:bg-[#E9B44C]/10"
+            >
+              Bulk Import
+            </button>
+            <button
+              onClick={() => setShowItemForm(true)}
+              className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
+            >
+              + Item
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Bulk Import Panel */}
+      {showBulkImport && (
+        <div className="mb-4 rounded-lg border border-white/10 bg-[#16283F] p-4">
+          <h3 className="mb-3 text-sm font-semibold text-[#EAF0FF]">Bulk Import from Inventory</h3>
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-[#EAF0FF]/60">Category</label>
+            <select
+              value={bulkCategoryId}
+              onChange={(e) => setBulkCategoryId(e.target.value)}
+              className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+            >
+              <option value="">Select category...</option>
+              {categories
+                ?.filter((c: any) => c.active)
+                .map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-[#EAF0FF]/60">Search inventory</label>
+            <input
+              type="text"
+              placeholder="Filter by name or category..."
+              value={bulkSearch}
+              onChange={(e) => setBulkSearch(e.target.value)}
+              className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+            />
+          </div>
+          <div className="mb-3 max-h-60 overflow-y-auto rounded-md border border-white/10 bg-[#0B1623]">
+            {bulkFilteredInventory.length === 0 ? (
+              <p className="p-3 text-sm text-[#5A6A7A]">No items available to import.</p>
+            ) : (
+              bulkFilteredInventory.slice(0, 50).map((inv: any) => (
+                <label
+                  key={inv.id}
+                  className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-[#16283F]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={bulkSelected.has(inv.id)}
+                    onChange={() => toggleBulkItem(inv.id)}
+                    className="accent-[#E9B44C]"
+                  />
+                  <span className="text-sm text-[#EAF0FF]">{inv.name}</span>
+                  <span className="text-xs text-[#5A6A7A]">{inv.category?.name ?? ""}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                if (!bulkCategoryId || bulkSelected.size === 0) return;
+                bulkCreateItems.mutate({
+                  locationId: locationId!,
+                  categoryId: bulkCategoryId,
+                  inventoryItemIds: Array.from(bulkSelected),
+                });
+              }}
+              disabled={!bulkCategoryId || bulkSelected.size === 0 || bulkCreateItems.isPending}
+              className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+            >
+              {bulkCreateItems.isPending
+                ? "Importing..."
+                : `Import ${bulkSelected.size} item${bulkSelected.size !== 1 ? "s" : ""}`}
+            </button>
+            <button
+              onClick={() => {
+                setShowBulkImport(false);
+                setBulkCategoryId("");
+                setBulkSearch("");
+                setBulkSelected(new Set());
+              }}
+              className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-[#EAF0FF]/60 hover:bg-[#16283F]"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {showItemForm && (
         <div className="mb-4 rounded-lg border border-white/10 bg-[#16283F] p-4">
@@ -472,42 +852,70 @@ export default function ProductGuidePage() {
             ? "Create a category first."
             : "Add items to get started."}
         </div>
+      ) : selectedCategoryId ? (
+        /* Drag-to-reorder enabled when viewing a single category */
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleItemDragEnd}
+        >
+          <SortableContext items={itemIds} strategy={rectSortingStrategy}>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {items?.map((item: any) => (
+                <SortableItemCard key={item.id} item={item} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       ) : (
+        /* "All" view — no drag-to-reorder */
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {items?.map((item: any) => (
-            <Link
-              key={item.id}
-              href={`/guide/${item.id}`}
-              className={`group rounded-lg border border-white/10 bg-[#16283F] shadow-sm transition-shadow hover:shadow-md ${
-                !item.active ? "opacity-50" : ""
-              }`}
-            >
-              <div className="aspect-square w-full overflow-hidden rounded-t-lg bg-[#16283F]/60">
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt={item.inventoryItem.name}
-                    className="h-full w-full object-contain transition-transform group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-4xl text-[#EAF0FF]/30">
-                    🍷
-                  </div>
-                )}
-              </div>
-              <div className="p-3">
-                <h3 className="truncate text-sm font-semibold text-[#EAF0FF]">
-                  {item.inventoryItem.name}
-                </h3>
-                <p className="truncate text-xs text-[#EAF0FF]/60">
-                  {item.category.name}
-                </p>
-                <p className="mt-1 text-xs capitalize text-[#5A6A7A]">
-                  {item.inventoryItem.category?.name ?? ""}
-                </p>
-              </div>
-            </Link>
-          ))}
+          {items?.map((item: any) => {
+            const prices = Array.isArray(item.prices)
+              ? (item.prices as { label: string; price: number }[])
+              : [];
+            return (
+              <Link
+                key={item.id}
+                href={`/guide/${item.id}`}
+                className={`group rounded-lg border border-white/10 bg-[#16283F] shadow-sm transition-shadow hover:shadow-md ${
+                  !item.active ? "opacity-50" : ""
+                }`}
+              >
+                <div className="aspect-square w-full overflow-hidden rounded-t-lg bg-[#16283F]/60">
+                  {item.imageUrl ? (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.inventoryItem.name}
+                      className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-4xl text-[#EAF0FF]/30">
+                      🍷
+                    </div>
+                  )}
+                </div>
+                <div className="p-3">
+                  <h3 className="truncate text-sm font-semibold text-[#EAF0FF]">
+                    {item.inventoryItem.name}
+                  </h3>
+                  <p className="truncate text-xs text-[#EAF0FF]/60">
+                    {item.category.name}
+                  </p>
+                  <p className="mt-1 text-xs capitalize text-[#5A6A7A]">
+                    {item.inventoryItem.category?.name ?? ""}
+                  </p>
+                  {prices.length > 0 && (
+                    <p className="mt-1 text-sm font-semibold text-[#E9B44C]">
+                      {prices.length === 1
+                        ? `$${Number(prices[0].price).toFixed(2)}`
+                        : `$${Number(Math.min(...prices.map((p) => p.price))).toFixed(2)}+`}
+                    </p>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

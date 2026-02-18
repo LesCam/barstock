@@ -1,18 +1,47 @@
-import { View, Text, ScrollView, StyleSheet } from "react-native";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Image } from "expo-image";
-import { useLocalSearchParams, Stack } from "expo-router";
+import { useLocalSearchParams, Stack, router } from "expo-router";
 import { trpc } from "@/lib/trpc";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, usePermission } from "@/lib/auth-context";
 import { API_URL } from "@/lib/trpc";
 
 export default function GuideItemDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { selectedLocationId } = useAuth();
+  const { selectedLocationId, user } = useAuth();
+  const isManager = ["manager", "business_admin", "platform_admin"].includes(
+    user?.highestRole ?? ""
+  );
+
+  const utils = trpc.useUtils();
 
   const { data: item, isLoading } = trpc.productGuide.getItem.useQuery(
     { id: id!, locationId: selectedLocationId! },
     { enabled: !!id && !!selectedLocationId }
   );
+
+  const deleteItem = trpc.productGuide.deleteItem.useMutation({
+    onSuccess: () => {
+      utils.productGuide.listItems.invalidate();
+      router.back();
+    },
+  });
+
+  function handleDelete() {
+    Alert.alert(
+      "Delete Item",
+      `Remove "${item?.inventoryItem.name}" from the guide?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            deleteItem.mutate({ id: id!, locationId: selectedLocationId! });
+          },
+        },
+      ]
+    );
+  }
 
   function resolveImageUrl(url: string | null | undefined): string | null {
     if (!url) return null;
@@ -124,6 +153,17 @@ export default function GuideItemDetail() {
           </View>
         )}
 
+        {isManager && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDelete}
+            disabled={deleteItem.isPending}
+          >
+            <Text style={styles.deleteButtonText}>
+              {deleteItem.isPending ? "Deleting..." : "Delete from Guide"}
+            </Text>
+          </TouchableOpacity>
+        )}
 
       </View>
     </ScrollView>
@@ -224,4 +264,18 @@ const styles = StyleSheet.create({
   },
   detailLabel: { fontSize: 13, color: "#5A6A7A" },
   detailValue: { fontSize: 13, fontWeight: "500", color: "#EAF0FF" },
+  deleteButton: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center" as const,
+    marginBottom: 32,
+  },
+  deleteButtonText: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: "#EF4444",
+  },
 });

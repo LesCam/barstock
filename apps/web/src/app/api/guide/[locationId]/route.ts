@@ -18,9 +18,9 @@ export async function GET(
   }
 
   const service = new ProductGuideService(prisma as any);
-  const guide = await service.getPublicGuide(locationId);
+  const result = await service.getPublicGuide(locationId);
 
-  return NextResponse.json(guide, {
+  return NextResponse.json(result, {
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": "public, max-age=300",

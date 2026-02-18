@@ -3,10 +3,15 @@ import type {
   GuideCategoryCreateInput,
   GuideCategoryUpdateInput,
   GuideCategoryListInput,
+  GuideCategoryReorderInput,
+  GuideCategoryDeleteInput,
   GuideItemCreateInput,
   GuideItemUpdateInput,
   GuideItemListInput,
+  GuideItemReorderInput,
+  GuideItemBulkCreateInput,
 } from "@barstock/validators";
+import { TRPCError } from "@trpc/server";
 import { AuditService } from "./audit.service";
 import { createStorageAdapter } from "./storage";
 
@@ -315,39 +320,181 @@ export class ProductGuideService {
     }
   }
 
+  // ─── Reorder / Delete Category / Bulk Import ─────────────
+
+  async reorderCategories(data: GuideCategoryReorderInput, actorUserId: string) {
+    await this.prisma.$transaction(
+      data.items.map((item) =>
+        this.prisma.productGuideCategory.update({
+          where: { id: item.id },
+          data: { sortOrder: item.sortOrder },
+        })
+      )
+    );
+
+    const location = await this.prisma.location.findUnique({
+      where: { id: data.locationId },
+      select: { businessId: true },
+    });
+
+    if (location) {
+      await this.audit.log({
+        businessId: location.businessId,
+        actorUserId,
+        actionType: "guide_category.reordered",
+        objectType: "guide_category",
+        objectId: data.locationId,
+        metadata: { count: data.items.length },
+      });
+    }
+  }
+
+  async reorderItems(data: GuideItemReorderInput, actorUserId: string) {
+    await this.prisma.$transaction(
+      data.items.map((item) =>
+        this.prisma.productGuideItem.update({
+          where: { id: item.id },
+          data: { sortOrder: item.sortOrder },
+        })
+      )
+    );
+
+    const location = await this.prisma.location.findUnique({
+      where: { id: data.locationId },
+      select: { businessId: true },
+    });
+
+    if (location) {
+      await this.audit.log({
+        businessId: location.businessId,
+        actorUserId,
+        actionType: "guide_item.reordered",
+        objectType: "guide_item",
+        objectId: data.locationId,
+        metadata: { count: data.items.length },
+      });
+    }
+  }
+
+  async deleteCategory(data: GuideCategoryDeleteInput, actorUserId: string) {
+    const category = await this.prisma.productGuideCategory.findUniqueOrThrow({
+      where: { id: data.id },
+      include: { _count: { select: { items: true } } },
+    });
+
+    if (category._count.items > 0) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: `Cannot delete category "${category.name}" — it still has ${category._count.items} item(s). Remove or move them first.`,
+      });
+    }
+
+    await this.prisma.productGuideCategory.delete({ where: { id: data.id } });
+
+    const location = await this.prisma.location.findUnique({
+      where: { id: data.locationId },
+      select: { businessId: true },
+    });
+
+    if (location) {
+      await this.audit.log({
+        businessId: location.businessId,
+        actorUserId,
+        actionType: "guide_category.deleted",
+        objectType: "guide_category",
+        objectId: data.id,
+        metadata: { name: category.name },
+      });
+    }
+  }
+
+  async bulkCreateItems(data: GuideItemBulkCreateInput, actorUserId: string) {
+    const maxSort = await this.prisma.productGuideItem.aggregate({
+      where: { categoryId: data.categoryId, locationId: data.locationId },
+      _max: { sortOrder: true },
+    });
+
+    let nextSort = (maxSort._max.sortOrder ?? -1) + 1;
+
+    const items = await this.prisma.$transaction(
+      data.inventoryItemIds.map((inventoryItemId) =>
+        this.prisma.productGuideItem.create({
+          data: {
+            locationId: data.locationId,
+            categoryId: data.categoryId,
+            inventoryItemId,
+            sortOrder: nextSort++,
+          },
+          include: {
+            inventoryItem: { select: { name: true, category: { select: { name: true } } } },
+            category: { select: { id: true, name: true } },
+          },
+        })
+      )
+    );
+
+    const location = await this.prisma.location.findUnique({
+      where: { id: data.locationId },
+      select: { businessId: true },
+    });
+
+    if (location) {
+      await this.audit.log({
+        businessId: location.businessId,
+        actorUserId,
+        actionType: "guide_item.bulk_created",
+        objectType: "guide_item",
+        objectId: data.categoryId,
+        metadata: { count: items.length, categoryId: data.categoryId },
+      });
+    }
+
+    return items;
+  }
+
   // ─── Public API ───────────────────────────────────────────
 
   async getPublicGuide(locationId: string) {
-    const categories = await this.prisma.productGuideCategory.findMany({
-      where: { locationId, active: true },
-      orderBy: { sortOrder: "asc" },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        sortOrder: true,
-        items: {
-          where: { active: true },
-          orderBy: { sortOrder: "asc" },
-          select: {
-            id: true,
-            description: true,
-            imageUrl: true,
-            prices: true,
-            abv: true,
-            producer: true,
-            region: true,
-            vintage: true,
-            varietal: true,
-            sortOrder: true,
-            inventoryItem: {
-              select: { name: true, category: { select: { name: true } } },
+    const [location, categories] = await Promise.all([
+      this.prisma.location.findUnique({
+        where: { id: locationId },
+        select: { name: true, business: { select: { name: true } } },
+      }),
+      this.prisma.productGuideCategory.findMany({
+        where: { locationId, active: true },
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          sortOrder: true,
+          items: {
+            where: { active: true },
+            orderBy: { sortOrder: "asc" },
+            select: {
+              id: true,
+              description: true,
+              imageUrl: true,
+              prices: true,
+              abv: true,
+              producer: true,
+              region: true,
+              vintage: true,
+              varietal: true,
+              sortOrder: true,
+              inventoryItem: {
+                select: { name: true, category: { select: { name: true } } },
+              },
             },
           },
         },
-      },
-    });
+      }),
+    ]);
 
-    return categories;
+    return {
+      locationName: location?.name ?? "",
+      businessName: location?.business?.name ?? "",
+      categories,
+    };
   }
 }

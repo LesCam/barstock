@@ -6,10 +6,11 @@ import {
   ScrollView,
   StyleSheet,
   Dimensions,
+  TextInput,
 } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { API_URL } from "@/lib/trpc";
@@ -25,6 +26,7 @@ export default function GuideTab() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null
   );
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: categories } = trpc.productGuide.listCategories.useQuery(
     { locationId: selectedLocationId!, activeOnly: true },
@@ -39,6 +41,18 @@ export default function GuideTab() {
     },
     { enabled: !!selectedLocationId }
   );
+
+  const filteredItems = useMemo(() => {
+    if (!items) return [];
+    if (!searchQuery.trim()) return items;
+    const q = searchQuery.toLowerCase();
+    return items.filter((item: any) =>
+      item.inventoryItem.name.toLowerCase().includes(q) ||
+      (item.producer ?? "").toLowerCase().includes(q) ||
+      (item.region ?? "").toLowerCase().includes(q) ||
+      (item.varietal ?? "").toLowerCase().includes(q)
+    );
+  }, [items, searchQuery]);
 
   function resolveImageUrl(url: string | null | undefined): string | null {
     if (!url) return null;
@@ -92,9 +106,23 @@ export default function GuideTab() {
         ))}
       </ScrollView>
 
+      {/* Search bar */}
+      <View style={styles.searchBar}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search items..."
+          placeholderTextColor="#5A6A7A"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+        />
+      </View>
+
       {/* Items grid */}
       <FlatList
-        data={items}
+        data={filteredItems}
         numColumns={NUM_COLUMNS}
         keyExtractor={(i: any) => i.id}
         columnWrapperStyle={styles.row}
@@ -155,6 +183,20 @@ export default function GuideTab() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0B1623" },
   filterBar: { maxHeight: 52, borderBottomWidth: 1, borderBottomColor: "#1E3550" },
+  searchBar: {
+    paddingHorizontal: COLUMN_GAP,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1E3550",
+  },
+  searchInput: {
+    backgroundColor: "#16283F",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: "#EAF0FF",
+  },
   filterContent: {
     paddingHorizontal: COLUMN_GAP,
     paddingVertical: 10,
