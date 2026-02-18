@@ -27,6 +27,33 @@ export const scaleRouter = router({
       });
     }),
 
+  /** Look up an item by barcode and return its existing template (if any) */
+  lookupByBarcode: protectedProcedure
+    .input(z.object({ locationId: z.string().uuid(), barcode: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const item = await ctx.prisma.inventoryItem.findFirst({
+        where: { locationId: input.locationId, barcode: input.barcode },
+        select: { id: true, name: true, type: true, barcode: true, containerSize: true },
+      });
+      if (!item) return null;
+
+      const template = await ctx.prisma.bottleTemplate.findFirst({
+        where: { inventoryItemId: item.id, enabled: true },
+      });
+
+      return {
+        item,
+        template: template
+          ? {
+              emptyBottleWeightG: Number(template.emptyBottleWeightG),
+              fullBottleWeightG: Number(template.fullBottleWeightG),
+              containerSizeMl: Number(template.containerSizeMl),
+              densityGPerMl: template.densityGPerMl != null ? Number(template.densityGPerMl) : null,
+            }
+          : null,
+      };
+    }),
+
   createTemplate: protectedProcedure
     .use(requirePermission("canManageTareWeights"))
     .input(z.object({

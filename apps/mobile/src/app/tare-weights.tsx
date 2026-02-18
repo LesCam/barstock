@@ -126,9 +126,6 @@ export default function TareWeightsScreen() {
     );
   }, [templates, search]);
 
-  // Keep a ref to latest templates so handleScan always has fresh data
-  const templatesRef = useRef<TemplateRow[]>([]);
-  templatesRef.current = (templates as TemplateRow[]) ?? [];
 
   function handleDelete(template: TemplateRow) {
     Alert.alert(
@@ -188,6 +185,21 @@ export default function TareWeightsScreen() {
 
   function handleItemSelected(item: SelectedItem) {
     setShowAddSearch(false);
+    addItemWithPrefill(item);
+  }
+
+  function addItemWithPrefill(item: SelectedItem) {
+    // Check if this item already has a template — pre-fill weights
+    const allTemplates = (templates as TemplateRow[]) ?? [];
+    const existing = allTemplates.find((t) => t.inventoryItemId === item.id);
+    if (existing) {
+      item.prefill = {
+        tareG: Number(existing.emptyBottleWeightG),
+        fullG: Number(existing.fullBottleWeightG),
+        containerMl: Number(existing.containerSizeMl),
+        density: existing.densityGPerMl != null ? Number(existing.densityGPerMl) : null,
+      };
+    }
     setAddingItem(item);
   }
 
@@ -201,26 +213,13 @@ export default function TareWeightsScreen() {
         barcode,
       });
       if (item) {
-        // Look up existing template from ref (always current render data)
-        const existing = templatesRef.current.find(
-          (t) => t.inventoryItemId === item.id
-        );
-        const selectedItem: SelectedItem = {
+        addItemWithPrefill({
           id: item.id,
           name: (item as any).name,
           type: (item as any).type,
           barcode: (item as any).barcode,
           containerSize: (item as any).containerSize,
-        };
-        if (existing) {
-          selectedItem.prefill = {
-            tareG: Number(existing.emptyBottleWeightG),
-            fullG: Number(existing.fullBottleWeightG),
-            containerMl: Number(existing.containerSizeMl),
-            density: existing.densityGPerMl != null ? Number(existing.densityGPerMl) : null,
-          };
-        }
-        setAddingItem(selectedItem);
+        });
       } else {
         setCreatingFromScan({ barcode });
       }
