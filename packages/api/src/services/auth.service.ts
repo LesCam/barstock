@@ -55,8 +55,14 @@ export function decodeToken(token: string): Record<string, unknown> {
 
 /** Derive default permissions from a role */
 export function deriveDefaultPermissions(role: Role): Record<string, boolean> {
+  const level = ROLE_HIERARCHY[role];
   return {
-    canManageTareWeights: ROLE_HIERARCHY[role] >= ROLE_HIERARCHY["manager"],
+    canAccessSessions:    role !== "curator" && role !== "accounting",
+    canAccessInventory:   role !== "curator" && role !== "accounting",
+    canAccessScale:       role !== "curator" && role !== "accounting",
+    canManageTareWeights: level >= ROLE_HIERARCHY["manager"],
+    canAccessArt:         true,
+    canAccessGuide:       true,
   };
 }
 

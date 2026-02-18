@@ -7,7 +7,7 @@ export default function SettingsTab() {
   const router = useRouter();
   const { user, signOut, selectedLocationId, selectLocation } = useAuth();
   const canManageTareWeights = usePermission("canManageTareWeights");
-  const isCuratorOnly = user?.highestRole === "curator";
+  const canAccessScale = usePermission("canAccessScale");
 
   const { data: locations } = trpc.locations.listByBusiness.useQuery(
     { businessId: user?.businessId ?? "" },
@@ -41,7 +41,7 @@ export default function SettingsTab() {
         </View>
       )}
 
-      {!isCuratorOnly && (
+      {canAccessScale && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Scale</Text>
           <TouchableOpacity

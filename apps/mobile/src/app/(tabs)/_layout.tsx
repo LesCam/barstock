@@ -1,17 +1,20 @@
 import { Tabs } from "expo-router";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, usePermission } from "@/lib/auth-context";
 import LocationPicker from "@/components/LocationPicker";
 
 export default function TabsLayout() {
   const { user, selectedLocationId } = useAuth();
 
+  // Hooks must be called before early returns (Rules of Hooks)
+  const canAccessSessions = usePermission("canAccessSessions");
+  const canAccessArt = usePermission("canAccessArt");
+  const canAccessInventory = usePermission("canAccessInventory");
+  const canAccessGuide = usePermission("canAccessGuide");
+
   // Multi-location user without a selection — show picker instead of tabs
   if (user && user.locationIds.length > 1 && !selectedLocationId) {
     return <LocationPicker />;
   }
-
-  const role = user?.highestRole;
-  const isCuratorOnly = role === "curator";
 
   return (
     <Tabs
@@ -29,24 +32,32 @@ export default function TabsLayout() {
         options={{
           title: "Sessions",
           tabBarLabel: "Sessions",
-          href: isCuratorOnly ? null : undefined,
+          href: canAccessSessions ? undefined : null,
         }}
       />
       <Tabs.Screen
         name="art"
-        options={{ title: "Art", tabBarLabel: "Art" }}
+        options={{
+          title: "Art",
+          tabBarLabel: "Art",
+          href: canAccessArt ? undefined : null,
+        }}
       />
       <Tabs.Screen
         name="inventory"
         options={{
           title: "Inventory",
           tabBarLabel: "Inventory",
-          href: isCuratorOnly ? null : undefined,
+          href: canAccessInventory ? undefined : null,
         }}
       />
       <Tabs.Screen
         name="guide"
-        options={{ title: "Product Guide", tabBarLabel: "Guide" }}
+        options={{
+          title: "Product Guide",
+          tabBarLabel: "Guide",
+          href: canAccessGuide ? undefined : null,
+        }}
       />
       <Tabs.Screen
         name="settings"

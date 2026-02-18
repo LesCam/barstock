@@ -362,6 +362,50 @@ function LocationAccessSection({
 
 // ── Feature Permissions Section ───────────────────────────────
 
+const PERMISSION_DEFS: {
+  key: string;
+  label: string;
+  description: string;
+  defaultOn: (role: string) => boolean;
+}[] = [
+  {
+    key: "canAccessSessions",
+    label: "Access Sessions",
+    description: "View and manage inventory count sessions",
+    defaultOn: (role) => role !== "curator" && role !== "accounting",
+  },
+  {
+    key: "canAccessInventory",
+    label: "Access Inventory",
+    description: "View and manage inventory items",
+    defaultOn: (role) => role !== "curator" && role !== "accounting",
+  },
+  {
+    key: "canAccessScale",
+    label: "Access Scale",
+    description: "Connect and use Bluetooth scale",
+    defaultOn: (role) => role !== "curator" && role !== "accounting",
+  },
+  {
+    key: "canManageTareWeights",
+    label: "Manage Tare Weights",
+    description: "Create and edit tare weight presets",
+    defaultOn: (role) => role === "manager" || role === "business_admin" || role === "platform_admin",
+  },
+  {
+    key: "canAccessArt",
+    label: "Access Art",
+    description: "View and manage art collection",
+    defaultOn: () => true,
+  },
+  {
+    key: "canAccessGuide",
+    label: "Access Product Guide",
+    description: "Browse product guide and bottle library",
+    defaultOn: () => true,
+  },
+];
+
 function FeaturePermissionsSection({
   userId,
   primaryLocationId,
@@ -379,33 +423,38 @@ function FeaturePermissionsSection({
   // Don't show for business_admin or platform_admin — they always have full access
   if (userRole === "business_admin" || userRole === "platform_admin") return null;
 
-  const isManager = userRole === "manager" || userRole === "curator";
-  const tareWeightEnabled = permissions?.[primaryLocationId]?.canManageTareWeights ?? false;
+  const locationPerms = permissions?.[primaryLocationId] ?? {};
 
   return (
     <div className="mt-4">
       <h4 className="text-sm font-semibold text-[#EAF0FF]/80">Feature Permissions</h4>
       <div className="mt-2 space-y-1 rounded-md border border-white/10 bg-[#0B1623] p-3">
-        <label className="flex items-center gap-2 text-sm text-[#EAF0FF] cursor-pointer">
-          <input
-            type="checkbox"
-            checked={tareWeightEnabled}
-            disabled={setPermMutation.isPending}
-            onChange={(e) =>
-              setPermMutation.mutate({
-                userId,
-                locationId: primaryLocationId,
-                permissionKey: "canManageTareWeights",
-                value: e.target.checked,
-              })
-            }
-            className="rounded border-white/10 bg-[#0B1623]"
-          />
-          Manage Tare Weights
-          <span className="text-xs text-[#EAF0FF]/40">
-            {isManager ? "(default: ON)" : "(default: OFF)"}
-          </span>
-        </label>
+        {PERMISSION_DEFS.map((perm) => {
+          const isDefault = perm.defaultOn(userRole);
+          const enabled = locationPerms[perm.key] ?? isDefault;
+          return (
+            <label key={perm.key} className="flex items-center gap-2 text-sm text-[#EAF0FF] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={enabled}
+                disabled={setPermMutation.isPending}
+                onChange={(e) =>
+                  setPermMutation.mutate({
+                    userId,
+                    locationId: primaryLocationId,
+                    permissionKey: perm.key,
+                    value: e.target.checked,
+                  })
+                }
+                className="rounded border-white/10 bg-[#0B1623]"
+              />
+              {perm.label}
+              <span className="text-xs text-[#EAF0FF]/40">
+                (default: {isDefault ? "ON" : "OFF"})
+              </span>
+            </label>
+          );
+        })}
       </div>
     </div>
   );

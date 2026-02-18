@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Redirect, router } from "expo-router";
 import { trpc } from "@/lib/trpc";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, usePermission } from "@/lib/auth-context";
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
   shift: "Inventory Count",
@@ -33,10 +33,11 @@ const INITIAL_LIMIT = 10;
 
 export default function SessionsTab() {
   const { user, selectedLocationId } = useAuth();
+  const canAccessSessions = usePermission("canAccessSessions");
+  const canAccessArt = usePermission("canAccessArt");
+  const canAccessInventory = usePermission("canAccessInventory");
+  const canAccessGuide = usePermission("canAccessGuide");
 
-  if (user?.highestRole === "curator") {
-    return <Redirect href="/(tabs)/art" />;
-  }
   const [creating, setCreating] = useState(false);
   const [limit, setLimit] = useState(INITIAL_LIMIT);
 
@@ -44,7 +45,7 @@ export default function SessionsTab() {
 
   const { data: sessions, isLoading } = trpc.sessions.list.useQuery(
     { locationId: selectedLocationId!, openOnly: false, limit },
-    { enabled: !!selectedLocationId, refetchOnMount: "always" }
+    { enabled: !!selectedLocationId && canAccessSessions, refetchOnMount: "always" }
   );
 
   const createSession = trpc.sessions.create.useMutation();
@@ -57,6 +58,13 @@ export default function SessionsTab() {
       Alert.alert("Error", error.message);
     },
   });
+
+  if (!canAccessSessions) {
+    if (canAccessArt) return <Redirect href="/(tabs)/art" />;
+    if (canAccessInventory) return <Redirect href="/(tabs)/inventory" />;
+    if (canAccessGuide) return <Redirect href="/(tabs)/guide" />;
+    return <Redirect href="/(tabs)/settings" />;
+  }
 
   const openSessions = sessions?.filter((s: any) => !s.endedTs) ?? [];
   const closedSessions = sessions?.filter((s: any) => s.endedTs) ?? [];
