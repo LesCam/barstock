@@ -2,7 +2,12 @@ import { router, protectedProcedure, requirePermission } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+const DENSITY_MAP: Record<string, number> = { wine: 0.99, liquor: 0.95 };
 const DEFAULT_DENSITY = 0.95;
+
+function densityForType(type: string): number {
+  return DENSITY_MAP[type] ?? DEFAULT_DENSITY;
+}
 
 export const scaleRouter = router({
   /** Bottle templates for a location (includes org-level) */
@@ -45,8 +50,8 @@ export const scaleRouter = router({
         item,
         template: template
           ? {
-              emptyBottleWeightG: Number(template.emptyBottleWeightG),
-              fullBottleWeightG: Number(template.fullBottleWeightG),
+              emptyBottleWeightG: template.emptyBottleWeightG != null ? Number(template.emptyBottleWeightG) : null,
+              fullBottleWeightG: template.fullBottleWeightG != null ? Number(template.fullBottleWeightG) : null,
               containerSizeMl: Number(template.containerSizeMl),
               densityGPerMl: template.densityGPerMl != null ? Number(template.densityGPerMl) : null,
             }
@@ -61,11 +66,14 @@ export const scaleRouter = router({
       locationId: z.string().uuid().optional(),
       inventoryItemId: z.string().uuid(),
       containerSizeMl: z.number().positive(),
-      emptyBottleWeightG: z.number().positive(),
-      fullBottleWeightG: z.number().positive(),
+      emptyBottleWeightG: z.number().positive().optional(),
+      fullBottleWeightG: z.number().positive().optional(),
       densityGPerMl: z.number().positive().optional(),
       force: z.boolean().default(false),
-    }))
+    }).refine(
+      (d) => d.emptyBottleWeightG || d.fullBottleWeightG,
+      { message: "At least one weight (empty or full) is required" }
+    ))
     .mutation(async ({ ctx, input }) => {
       const { force, ...data } = input;
 
@@ -82,16 +90,18 @@ export const scaleRouter = router({
         data: { containerSize: input.containerSizeMl, containerUom: "ml" },
       });
 
+      const templateData = {
+        containerSizeMl: input.containerSizeMl,
+        emptyBottleWeightG: input.emptyBottleWeightG ?? null,
+        fullBottleWeightG: input.fullBottleWeightG ?? null,
+        densityGPerMl: input.densityGPerMl ?? null,
+      };
+
       if (active) {
         // Force: update the existing active template
         return ctx.prisma.bottleTemplate.update({
           where: { id: active.id },
-          data: {
-            containerSizeMl: input.containerSizeMl,
-            emptyBottleWeightG: input.emptyBottleWeightG,
-            fullBottleWeightG: input.fullBottleWeightG,
-            densityGPerMl: input.densityGPerMl ?? null,
-          },
+          data: templateData,
         });
       }
 
@@ -102,25 +112,25 @@ export const scaleRouter = router({
       if (disabled) {
         return ctx.prisma.bottleTemplate.update({
           where: { id: disabled.id },
-          data: {
-            enabled: true,
-            containerSizeMl: input.containerSizeMl,
-            emptyBottleWeightG: input.emptyBottleWeightG,
-            fullBottleWeightG: input.fullBottleWeightG,
-            densityGPerMl: input.densityGPerMl ?? null,
-          },
+          data: { enabled: true, ...templateData },
         });
       }
 
-      return ctx.prisma.bottleTemplate.create({ data });
+      return ctx.prisma.bottleTemplate.create({
+        data: {
+          ...data,
+          emptyBottleWeightG: data.emptyBottleWeightG ?? null,
+          fullBottleWeightG: data.fullBottleWeightG ?? null,
+        },
+      });
     }),
 
   updateTemplate: protectedProcedure
     .use(requirePermission("canManageTareWeights"))
     .input(z.object({
       templateId: z.string().uuid(),
-      emptyBottleWeightG: z.number().positive().optional(),
-      fullBottleWeightG: z.number().positive().optional(),
+      emptyBottleWeightG: z.number().positive().nullable().optional(),
+      fullBottleWeightG: z.number().positive().nullable().optional(),
       densityGPerMl: z.number().positive().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -238,16 +248,18 @@ export const scaleRouter = router({
           },
         });
 
-        // 3. Calculate counterpart weight from volume + density
-        let emptyG = input.emptyBottleWeightG;
-        let fullG = input.fullBottleWeightG;
-        const liquidWeightG = input.containerSizeMl * DEFAULT_DENSITY;
+        // 3. Determine weights and density using type-based defaults
+        const typeDensity = densityForType(input.type);
+        let emptyG = input.emptyBottleWeightG ?? null;
+        let fullG = input.fullBottleWeightG ?? null;
+        let density: number = typeDensity;
 
-        if (emptyG && !fullG) {
-          fullG = emptyG + liquidWeightG;
-        } else if (fullG && !emptyG) {
-          emptyG = fullG - liquidWeightG;
+        if (emptyG != null && fullG != null) {
+          // Both measured — derive actual density
+          const liquidG = fullG - emptyG;
+          density = (liquidG > 0 && input.containerSizeMl > 0) ? liquidG / input.containerSizeMl : typeDensity;
         }
+        // If only one weight provided, the other stays null — derived on-the-fly using density
 
         // 4. Create bottle template
         const template = await tx.bottleTemplate.create({
@@ -256,9 +268,9 @@ export const scaleRouter = router({
             locationId: input.locationId,
             inventoryItemId: item.id,
             containerSizeMl: input.containerSizeMl,
-            emptyBottleWeightG: emptyG!,
-            fullBottleWeightG: fullG!,
-            densityGPerMl: DEFAULT_DENSITY,
+            emptyBottleWeightG: emptyG,
+            fullBottleWeightG: fullG,
+            densityGPerMl: density,
           },
         });
 
@@ -300,8 +312,17 @@ export const scaleRouter = router({
         where: { id: input.templateId },
       });
 
-      const liquidWeightG = input.grossWeightG - Number(template.emptyBottleWeightG);
-      const density = Number(template.densityGPerMl) || 1.0;
+      const density = Number(template.densityGPerMl) || DEFAULT_DENSITY;
+      const containerMl = Number(template.containerSizeMl);
+      const liquidContentG = containerMl * density;
+
+      // Derive whichever weight is missing from the other + density
+      const effectiveTareG = template.emptyBottleWeightG != null
+        ? Number(template.emptyBottleWeightG)
+        : template.fullBottleWeightG != null
+          ? Number(template.fullBottleWeightG) - liquidContentG
+          : 0; // shouldn't happen — at least one weight must exist
+      const liquidWeightG = input.grossWeightG - effectiveTareG;
       const liquidMl = Math.max(0, liquidWeightG / density);
       const liquidOz = liquidMl / 29.5735;
       const percentRemaining =

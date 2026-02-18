@@ -357,11 +357,27 @@ export default function InventoryDetailPage({
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
               <div>
                 <dt className="text-[#EAF0FF]/60">Tare (Empty)</dt>
-                <dd className="text-[#EAF0FF]">{Math.round(Number(t.emptyBottleWeightG))} g</dd>
+                <dd className="text-[#EAF0FF]">
+                  {t.emptyBottleWeightG != null
+                    ? `${Math.round(Number(t.emptyBottleWeightG))} g`
+                    : (() => {
+                        const d = Number(t.densityGPerMl) || 0.95;
+                        const derived = Number(t.fullBottleWeightG) - Number(t.containerSizeMl) * d;
+                        return `~${Math.round(derived)} g (est.)`;
+                      })()}
+                </dd>
               </div>
               <div>
                 <dt className="text-[#EAF0FF]/60">Full</dt>
-                <dd className="text-[#EAF0FF]">{Math.round(Number(t.fullBottleWeightG))} g</dd>
+                <dd className="text-[#EAF0FF]">
+                  {t.fullBottleWeightG != null
+                    ? `${Math.round(Number(t.fullBottleWeightG))} g`
+                    : (() => {
+                        const d = Number(t.densityGPerMl) || 0.95;
+                        const derived = Number(t.emptyBottleWeightG) + Number(t.containerSizeMl) * d;
+                        return `~${Math.round(derived)} g (est.)`;
+                      })()}
+                </dd>
               </div>
               <div>
                 <dt className="text-[#EAF0FF]/60">Container</dt>

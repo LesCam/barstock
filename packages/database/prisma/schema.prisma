@@ -563,8 +563,8 @@ model BottleTemplate {
   locationId        String?  @map("location_id") @db.Uuid
   inventoryItemId   String   @map("inventory_item_id") @db.Uuid
   containerSizeMl   Decimal  @map("container_size_ml")
-  emptyBottleWeightG Decimal @map("empty_bottle_weight_g")
-  fullBottleWeightG  Decimal @map("full_bottle_weight_g")
+  emptyBottleWeightG Decimal? @map("empty_bottle_weight_g")
+  fullBottleWeightG  Decimal? @map("full_bottle_weight_g")
   densityGPerMl     Decimal? @map("density_g_per_ml")
   enabled           Boolean  @default(true)
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()

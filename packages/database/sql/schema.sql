@@ -297,8 +297,8 @@ create table if not exists bottle_templates (
   location_id uuid references locations(id),
   inventory_item_id uuid not null references inventory_items(id),
   container_size_ml numeric not null,
-  empty_bottle_weight_g numeric not null,
-  full_bottle_weight_g numeric not null,
+  empty_bottle_weight_g numeric,
+  full_bottle_weight_g numeric,
   density_g_per_ml numeric,
   enabled boolean not null default true,
   created_at timestamptz not null default now()

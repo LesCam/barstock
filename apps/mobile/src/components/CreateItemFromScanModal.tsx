@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
 
+const DENSITY_MAP: Record<string, number> = { wine: 0.99, liquor: 0.95 };
 const DEFAULT_DENSITY = 0.95;
 
 type ItemType = "liquor" | "wine";
@@ -98,10 +99,10 @@ export function CreateItemFromScanModal({
     const fullG =
       capturedWeight?.kind === "full" ? capturedWeight.grams : undefined;
 
-    // If no scale weight captured, auto-calculate from volume
-    const liquidWeightG = sizeMl * DEFAULT_DENSITY;
+    // If no scale weight captured, auto-calculate from volume using type-based density
+    const density = DENSITY_MAP[itemType] ?? DEFAULT_DENSITY;
     const finalEmptyG = emptyG;
-    const finalFullG = fullG ?? (emptyG ? undefined : Math.round(sizeMl * DEFAULT_DENSITY + 300));
+    const finalFullG = fullG ?? (emptyG ? undefined : Math.round(sizeMl * density + 300));
     // We need at least one weight — if no scale, estimate full from volume + typical glass weight
     const submitEmptyG = finalEmptyG;
     const submitFullG = finalFullG;

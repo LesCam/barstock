@@ -13,7 +13,7 @@ interface TareWeightEditModalProps {
   densityGPerMl?: number | null;
   /** When true, name and container size are editable (used for new template creation) */
   editable?: boolean;
-  onSave: (emptyBottleWeightG: number, fullBottleWeightG: number, name?: string, containerSizeMl?: number) => void;
+  onSave: (emptyBottleWeightG: number | null, fullBottleWeightG: number | null, name?: string, containerSizeMl?: number) => void;
   onCancel: () => void;
 }
 
@@ -87,10 +87,13 @@ export function TareWeightEditModal({
 
   function handleSave() {
     if (effectiveTareG <= 0 && effectiveFullG <= 0) return;
+    // Pass null for whichever weight the user didn't explicitly enter (auto-calculated)
+    const tareToSave = tareG > 0 ? effectiveTareG : null;
+    const fullToSave = fullG > 0 ? effectiveFullG : null;
     if (editable) {
-      onSave(effectiveTareG, effectiveFullG, editName.trim(), activeContainerMl);
+      onSave(tareToSave, fullToSave, editName.trim(), activeContainerMl);
     } else {
-      onSave(effectiveTareG, effectiveFullG);
+      onSave(tareToSave, fullToSave);
     }
   }
 

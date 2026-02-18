@@ -23,8 +23,8 @@ interface TemplateRow {
   id: string;
   inventoryItemId: string;
   containerSizeMl: number;
-  emptyBottleWeightG: number;
-  fullBottleWeightG: number;
+  emptyBottleWeightG: number | null;
+  fullBottleWeightG: number | null;
   densityGPerMl: number | null;
   inventoryItem: { name: string; type: string; barcode: string | null };
 }
@@ -36,8 +36,8 @@ interface SelectedItem {
   barcode: string | null;
   containerSize: unknown;
   prefill?: {
-    tareG: number;
-    fullG: number;
+    tareG: number | null;
+    fullG: number | null;
     containerMl: number;
     density: number | null;
   };
@@ -164,23 +164,32 @@ export default function TareWeightsScreen() {
     );
   }
 
-  function handleEditSave(emptyBottleWeightG: number, fullBottleWeightG: number) {
+  function handleEditSave(emptyBottleWeightG: number | null, fullBottleWeightG: number | null) {
     if (!editingTemplate) return;
-    // Calculate actual density when both weights are measured
-    const containerMl = Number(editingTemplate.containerSizeMl);
-    const liquidG = fullBottleWeightG - emptyBottleWeightG;
-    const densityGPerMl = (liquidG > 0 && containerMl > 0) ? liquidG / containerMl : undefined;
-    updateMutation.mutate({
-      templateId: editingTemplate.id,
-      emptyBottleWeightG,
-      fullBottleWeightG,
-      densityGPerMl,
-    });
+    if (emptyBottleWeightG != null && fullBottleWeightG != null) {
+      // Both measured — derive actual density
+      const containerMl = Number(editingTemplate.containerSizeMl);
+      const liquidG = fullBottleWeightG - emptyBottleWeightG;
+      const densityGPerMl = (liquidG > 0 && containerMl > 0) ? liquidG / containerMl : undefined;
+      updateMutation.mutate({
+        templateId: editingTemplate.id,
+        emptyBottleWeightG,
+        fullBottleWeightG,
+        densityGPerMl,
+      });
+    } else {
+      // Only one weight — store measured one, null the other
+      updateMutation.mutate({
+        templateId: editingTemplate.id,
+        emptyBottleWeightG: emptyBottleWeightG ?? null,
+        fullBottleWeightG: fullBottleWeightG ?? null,
+      });
+    }
   }
 
   const updateItemMutation = trpc.inventory.update.useMutation();
 
-  function handleAddSave(emptyBottleWeightG: number, fullBottleWeightG: number, name?: string, containerSizeMl?: number) {
+  function handleAddSave(emptyBottleWeightG: number | null, fullBottleWeightG: number | null, name?: string, containerSizeMl?: number) {
     if (!addingItem) return;
     const sizeMl = containerSizeMl ?? (Number(addingItem.containerSize) || 750);
 
@@ -191,16 +200,17 @@ export default function TareWeightsScreen() {
     }
 
     // Calculate actual density when both weights are provided
-    const liquidG = fullBottleWeightG - emptyBottleWeightG;
-    const densityGPerMl = (liquidG > 0 && sizeMl > 0) ? liquidG / sizeMl : undefined;
+    const densityGPerMl = (emptyBottleWeightG != null && fullBottleWeightG != null)
+      ? (() => { const liquidG = fullBottleWeightG - emptyBottleWeightG; return (liquidG > 0 && sizeMl > 0) ? liquidG / sizeMl : undefined; })()
+      : undefined;
 
     createMutation.mutate({
       businessId: user?.businessId,
       locationId,
       inventoryItemId: addingItem.id,
       containerSizeMl: sizeMl,
-      emptyBottleWeightG,
-      fullBottleWeightG,
+      emptyBottleWeightG: emptyBottleWeightG ?? undefined,
+      fullBottleWeightG: fullBottleWeightG ?? undefined,
       densityGPerMl,
     });
   }
@@ -216,8 +226,8 @@ export default function TareWeightsScreen() {
     const existing = allTemplates.find((t) => t.inventoryItemId === item.id);
     if (existing) {
       item.prefill = {
-        tareG: Number(existing.emptyBottleWeightG),
-        fullG: Number(existing.fullBottleWeightG),
+        tareG: existing.emptyBottleWeightG != null ? Number(existing.emptyBottleWeightG) : null,
+        fullG: existing.fullBottleWeightG != null ? Number(existing.fullBottleWeightG) : null,
         containerMl: Number(existing.containerSizeMl),
         density: existing.densityGPerMl != null ? Number(existing.densityGPerMl) : null,
       };
@@ -323,7 +333,13 @@ export default function TareWeightsScreen() {
               onPress={() => promptScaleOrEdit(item)}
             >
               <Text style={styles.weightText}>
-                {Math.round(Number(item.emptyBottleWeightG))}g
+                {item.emptyBottleWeightG != null
+                  ? `${Math.round(Number(item.emptyBottleWeightG))}g`
+                  : (() => {
+                      const d = Number(item.densityGPerMl) || 0.95;
+                      const derived = Number(item.fullBottleWeightG) - Number(item.containerSizeMl) * d;
+                      return `~${Math.round(derived)}g`;
+                    })()}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -331,7 +347,13 @@ export default function TareWeightsScreen() {
               onPress={() => promptScaleOrEdit(item)}
             >
               <Text style={styles.weightText}>
-                {Math.round(Number(item.fullBottleWeightG))}g
+                {item.fullBottleWeightG != null
+                  ? `${Math.round(Number(item.fullBottleWeightG))}g`
+                  : (() => {
+                      const d = Number(item.densityGPerMl) || 0.95;
+                      const derived = Number(item.emptyBottleWeightG) + Number(item.containerSizeMl) * d;
+                      return `~${Math.round(derived)}g`;
+                    })()}
               </Text>
               <Text style={styles.editIcon}>&#x270E;</Text>
             </TouchableOpacity>
@@ -358,8 +380,8 @@ export default function TareWeightsScreen() {
         <TareWeightEditModal
           visible
           itemName={editingTemplate.inventoryItem.name}
-          currentTareWeightG={Number(editingTemplate.emptyBottleWeightG)}
-          currentFullWeightG={Number(editingTemplate.fullBottleWeightG)}
+          currentTareWeightG={editingTemplate.emptyBottleWeightG != null ? Number(editingTemplate.emptyBottleWeightG) : undefined}
+          currentFullWeightG={editingTemplate.fullBottleWeightG != null ? Number(editingTemplate.fullBottleWeightG) : undefined}
           containerSizeMl={Number(editingTemplate.containerSizeMl)}
           densityGPerMl={editingTemplate.densityGPerMl != null ? Number(editingTemplate.densityGPerMl) : null}
           onSave={handleEditSave}
@@ -375,8 +397,8 @@ export default function TareWeightsScreen() {
           editable
           itemName={addingItem.name}
           containerSizeMl={addingItem.prefill?.containerMl ?? (Number(addingItem.containerSize) || 750)}
-          currentTareWeightG={addingItem.prefill?.tareG}
-          currentFullWeightG={addingItem.prefill?.fullG}
+          currentTareWeightG={addingItem.prefill?.tareG ?? undefined}
+          currentFullWeightG={addingItem.prefill?.fullG ?? undefined}
           densityGPerMl={addingItem.prefill?.density}
           onSave={handleAddSave}
           onCancel={() => setAddingItem(null)}
@@ -420,13 +442,25 @@ export default function TareWeightsScreen() {
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Tare Weight</Text>
                 <Text style={styles.infoValue}>
-                  {Math.round(Number(viewingTemplate.emptyBottleWeightG))} g
+                  {viewingTemplate.emptyBottleWeightG != null
+                    ? `${Math.round(Number(viewingTemplate.emptyBottleWeightG))} g`
+                    : (() => {
+                        const d = Number(viewingTemplate.densityGPerMl) || 0.95;
+                        const derived = Number(viewingTemplate.fullBottleWeightG) - Number(viewingTemplate.containerSizeMl) * d;
+                        return `~${Math.round(derived)} g (est.)`;
+                      })()}
                 </Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Full Weight</Text>
                 <Text style={styles.infoValue}>
-                  {Math.round(Number(viewingTemplate.fullBottleWeightG))} g
+                  {viewingTemplate.fullBottleWeightG != null
+                    ? `${Math.round(Number(viewingTemplate.fullBottleWeightG))} g`
+                    : (() => {
+                        const d = Number(viewingTemplate.densityGPerMl) || 0.95;
+                        const derived = Number(viewingTemplate.emptyBottleWeightG) + Number(viewingTemplate.containerSizeMl) * d;
+                        return `~${Math.round(derived)} g (est.)`;
+                      })()}
                 </Text>
               </View>
               <View style={styles.infoRow}>
