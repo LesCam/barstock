@@ -47,12 +47,27 @@ export default function ReceiveStockScreen() {
   const [newVendorName, setNewVendorName] = useState("");
   const [newVendorEmail, setNewVendorEmail] = useState("");
   const [newVendorPhone, setNewVendorPhone] = useState("");
+  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [selectedSubAreaId, setSelectedSubAreaId] = useState<string | null>(null);
   const [showReview, setShowReview] = useState(false);
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editingQty, setEditingQty] = useState("");
   const sessionCreating = useRef(false);
 
   const utils = trpc.useUtils();
+
+  // Fetch areas for this location
+  const { data: areas } = trpc.areas.listBarAreas.useQuery(
+    { locationId: selectedLocationId! },
+    { enabled: !!selectedLocationId }
+  );
+
+  // Flatten sub-areas for the selected bar area
+  const subAreas = useMemo(() => {
+    if (!areas || !selectedAreaId) return [];
+    const area = (areas as any[]).find((a) => a.id === selectedAreaId);
+    return area?.subAreas ?? [];
+  }, [areas, selectedAreaId]);
 
   // Create a receiving session on mount
   const createSession = trpc.sessions.create.useMutation();
@@ -129,6 +144,7 @@ export default function ReceiveStockScreen() {
             sessionId,
             inventoryItemId: selectedItem.id,
             countUnits: totalUnits,
+            subAreaId: selectedSubAreaId ?? undefined,
             notes: notes.trim() || undefined,
           });
           utils.sessions.getById.invalidate({ id: sessionId });
@@ -251,6 +267,64 @@ export default function ReceiveStockScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Area Picker */}
+        {areas && (areas as any[]).length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Receive To Area</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+              {(areas as any[]).map((area: any) => (
+                <TouchableOpacity
+                  key={area.id}
+                  style={[
+                    styles.areaPill,
+                    selectedAreaId === area.id && styles.areaPillActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedAreaId(area.id);
+                    setSelectedSubAreaId(null);
+                    // Auto-select if only one sub-area
+                    if (area.subAreas?.length === 1) {
+                      setSelectedSubAreaId(area.subAreas[0].id);
+                    }
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.areaPillText,
+                      selectedAreaId === area.id && styles.areaPillTextActive,
+                    ]}
+                  >
+                    {area.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {subAreas.length > 1 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {subAreas.map((sa: any) => (
+                  <TouchableOpacity
+                    key={sa.id}
+                    style={[
+                      styles.subAreaPill,
+                      selectedSubAreaId === sa.id && styles.subAreaPillActive,
+                    ]}
+                    onPress={() => setSelectedSubAreaId(sa.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.subAreaPillText,
+                        selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
+                      ]}
+                    >
+                      {sa.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        )}
 
         {/* Item Search */}
         <View style={styles.section}>
@@ -413,6 +487,7 @@ export default function ReceiveStockScreen() {
                       <Text style={styles.reviewItemMeta}>
                         {line.inventoryItem?.type?.replace("_", " ") ?? ""}
                         {itemPack ? ` | Pack of ${itemPack}` : ""}
+                        {line.subArea ? ` | ${line.subArea.name}` : ""}
                       </Text>
                     </View>
 
@@ -696,6 +771,35 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.4 },
   submitBtnText: { color: "#fff", fontSize: 17, fontWeight: "700" },
+  areaPill: {
+    backgroundColor: "#16283F",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  areaPillActive: {
+    backgroundColor: "#1E3550",
+    borderColor: "#E9B44C",
+  },
+  areaPillText: { color: "#8899AA", fontSize: 13, fontWeight: "500" },
+  areaPillTextActive: { color: "#E9B44C" },
+  subAreaPill: {
+    backgroundColor: "#0F1D2E",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  subAreaPillActive: {
+    borderColor: "#2BA8A0",
+  },
+  subAreaPillText: { color: "#5A6A7A", fontSize: 12, fontWeight: "500" },
+  subAreaPillTextActive: { color: "#2BA8A0" },
   bottomRow: {
     flexDirection: "row",
     gap: 10,
