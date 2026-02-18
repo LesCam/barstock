@@ -19,7 +19,11 @@ interface SelectedItem {
 type CountType = "individual" | "full_pack";
 
 export default function PackagedCountScreen() {
-  const { id: sessionId } = useLocalSearchParams<{ id: string }>();
+  const { id: sessionId, subAreaId, areaName } = useLocalSearchParams<{
+    id: string;
+    subAreaId?: string;
+    areaName?: string;
+  }>();
   const { selectedLocationId } = useAuth();
   const utils = trpc.useUtils();
 
@@ -52,6 +56,7 @@ export default function PackagedCountScreen() {
       inventoryItemId: selectedItem.id,
       countUnits,
       isManual: false,
+      subAreaId: subAreaId || undefined,
     });
   }
 
@@ -63,6 +68,11 @@ export default function PackagedCountScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.heading}>Packaged Count</Text>
+        {areaName && (
+          <View style={styles.areaBanner}>
+            <Text style={styles.areaBannerText}>{areaName}</Text>
+          </View>
+        )}
 
         <ItemSearchBar
           locationId={selectedLocationId!}
@@ -208,6 +218,14 @@ const styles = StyleSheet.create({
     color: "#EAF0FF",
     marginBottom: 16,
   },
+  areaBanner: {
+    backgroundColor: "#1E3550",
+    borderRadius: 8,
+    padding: 10,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  areaBannerText: { color: "#E9B44C", fontSize: 14, fontWeight: "600" },
   itemCard: {
     backgroundColor: "#16283F",
     borderRadius: 12,

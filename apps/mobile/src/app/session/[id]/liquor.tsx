@@ -21,7 +21,12 @@ interface SelectedItem {
 }
 
 export default function LiquorWeighScreen() {
-  const { id: sessionId, manual } = useLocalSearchParams<{ id: string; manual?: string }>();
+  const { id: sessionId, manual, subAreaId, areaName } = useLocalSearchParams<{
+    id: string;
+    manual?: string;
+    subAreaId?: string;
+    areaName?: string;
+  }>();
   const { selectedLocationId } = useAuth();
   const utils = trpc.useUtils();
 
@@ -110,6 +115,7 @@ export default function LiquorWeighScreen() {
         inventoryItemId: selectedItem.id,
         grossWeightGrams: grossWeightG,
         isManual: useManual,
+        subAreaId: subAreaId || undefined,
       });
 
       // Record measurement for tracking
@@ -142,6 +148,7 @@ export default function LiquorWeighScreen() {
         inventoryItemId: selectedItem.id,
         countUnits: parseInt(manualWeight, 10),
         isManual: true,
+        subAreaId: subAreaId || undefined,
       });
       setSubmittedCount((c) => c + 1);
       setSelectedItem(null);
@@ -162,6 +169,11 @@ export default function LiquorWeighScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.heading}>Liquor Weigh</Text>
+        {areaName && (
+          <View style={styles.areaBanner}>
+            <Text style={styles.areaBannerText}>{areaName}</Text>
+          </View>
+        )}
 
         <ItemSearchBar
           locationId={selectedLocationId!}
@@ -433,6 +445,14 @@ const styles = StyleSheet.create({
     color: "#EAF0FF",
     marginBottom: 16,
   },
+  areaBanner: {
+    backgroundColor: "#1E3550",
+    borderRadius: 8,
+    padding: 10,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  areaBannerText: { color: "#E9B44C", fontSize: 14, fontWeight: "600" },
   itemCard: {
     backgroundColor: "#16283F",
     borderRadius: 12,

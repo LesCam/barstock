@@ -16,7 +16,11 @@ interface TapEntry {
 }
 
 export default function DraftVerifyScreen() {
-  const { id: sessionId } = useLocalSearchParams<{ id: string }>();
+  const { id: sessionId, subAreaId, areaName } = useLocalSearchParams<{
+    id: string;
+    subAreaId?: string;
+    areaName?: string;
+  }>();
   const { selectedLocationId } = useAuth();
   const utils = trpc.useUtils();
 
@@ -73,6 +77,7 @@ export default function DraftVerifyScreen() {
             kegInstanceId: tap.kegInstanceId,
             percentRemaining: parseInt(entries[tap.tapLineId], 10),
             isManual: false,
+            subAreaId: subAreaId || undefined,
           })
         )
       );
@@ -97,6 +102,11 @@ export default function DraftVerifyScreen() {
 
   return (
     <View style={styles.container}>
+      {areaName && (
+        <View style={styles.areaBanner}>
+          <Text style={styles.areaBannerText}>{areaName}</Text>
+        </View>
+      )}
       <View style={styles.headerRow}>
         <Text style={styles.heading}>Draft Verify</Text>
         <Text style={styles.headerCount}>
@@ -206,6 +216,14 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#EAF0FF",
   },
+  areaBanner: {
+    backgroundColor: "#1E3550",
+    borderRadius: 8,
+    padding: 10,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  areaBannerText: { color: "#E9B44C", fontSize: 14, fontWeight: "600" },
   headerCount: {
     fontSize: 14,
     color: "#E9B44C",

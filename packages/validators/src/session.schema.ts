@@ -32,6 +32,13 @@ export const sessionCloseSchema = z.object({
     .optional(),
 });
 
+export const expectedItemsForAreaSchema = z.object({
+  locationId: z.string().uuid(),
+  barAreaId: z.string().uuid(),
+  subAreaId: z.string().uuid().optional(),
+});
+
 export type SessionCreateInput = z.infer<typeof sessionCreateSchema>;
 export type SessionLineCreateInput = z.infer<typeof sessionLineCreateSchema>;
 export type SessionCloseInput = z.infer<typeof sessionCloseSchema>;
+export type ExpectedItemsForAreaInput = z.infer<typeof expectedItemsForAreaSchema>;
