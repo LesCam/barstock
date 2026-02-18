@@ -303,6 +303,7 @@ model PriceHistory {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   inventoryItemId String    @map("inventory_item_id") @db.Uuid
   unitCost        Decimal   @map("unit_cost")
+  containerCost   Decimal?  @map("container_cost")
   currency        String    @default("CAD")
   effectiveFromTs DateTime  @map("effective_from_ts") @db.Timestamptz()
   effectiveToTs   DateTime? @map("effective_to_ts") @db.Timestamptz()

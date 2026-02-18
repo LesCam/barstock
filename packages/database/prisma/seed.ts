@@ -209,13 +209,13 @@ async function main() {
   await prisma.priceHistory.createMany({
     data: [
       { inventoryItemId: budLight.id, unitCost: 0.75, effectiveFromTs: thirtyDaysAgo },
-      { inventoryItemId: ipaKeg.id, unitCost: 175.0, effectiveFromTs: thirtyDaysAgo },
-      { inventoryItemId: lagerKeg.id, unitCost: 135.0, effectiveFromTs: thirtyDaysAgo },
-      { inventoryItemId: jackDaniels.id, unitCost: 28.5, effectiveFromTs: thirtyDaysAgo },
-      { inventoryItemId: greyGoose.id, unitCost: 32.0, effectiveFromTs: thirtyDaysAgo },
-      { inventoryItemId: captainMorgan.id, unitCost: 18.5, effectiveFromTs: thirtyDaysAgo },
-      { inventoryItemId: houseRed.id, unitCost: 8.5, effectiveFromTs: thirtyDaysAgo },
-      { inventoryItemId: prosecco.id, unitCost: 11.0, effectiveFromTs: thirtyDaysAgo },
+      { inventoryItemId: ipaKeg.id, unitCost: 175.0 / 1984, containerCost: 175.0, effectiveFromTs: thirtyDaysAgo },
+      { inventoryItemId: lagerKeg.id, unitCost: 135.0 / 661, containerCost: 135.0, effectiveFromTs: thirtyDaysAgo },
+      { inventoryItemId: jackDaniels.id, unitCost: 28.5 / 25.3605, containerCost: 28.5, effectiveFromTs: thirtyDaysAgo },
+      { inventoryItemId: greyGoose.id, unitCost: 32.0 / 25.3605, containerCost: 32.0, effectiveFromTs: thirtyDaysAgo },
+      { inventoryItemId: captainMorgan.id, unitCost: 18.5 / 25.3605, containerCost: 18.5, effectiveFromTs: thirtyDaysAgo },
+      { inventoryItemId: houseRed.id, unitCost: 8.5 / 750, containerCost: 8.5, effectiveFromTs: thirtyDaysAgo },
+      { inventoryItemId: prosecco.id, unitCost: 11.0 / 750, containerCost: 11.0, effectiveFromTs: thirtyDaysAgo },
     ],
   });
   console.log(`Created price history for all items`);

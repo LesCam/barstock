@@ -36,9 +36,15 @@ export default function InventoryDetailPage({
 
   // --- Data fetching ---
   const { data: item, isLoading } = trpc.inventory.getById.useQuery({ id });
+  const businessId = user?.businessId;
   const { data: onHand } = trpc.inventory.onHand.useQuery(
     { locationId: locationId! },
     { enabled: !!locationId }
+  );
+  const isKegBeer = item?.type === "keg_beer";
+  const { data: kegSizes } = trpc.inventory.kegSizesForItem.useQuery(
+    { inventoryItemId: id, businessId: businessId! },
+    { enabled: !!businessId && isKegBeer === true }
   );
 
   // --- Edit state ---
@@ -53,7 +59,10 @@ export default function InventoryDetailPage({
 
   // --- Add price state ---
   const [showAddPrice, setShowAddPrice] = useState(false);
+  const [priceEntryMode, setPriceEntryMode] = useState<"per_unit" | "per_container">("per_unit");
   const [priceUnitCost, setPriceUnitCost] = useState("");
+  const [priceContainerCost, setPriceContainerCost] = useState("");
+  const [priceKegSizeId, setPriceKegSizeId] = useState("");
   const [priceEffectiveFrom, setPriceEffectiveFrom] = useState("");
 
   // --- Mutations ---
@@ -69,7 +78,10 @@ export default function InventoryDetailPage({
     onSuccess: () => {
       utils.inventory.getById.invalidate({ id });
       setShowAddPrice(false);
+      setPriceEntryMode("per_unit");
       setPriceUnitCost("");
+      setPriceContainerCost("");
+      setPriceKegSizeId("");
       setPriceEffectiveFrom("");
     },
   });
@@ -106,14 +118,36 @@ export default function InventoryDetailPage({
     updateMut.mutate({ id, active: !item.active });
   }
 
+  // Derive container size in oz for the selected keg
+  const selectedKegSize = kegSizes?.find((k) => k.id === priceKegSizeId);
+  const containerSizeOz = selectedKegSize ? Number(selectedKegSize.totalOz) : undefined;
+  const derivedUnitCost =
+    priceEntryMode === "per_container" && priceContainerCost && containerSizeOz
+      ? Number(priceContainerCost) / containerSizeOz
+      : undefined;
+
   function handleAddPrice() {
-    if (!priceUnitCost || !priceEffectiveFrom) return;
-    addPriceMut.mutate({
-      inventoryItemId: id,
-      unitCost: Number(priceUnitCost),
-      currency: "CAD",
-      effectiveFromTs: new Date(priceEffectiveFrom),
-    });
+    if (!priceEffectiveFrom) return;
+    if (priceEntryMode === "per_container") {
+      if (!priceContainerCost || !containerSizeOz) return;
+      addPriceMut.mutate({
+        inventoryItemId: id,
+        entryMode: "per_container",
+        containerCost: Number(priceContainerCost),
+        containerSizeOz,
+        currency: "CAD",
+        effectiveFromTs: new Date(priceEffectiveFrom),
+      });
+    } else {
+      if (!priceUnitCost) return;
+      addPriceMut.mutate({
+        inventoryItemId: id,
+        entryMode: "per_unit",
+        unitCost: Number(priceUnitCost),
+        currency: "CAD",
+        effectiveFromTs: new Date(priceEffectiveFrom),
+      });
+    }
   }
 
   // --- Derived ---
@@ -329,7 +363,7 @@ export default function InventoryDetailPage({
               <dt className="text-[#EAF0FF]/60">Unit Cost</dt>
               <dd className="text-[#EAF0FF]">
                 {itemOnHand.unitCost != null
-                  ? `$${Number(itemOnHand.unitCost).toFixed(2)}`
+                  ? `$${Number(itemOnHand.unitCost).toFixed(isKegBeer ? 4 : 2)}`
                   : "—"}
               </dd>
             </div>
@@ -364,36 +398,122 @@ export default function InventoryDetailPage({
         </div>
 
         {showAddPrice && (
-          <div className="mb-3 flex flex-wrap items-end gap-3 rounded-md border border-white/10 bg-[#0B1623] p-3">
-            <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Unit Cost ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={priceUnitCost}
-                onChange={(e) => setPriceUnitCost(e.target.value)}
-                className="w-32 rounded-md border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF]"
-                placeholder="0.00"
-              />
+          <div className="mb-3 rounded-md border border-white/10 bg-[#0B1623] p-3">
+            {/* Entry mode toggle — only show for keg_beer items */}
+            {isKegBeer && (
+              <div className="mb-3">
+                <div className="inline-flex rounded-md border border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setPriceEntryMode("per_unit")}
+                    className={`px-3 py-1 text-xs font-medium ${
+                      priceEntryMode === "per_unit"
+                        ? "bg-[#E9B44C] text-[#0B1623]"
+                        : "text-[#EAF0FF]/60 hover:text-[#EAF0FF]"
+                    }`}
+                  >
+                    Per Unit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPriceEntryMode("per_container")}
+                    className={`px-3 py-1 text-xs font-medium ${
+                      priceEntryMode === "per_container"
+                        ? "bg-[#E9B44C] text-[#0B1623]"
+                        : "text-[#EAF0FF]/60 hover:text-[#EAF0FF]"
+                    }`}
+                  >
+                    Per Keg
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-end gap-3">
+              {priceEntryMode === "per_container" && isKegBeer ? (
+                <>
+                  {/* Keg size selector */}
+                  <div>
+                    <label className="mb-1 block text-xs text-[#EAF0FF]/60">Keg Size</label>
+                    <select
+                      value={priceKegSizeId}
+                      onChange={(e) => setPriceKegSizeId(e.target.value)}
+                      className="rounded-md border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF]"
+                    >
+                      <option value="">Select keg size...</option>
+                      {kegSizes?.map((ks) => (
+                        <option key={ks.id} value={ks.id}>
+                          {ks.name} ({Number(ks.totalOz)} oz)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Container cost */}
+                  <div>
+                    <label className="mb-1 block text-xs text-[#EAF0FF]/60">Keg Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={priceContainerCost}
+                      onChange={(e) => setPriceContainerCost(e.target.value)}
+                      className="w-32 rounded-md border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF]"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  {/* Live preview */}
+                  {derivedUnitCost != null && (
+                    <div className="self-center text-xs text-[#EAF0FF]/60">
+                      = ${derivedUnitCost.toFixed(4)} per oz
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <label className="mb-1 block text-xs text-[#EAF0FF]/60">
+                    Cost per {UOM_LABELS[item.baseUom] ?? item.baseUom} ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={priceUnitCost}
+                    onChange={(e) => setPriceUnitCost(e.target.value)}
+                    className="w-32 rounded-md border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF]"
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Effective From</label>
+                <input
+                  type="date"
+                  value={priceEffectiveFrom}
+                  onChange={(e) => setPriceEffectiveFrom(e.target.value)}
+                  className="rounded-md border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF]"
+                />
+              </div>
+              <button
+                onClick={handleAddPrice}
+                disabled={
+                  !priceEffectiveFrom ||
+                  (priceEntryMode === "per_container"
+                    ? !priceContainerCost || !priceKegSizeId
+                    : !priceUnitCost) ||
+                  addPriceMut.isPending
+                }
+                className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+              >
+                {addPriceMut.isPending ? "Adding..." : "Add"}
+              </button>
+              {addPriceMut.error && (
+                <p className="text-sm text-red-400">{addPriceMut.error.message}</p>
+              )}
             </div>
-            <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Effective From</label>
-              <input
-                type="date"
-                value={priceEffectiveFrom}
-                onChange={(e) => setPriceEffectiveFrom(e.target.value)}
-                className="rounded-md border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF]"
-              />
-            </div>
-            <button
-              onClick={handleAddPrice}
-              disabled={!priceUnitCost || !priceEffectiveFrom || addPriceMut.isPending}
-              className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
-            >
-              {addPriceMut.isPending ? "Adding..." : "Add"}
-            </button>
-            {addPriceMut.error && (
-              <p className="text-sm text-red-400">{addPriceMut.error.message}</p>
+
+            {isKegBeer && priceEntryMode === "per_container" && (
+              <p className="mt-2 text-xs text-[#EAF0FF]/40">
+                Enter the full keg price. We'll calculate the per-oz cost automatically.
+              </p>
             )}
           </div>
         )}
@@ -404,6 +524,7 @@ export default function InventoryDetailPage({
               <thead className="border-b border-white/10 text-xs uppercase text-[#EAF0FF]/60">
                 <tr>
                   <th className="px-4 py-2">Unit Cost</th>
+                  {isKegBeer && <th className="px-4 py-2">Keg Cost</th>}
                   <th className="px-4 py-2">Currency</th>
                   <th className="px-4 py-2">Effective From</th>
                   <th className="px-4 py-2">Effective To</th>
@@ -412,7 +533,14 @@ export default function InventoryDetailPage({
               <tbody className="divide-y divide-white/5 text-[#EAF0FF]">
                 {item.priceHistory.map((price) => (
                   <tr key={price.id} className="hover:bg-white/5">
-                    <td className="px-4 py-2">${Number(price.unitCost).toFixed(2)}</td>
+                    <td className="px-4 py-2">${Number(price.unitCost).toFixed(4)}</td>
+                    {isKegBeer && (
+                      <td className="px-4 py-2">
+                        {(price as any).containerCost != null
+                          ? `$${Number((price as any).containerCost).toFixed(2)}`
+                          : "—"}
+                      </td>
+                    )}
                     <td className="px-4 py-2">{price.currency}</td>
                     <td className="px-4 py-2">
                       {new Date(price.effectiveFromTs).toLocaleDateString()}

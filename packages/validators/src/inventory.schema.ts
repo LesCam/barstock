@@ -27,13 +27,29 @@ export const inventoryItemUpdateSchema = z.object({
   active: z.boolean().optional(),
 });
 
-export const priceHistoryCreateSchema = z.object({
-  inventoryItemId: z.string().uuid(),
-  unitCost: z.number().min(0),
-  currency: z.string().default("CAD"),
-  effectiveFromTs: z.coerce.date(),
-  effectiveToTs: z.coerce.date().optional(),
-});
+export const priceHistoryCreateSchema = z
+  .object({
+    inventoryItemId: z.string().uuid(),
+    unitCost: z.number().min(0).optional(),
+    currency: z.string().default("CAD"),
+    effectiveFromTs: z.coerce.date(),
+    effectiveToTs: z.coerce.date().optional(),
+    entryMode: z.enum(["per_unit", "per_container"]).default("per_unit"),
+    containerCost: z.number().min(0).optional(),
+    containerSizeOz: z.number().positive().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.entryMode === "per_container") {
+        return data.containerCost != null && data.containerSizeOz != null;
+      }
+      return data.unitCost != null;
+    },
+    {
+      message:
+        "Per-container mode requires containerCost and containerSizeOz; per-unit mode requires unitCost",
+    }
+  );
 
 export const onHandQuerySchema = z.object({
   locationId: z.string().uuid(),

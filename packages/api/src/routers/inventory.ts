@@ -37,7 +37,42 @@ export const inventoryRouter = router({
 
   addPrice: protectedProcedure
     .input(priceHistoryCreateSchema)
-    .mutation(({ ctx, input }) => ctx.prisma.priceHistory.create({ data: input })),
+    .mutation(({ ctx, input }) => {
+      const { entryMode, containerCost, containerSizeOz, ...rest } = input;
+      if (entryMode === "per_container") {
+        const unitCost = containerCost! / containerSizeOz!;
+        return ctx.prisma.priceHistory.create({
+          data: { ...rest, unitCost, containerCost },
+        });
+      }
+      return ctx.prisma.priceHistory.create({
+        data: { ...rest, unitCost: rest.unitCost! },
+      });
+    }),
+
+  kegSizesForItem: protectedProcedure
+    .input(z.object({ inventoryItemId: z.string().uuid(), businessId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Get keg sizes used by this item's keg instances
+      const itemSizes = await ctx.prisma.kegInstance.findMany({
+        where: { inventoryItemId: input.inventoryItemId },
+        select: { kegSizeId: true },
+        distinct: ["kegSizeId"],
+      });
+      const itemSizeIds = itemSizes.map((k) => k.kegSizeId);
+
+      // Fetch those sizes, or fall back to all business keg sizes
+      if (itemSizeIds.length > 0) {
+        return ctx.prisma.kegSize.findMany({
+          where: { id: { in: itemSizeIds } },
+          orderBy: { totalOz: "asc" },
+        });
+      }
+      return ctx.prisma.kegSize.findMany({
+        where: { businessId: input.businessId },
+        orderBy: { totalOz: "asc" },
+      });
+    }),
 
   getByBarcode: protectedProcedure
     .input(z.object({ locationId: z.string().uuid(), barcode: z.string() }))
