@@ -54,6 +54,21 @@ export const inventoryRouter = router({
       return svc.calculateOnHand(input.locationId, input.asOf);
     }),
 
+  lastLocation: protectedProcedure
+    .input(z.object({ inventoryItemId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const line = await ctx.prisma.inventorySessionLine.findFirst({
+        where: { inventoryItemId: input.inventoryItemId, subAreaId: { not: null } },
+        orderBy: { createdAt: "desc" },
+        include: { subArea: { include: { barArea: true } } },
+      });
+      if (!line?.subArea) return null;
+      return {
+        areaName: line.subArea.barArea.name,
+        subAreaName: line.subArea.name,
+      };
+    }),
+
   listWithStock: protectedProcedure
     .input(z.object({ locationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {

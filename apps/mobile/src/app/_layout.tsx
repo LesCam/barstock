@@ -59,6 +59,10 @@ function RootNavigator() {
         name="tare-weights"
         options={{ title: "Tare Weights", headerBackTitle: "Back" }}
       />
+      <Stack.Screen
+        name="inventory/[id]"
+        options={{ title: "Item Detail", headerBackTitle: "Back" }}
+      />
     </Stack>
   );
 }

@@ -1,4 +1,5 @@
-import { View, Text, FlatList, StyleSheet } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from "react-native";
+import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 
@@ -42,7 +43,11 @@ export default function InventoryTab() {
         data={items}
         keyExtractor={(i) => i.id}
         renderItem={({ item }) => (
-          <View style={styles.row}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => router.push(`/inventory/${item.id}` as any)}
+            activeOpacity={0.7}
+          >
             <View style={styles.info}>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.type}>{item.type.replace("_", " ")}</Text>
@@ -55,7 +60,7 @@ export default function InventoryTab() {
                 item.type
               )}
             </Text>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={
           <Text style={styles.empty}>No inventory items.</Text>
