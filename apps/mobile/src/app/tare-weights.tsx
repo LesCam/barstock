@@ -117,7 +117,9 @@ export default function TareWeightsScreen() {
 
   const filteredTemplates = useMemo(() => {
     if (!templates) return [];
-    const list = templates as TemplateRow[];
+    const list = [...(templates as TemplateRow[])].sort((a, b) =>
+      a.inventoryItem.name.localeCompare(b.inventoryItem.name)
+    );
     if (!search.trim()) return list;
     const q = search.toLowerCase();
     return list.filter(
