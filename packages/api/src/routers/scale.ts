@@ -37,19 +37,38 @@ export const scaleRouter = router({
       emptyBottleWeightG: z.number().positive(),
       fullBottleWeightG: z.number().positive(),
       densityGPerMl: z.number().positive().optional(),
+      force: z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Reactivate existing soft-deleted template or reject if already active
-      const existing = await ctx.prisma.bottleTemplate.findFirst({
-        where: { inventoryItemId: input.inventoryItemId, locationId: input.locationId ?? null },
+      const { force, ...data } = input;
+
+      // Check for an active template for this item
+      const active = await ctx.prisma.bottleTemplate.findFirst({
+        where: { inventoryItemId: input.inventoryItemId, locationId: input.locationId ?? null, enabled: true },
       });
-      if (existing && existing.enabled) {
-        throw new TRPCError({ code: "CONFLICT", message: "A template already exists for this item." });
+      if (active && !force) {
+        throw new TRPCError({ code: "CONFLICT", message: "A template already exists for this item. Override with new values?" });
       }
-      if (existing) {
-        // Reactivate the soft-deleted template with updated values
+      if (active) {
+        // Force: update the existing active template
         return ctx.prisma.bottleTemplate.update({
-          where: { id: existing.id },
+          where: { id: active.id },
+          data: {
+            containerSizeMl: input.containerSizeMl,
+            emptyBottleWeightG: input.emptyBottleWeightG,
+            fullBottleWeightG: input.fullBottleWeightG,
+            densityGPerMl: input.densityGPerMl ?? null,
+          },
+        });
+      }
+
+      // Reactivate a soft-deleted template if one exists
+      const disabled = await ctx.prisma.bottleTemplate.findFirst({
+        where: { inventoryItemId: input.inventoryItemId, locationId: input.locationId ?? null, enabled: false },
+      });
+      if (disabled) {
+        return ctx.prisma.bottleTemplate.update({
+          where: { id: disabled.id },
           data: {
             enabled: true,
             containerSizeMl: input.containerSizeMl,
@@ -59,7 +78,8 @@ export const scaleRouter = router({
           },
         });
       }
-      return ctx.prisma.bottleTemplate.create({ data: input });
+
+      return ctx.prisma.bottleTemplate.create({ data });
     }),
 
   updateTemplate: protectedProcedure

@@ -42,7 +42,15 @@ export function TareWeightEditModal({
   const [editName, setEditName] = useState(itemName);
   const [editContainer, setEditContainer] = useState(String(containerSizeMl));
   const [liveWeight, setLiveWeight] = useState<number | null>(null);
-  const scaleConnected = scaleManager.isConnected;
+  const [scaleConnected, setScaleConnected] = useState(scaleManager.isConnected);
+
+  useEffect(() => {
+    const unsubDisconnect = scaleManager.onDisconnect(() => {
+      setScaleConnected(false);
+      setLiveWeight(null);
+    });
+    return unsubDisconnect;
+  }, []);
 
   useEffect(() => {
     if (!scaleConnected) return;

@@ -22,6 +22,14 @@ export function ScaleConnector({ onWeightReading }: ScaleConnectorProps) {
     return unsubscribe;
   }, [onWeightReading]);
 
+  useEffect(() => {
+    const unsubscribe = scaleManager.onDisconnect(() => {
+      setConnected(false);
+      setLastReading(null);
+    });
+    return unsubscribe;
+  }, []);
+
   async function handleScan() {
     setScanning(true);
     const found = await scaleManager.scan();

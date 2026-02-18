@@ -33,6 +33,12 @@ interface SelectedItem {
   type: string;
   barcode: string | null;
   containerSize: unknown;
+  prefill?: {
+    tareG: number;
+    fullG: number;
+    containerMl: number;
+    density: number | null;
+  };
 }
 
 export default function TareWeightsScreen() {
@@ -89,6 +95,23 @@ export default function TareWeightsScreen() {
       setAddingItem(null);
       setShowAddSearch(false);
     },
+    onError: (error, variables) => {
+      if (error.data?.code === "CONFLICT") {
+        Alert.alert(
+          "Template Exists",
+          error.message,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Override",
+              onPress: () => createMutation.mutate({ ...variables, force: true }),
+            },
+          ]
+        );
+      } else {
+        Alert.alert("Error", error.message ?? "Failed to create template.");
+      }
+    },
   });
 
   const filteredTemplates = useMemo(() => {
@@ -102,6 +125,10 @@ export default function TareWeightsScreen() {
         (t.inventoryItem.barcode && t.inventoryItem.barcode.includes(q))
     );
   }, [templates, search]);
+
+  // Keep a ref to latest templates so handleScan always has fresh data
+  const templatesRef = useRef<TemplateRow[]>([]);
+  templatesRef.current = (templates as TemplateRow[]) ?? [];
 
   function handleDelete(template: TemplateRow) {
     Alert.alert(
@@ -168,33 +195,32 @@ export default function TareWeightsScreen() {
     // Close scanner first — it's a plain View overlay, no Modal dismiss needed
     setShowScanner(false);
 
-    const allTemplates = (templates as TemplateRow[]) ?? [];
-    const found = allTemplates.find((t) => t.inventoryItem.barcode === barcode);
-
-    if (found) {
-      const idx = filteredTemplates.findIndex((t) => t.id === found.id);
-      if (idx >= 0) {
-        flatListRef.current?.scrollToIndex({ index: idx, animated: true });
-      }
-      const tareG = Math.round(Number(found.emptyBottleWeightG));
-      Alert.alert(
-        "Already Exists",
-        `"${found.inventoryItem.name}" already has a tare weight of ${tareG} g.`,
-        [
-          { text: "Edit", onPress: () => setEditingTemplate(found) },
-          { text: "OK", style: "cancel" },
-        ]
-      );
-      return;
-    }
-
     try {
       const item = await utils.inventory.getByBarcode.fetch({
         locationId,
         barcode,
       });
       if (item) {
-        setAddingItem(item as SelectedItem);
+        // Look up existing template from ref (always current render data)
+        const existing = templatesRef.current.find(
+          (t) => t.inventoryItemId === item.id
+        );
+        const selectedItem: SelectedItem = {
+          id: item.id,
+          name: (item as any).name,
+          type: (item as any).type,
+          barcode: (item as any).barcode,
+          containerSize: (item as any).containerSize,
+        };
+        if (existing) {
+          selectedItem.prefill = {
+            tareG: Number(existing.emptyBottleWeightG),
+            fullG: Number(existing.fullBottleWeightG),
+            containerMl: Number(existing.containerSizeMl),
+            density: existing.densityGPerMl != null ? Number(existing.densityGPerMl) : null,
+          };
+        }
+        setAddingItem(selectedItem);
       } else {
         setCreatingFromScan({ barcode });
       }
@@ -300,13 +326,17 @@ export default function TareWeightsScreen() {
         />
       )}
 
-      {/* Add (new template) modal — editable name & container */}
+      {/* Add (new template) modal — editable name & container, pre-filled if existing */}
       {addingItem && (
         <TareWeightEditModal
+          key={addingItem.id + (addingItem.prefill ? "-prefill" : "")}
           visible
           editable
           itemName={addingItem.name}
-          containerSizeMl={Number(addingItem.containerSize) || 750}
+          containerSizeMl={addingItem.prefill?.containerMl ?? (Number(addingItem.containerSize) || 750)}
+          currentTareWeightG={addingItem.prefill?.tareG}
+          currentFullWeightG={addingItem.prefill?.fullG}
+          densityGPerMl={addingItem.prefill?.density}
           onSave={handleAddSave}
           onCancel={() => setAddingItem(null)}
         />

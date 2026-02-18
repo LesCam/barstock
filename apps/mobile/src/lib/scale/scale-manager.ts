@@ -91,17 +91,22 @@ async function requestBlePermissions(): Promise<void> {
   }
 }
 
+export type DisconnectListener = () => void;
+
 export class ScaleManager {
   private listeners: Set<ScaleListener> = new Set();
+  private disconnectListeners: Set<DisconnectListener> = new Set();
   private connectedDeviceId: string | null = null;
   private connectedDevice: Device | null = null;
   private scaleType: ScaleType | null = null;
   private monitorSubscription: Subscription | null = null;
+  private disconnectSubscription: Subscription | null = null;
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
-   * Scan for nearby BLE devices (5 s).
-   * Returns all named devices — the user picks their scale from the list.
+   * Scan for nearby BLE scale devices (5 s).
+   * Filters to only show devices that advertise the standard weight service
+   * or have a name matching known scale brands.
    */
   async scan(): Promise<Array<{ id: string; name: string }>> {
     await requestBlePermissions();
@@ -110,11 +115,23 @@ export class ScaleManager {
     const manager = getManager();
     const seen = new Map<string, { id: string; name: string }>();
 
+    const knownScaleNames = ["skale", "scale", "acaia", "decent", "felicita", "brewista"];
+
     return new Promise((resolve) => {
       manager.startDeviceScan(null, null, (_error, device) => {
         if (!device) return;
         const name = device.name ?? device.localName;
-        if (name && !seen.has(device.id)) {
+        if (!name || seen.has(device.id)) return;
+
+        // Check if device advertises the standard BLE weight service
+        const services = (device.serviceUUIDs ?? []).map((s) => s.toLowerCase());
+        const hasWeightService = services.includes(STANDARD_WEIGHT_SERVICE_UUID);
+
+        // Check if name matches known scale brands
+        const nameLower = name.toLowerCase();
+        const hasScaleName = knownScaleNames.some((pattern) => nameLower.includes(pattern));
+
+        if (hasWeightService || hasScaleName) {
           seen.set(device.id, { id: device.id, name });
         }
       });
@@ -154,6 +171,11 @@ export class ScaleManager {
     this.connectedDevice = device;
     this.scaleType = await this.detectScaleType(device);
 
+    // Listen for unexpected disconnection
+    this.disconnectSubscription = device.onDisconnected(() => {
+      this.handleUnexpectedDisconnect();
+    });
+
     if (this.scaleType === "skale2") {
       await this.sendSkaleCommand(device, SKALE_CMD_UNIT_GRAMS);
       this.monitorSkale2(device, deviceId);
@@ -161,6 +183,19 @@ export class ScaleManager {
     } else {
       this.monitorStandard(device, deviceId);
     }
+  }
+
+  /** Handle unexpected BLE disconnection — clean up state and notify listeners. */
+  private handleUnexpectedDisconnect(): void {
+    this.stopKeepalive();
+    this.monitorSubscription?.remove();
+    this.monitorSubscription = null;
+    this.disconnectSubscription?.remove();
+    this.disconnectSubscription = null;
+    this.connectedDeviceId = null;
+    this.connectedDevice = null;
+    this.scaleType = null;
+    this.disconnectListeners.forEach((listener) => listener());
   }
 
   private async monitorSkale2(device: Device, deviceId: string): Promise<void> {
@@ -186,7 +221,11 @@ export class ScaleManager {
       serviceUUID,
       SKALE_WEIGHT_CHARACTERISTIC_UUID,
       (error, characteristic) => {
-        if (error || !characteristic?.value) return;
+        if (error) {
+          this.handleUnexpectedDisconnect();
+          return;
+        }
+        if (!characteristic?.value) return;
 
         const buf = Buffer.from(characteristic.value, "base64");
         if (buf.length < 3) return;
@@ -214,7 +253,11 @@ export class ScaleManager {
       STANDARD_WEIGHT_SERVICE_UUID,
       STANDARD_WEIGHT_CHARACTERISTIC_UUID,
       (error, characteristic) => {
-        if (error || !characteristic?.value) return;
+        if (error) {
+          this.handleUnexpectedDisconnect();
+          return;
+        }
+        if (!characteristic?.value) return;
 
         const buf = Buffer.from(characteristic.value, "base64");
         const weightGrams = buf.readUInt16LE(1) / 10;
@@ -278,6 +321,8 @@ export class ScaleManager {
     this.stopKeepalive();
     this.monitorSubscription?.remove();
     this.monitorSubscription = null;
+    this.disconnectSubscription?.remove();
+    this.disconnectSubscription = null;
 
     const manager = getManager();
     await manager.cancelDeviceConnection(this.connectedDeviceId);
@@ -289,6 +334,11 @@ export class ScaleManager {
   onReading(listener: ScaleListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  onDisconnect(listener: DisconnectListener): () => void {
+    this.disconnectListeners.add(listener);
+    return () => this.disconnectListeners.delete(listener);
   }
 
   get isConnected() {

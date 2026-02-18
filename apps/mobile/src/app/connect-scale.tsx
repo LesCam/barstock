@@ -30,6 +30,15 @@ export default function ConnectScaleSettingsScreen() {
   }, []);
 
   useEffect(() => {
+    const unsubscribe = scaleManager.onDisconnect(() => {
+      setConnected(false);
+      setConnectedDeviceName(null);
+      setLastReading(null);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     handleScan();
   }, []);
 
@@ -89,7 +98,7 @@ export default function ConnectScaleSettingsScreen() {
       >
         <Text style={styles.heading}>Connect Scale</Text>
         <Text style={styles.subtitle}>
-          Pair a Bluetooth scale to weigh bottles
+          Pair a Bluetooth supported scale to weigh bottles
         </Text>
 
         {/* Connected Scale Card */}
