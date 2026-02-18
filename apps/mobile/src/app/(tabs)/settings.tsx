@@ -7,6 +7,7 @@ export default function SettingsTab() {
   const router = useRouter();
   const { user, signOut, selectedLocationId, selectLocation } = useAuth();
   const canManageTareWeights = usePermission("canManageTareWeights");
+  const isCuratorOnly = user?.highestRole === "curator";
 
   const { data: locations } = trpc.locations.listByBusiness.useQuery(
     { businessId: user?.businessId ?? "" },
@@ -40,23 +41,25 @@ export default function SettingsTab() {
         </View>
       )}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Scale</Text>
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/connect-scale")}
-        >
-          <Text style={styles.rowText}>Connect Bluetooth Scale</Text>
-        </TouchableOpacity>
-        {canManageTareWeights && (
+      {!isCuratorOnly && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Scale</Text>
           <TouchableOpacity
-            style={[styles.card, { marginTop: 8 }]}
-            onPress={() => router.push("/tare-weights")}
+            style={styles.card}
+            onPress={() => router.push("/connect-scale")}
           >
-            <Text style={styles.rowText}>Manage Tare Weights</Text>
+            <Text style={styles.rowText}>Connect Bluetooth Scale</Text>
           </TouchableOpacity>
-        )}
-      </View>
+          {canManageTareWeights && (
+            <TouchableOpacity
+              style={[styles.card, { marginTop: 8 }]}
+              onPress={() => router.push("/tare-weights")}
+            >
+              <Text style={styles.rowText}>Manage Tare Weights</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>About</Text>
