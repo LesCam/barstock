@@ -348,6 +348,36 @@ export default function InventoryDetailPage({
         )}
       </div>
 
+      {/* Bottle Weights (read-only, only when a template exists) */}
+      {item.bottleTemplates?.[0] && (() => {
+        const t = item.bottleTemplates[0];
+        return (
+          <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F] p-4">
+            <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]">Bottle Weights</h2>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-[#EAF0FF]/60">Tare (Empty)</dt>
+                <dd className="text-[#EAF0FF]">{Math.round(Number(t.emptyBottleWeightG))} g</dd>
+              </div>
+              <div>
+                <dt className="text-[#EAF0FF]/60">Full</dt>
+                <dd className="text-[#EAF0FF]">{Math.round(Number(t.fullBottleWeightG))} g</dd>
+              </div>
+              <div>
+                <dt className="text-[#EAF0FF]/60">Container</dt>
+                <dd className="text-[#EAF0FF]">{Number(t.containerSizeMl)} mL</dd>
+              </div>
+              <div>
+                <dt className="text-[#EAF0FF]/60">Density</dt>
+                <dd className="text-[#EAF0FF]">
+                  {t.densityGPerMl != null ? `${Number(t.densityGPerMl).toFixed(2)} g/mL` : "—"}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        );
+      })()}
+
       {/* On-Hand Section */}
       <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F] p-4">
         <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]">On-Hand</h2>

@@ -24,6 +24,7 @@ export const inventoryRouter = router({
         where: { id: input.id },
         include: {
           priceHistory: { orderBy: { effectiveFromTs: "desc" }, take: 5 },
+          bottleTemplates: { where: { enabled: true }, take: 1 },
         },
       })
     ),
