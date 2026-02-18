@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, StyleSheet } from "react-native";
+import { useState, useMemo, useRef } from "react";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, StyleSheet, Keyboard } from "react-native";
 import { trpc } from "@/lib/trpc";
 import { BarcodeScanner } from "./BarcodeScanner";
 
@@ -65,6 +65,7 @@ export function ItemSearchBar({
   }, [items, query, itemTypeFilter]);
 
   function handleSelect(item: InventoryItem) {
+    Keyboard.dismiss();
     setQuery("");
     setShowResults(false);
     setScanError(null);
