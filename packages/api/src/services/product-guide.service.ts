@@ -101,6 +101,12 @@ export class ProductGuideService {
         inventoryItemId: data.inventoryItemId,
         description: data.description,
         sortOrder: data.sortOrder,
+        prices: data.prices,
+        abv: data.abv,
+        producer: data.producer,
+        region: data.region,
+        vintage: data.vintage,
+        varietal: data.varietal,
       },
       include: {
         inventoryItem: { select: { name: true, type: true } },
@@ -157,7 +163,13 @@ export class ProductGuideService {
 
     const updateData: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(fields)) {
-      if (value !== undefined) updateData[key] = value;
+      if (value !== undefined) {
+        if (key === "categoryId") {
+          updateData.category = { connect: { id: value } };
+        } else {
+          updateData[key] = value;
+        }
+      }
     }
 
     const item = await this.prisma.productGuideItem.update({
@@ -290,6 +302,12 @@ export class ProductGuideService {
             id: true,
             description: true,
             imageUrl: true,
+            prices: true,
+            abv: true,
+            producer: true,
+            region: true,
+            vintage: true,
+            varietal: true,
             sortOrder: true,
             inventoryItem: {
               select: { name: true, type: true },

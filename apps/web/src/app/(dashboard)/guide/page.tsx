@@ -20,6 +20,12 @@ export default function ProductGuidePage() {
   const [itemInventoryId, setItemInventoryId] = useState("");
   const [itemDescription, setItemDescription] = useState("");
   const [inventorySearch, setInventorySearch] = useState("");
+  const [itemPrices, setItemPrices] = useState<{ label: string; price: string }[]>([{ label: "", price: "" }]);
+  const [itemAbv, setItemAbv] = useState("");
+  const [itemProducer, setItemProducer] = useState("");
+  const [itemRegion, setItemRegion] = useState("");
+  const [itemVintage, setItemVintage] = useState("");
+  const [itemVarietal, setItemVarietal] = useState("");
 
   const utils = trpc.useUtils();
 
@@ -69,6 +75,12 @@ export default function ProductGuidePage() {
       setItemInventoryId("");
       setItemDescription("");
       setInventorySearch("");
+      setItemPrices([{ label: "", price: "" }]);
+      setItemAbv("");
+      setItemProducer("");
+      setItemRegion("");
+      setItemVintage("");
+      setItemVarietal("");
     },
   });
 
@@ -301,6 +313,110 @@ export default function ProductGuidePage() {
               className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
             />
           </div>
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-[#EAF0FF]/60">Prices</label>
+            {itemPrices.map((p, i) => (
+              <div key={i} className="mb-2 flex gap-2">
+                <input
+                  type="text"
+                  value={p.label}
+                  onChange={(e) => {
+                    const next = [...itemPrices];
+                    next[i] = { ...next[i], label: e.target.value };
+                    setItemPrices(next);
+                  }}
+                  placeholder="Glass, Bottle, Pint..."
+                  className="flex-1 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={p.price}
+                  onChange={(e) => {
+                    const next = [...itemPrices];
+                    next[i] = { ...next[i], price: e.target.value };
+                    setItemPrices(next);
+                  }}
+                  placeholder="0.00"
+                  className="w-28 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+                />
+                {itemPrices.length > 1 && (
+                  <button
+                    onClick={() => setItemPrices(itemPrices.filter((_, j) => j !== i))}
+                    className="px-2 text-sm text-red-400 hover:text-red-300"
+                    type="button"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              onClick={() => setItemPrices([...itemPrices, { label: "", price: "" }])}
+              className="text-xs text-[#E9B44C] hover:underline"
+              type="button"
+            >
+              + Add price
+            </button>
+          </div>
+          <div className="mb-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">ABV (%)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={itemAbv}
+                onChange={(e) => setItemAbv(e.target.value)}
+                placeholder="13.5"
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Producer</label>
+              <input
+                type="text"
+                value={itemProducer}
+                onChange={(e) => setItemProducer(e.target.value)}
+                placeholder="Chateau Margaux"
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Region</label>
+              <input
+                type="text"
+                value={itemRegion}
+                onChange={(e) => setItemRegion(e.target.value)}
+                placeholder="Bordeaux, France"
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Vintage</label>
+              <input
+                type="number"
+                min="1900"
+                max="2100"
+                value={itemVintage}
+                onChange={(e) => setItemVintage(e.target.value)}
+                placeholder="2019"
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Varietal</label>
+              <input
+                type="text"
+                value={itemVarietal}
+                onChange={(e) => setItemVarietal(e.target.value)}
+                placeholder="Cabernet Sauvignon"
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+              />
+            </div>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={() => {
@@ -310,6 +426,14 @@ export default function ProductGuidePage() {
                   categoryId: selectedCategoryId,
                   inventoryItemId: itemInventoryId,
                   description: itemDescription || undefined,
+                  prices: itemPrices.some(p => p.label && p.price)
+                    ? itemPrices.filter(p => p.label && p.price).map(p => ({ label: p.label, price: parseFloat(p.price) }))
+                    : undefined,
+                  abv: itemAbv ? parseFloat(itemAbv) : undefined,
+                  producer: itemProducer || undefined,
+                  region: itemRegion || undefined,
+                  vintage: itemVintage ? parseInt(itemVintage, 10) : undefined,
+                  varietal: itemVarietal || undefined,
                 });
               }}
               disabled={!selectedCategoryId || !itemInventoryId || createItem.isPending}
@@ -323,6 +447,12 @@ export default function ProductGuidePage() {
                 setItemInventoryId("");
                 setItemDescription("");
                 setInventorySearch("");
+                setItemPrices([{ label: "", price: "" }]);
+                setItemAbv("");
+                setItemProducer("");
+                setItemRegion("");
+                setItemVintage("");
+                setItemVarietal("");
               }}
               className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-[#EAF0FF]/60 hover:bg-[#16283F]"
             >

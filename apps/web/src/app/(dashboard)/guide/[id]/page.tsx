@@ -19,6 +19,12 @@ export default function GuideItemDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editDescription, setEditDescription] = useState("");
   const [editCategoryId, setEditCategoryId] = useState("");
+  const [editPrices, setEditPrices] = useState<{ label: string; price: string }[]>([]);
+  const [editAbv, setEditAbv] = useState("");
+  const [editProducer, setEditProducer] = useState("");
+  const [editRegion, setEditRegion] = useState("");
+  const [editVintage, setEditVintage] = useState("");
+  const [editVarietal, setEditVarietal] = useState("");
 
   const utils = trpc.useUtils();
 
@@ -73,6 +79,13 @@ export default function GuideItemDetailPage() {
     if (!item) return;
     setEditDescription(item.description ?? "");
     setEditCategoryId(item.category.id);
+    const prices = Array.isArray(item.prices) ? item.prices as { label: string; price: number }[] : [];
+    setEditPrices(prices.length > 0 ? prices.map(p => ({ label: p.label, price: String(p.price) })) : [{ label: "", price: "" }]);
+    setEditAbv(item.abv != null ? String(item.abv) : "");
+    setEditProducer(item.producer ?? "");
+    setEditRegion(item.region ?? "");
+    setEditVintage(item.vintage != null ? String(item.vintage) : "");
+    setEditVarietal(item.varietal ?? "");
     setIsEditing(true);
   }
 
@@ -82,6 +95,14 @@ export default function GuideItemDetailPage() {
       locationId: locationId!,
       description: editDescription || null,
       categoryId: editCategoryId || undefined,
+      prices: editPrices.some(p => p.label && p.price)
+        ? editPrices.filter(p => p.label && p.price).map(p => ({ label: p.label, price: parseFloat(p.price) }))
+        : null,
+      abv: editAbv ? parseFloat(editAbv) : null,
+      producer: editProducer || null,
+      region: editRegion || null,
+      vintage: editVintage ? parseInt(editVintage, 10) : null,
+      varietal: editVarietal || null,
     });
   }
 
@@ -219,6 +240,108 @@ export default function GuideItemDetailPage() {
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
               />
             </div>
+            <div className="mb-4">
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Prices</label>
+              {editPrices.map((p, i) => (
+                <div key={i} className="mb-2 flex gap-2">
+                  <input
+                    type="text"
+                    value={p.label}
+                    onChange={(e) => {
+                      const next = [...editPrices];
+                      next[i] = { ...next[i], label: e.target.value };
+                      setEditPrices(next);
+                    }}
+                    placeholder="Glass, Bottle, Pint..."
+                    className="flex-1 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={p.price}
+                    onChange={(e) => {
+                      const next = [...editPrices];
+                      next[i] = { ...next[i], price: e.target.value };
+                      setEditPrices(next);
+                    }}
+                    placeholder="0.00"
+                    className="w-28 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+                  />
+                  <button
+                    onClick={() => setEditPrices(editPrices.filter((_, j) => j !== i))}
+                    className="px-2 text-sm text-red-400 hover:text-red-300"
+                    type="button"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => setEditPrices([...editPrices, { label: "", price: "" }])}
+                className="text-xs text-[#E9B44C] hover:underline"
+                type="button"
+              >
+                + Add price
+              </button>
+            </div>
+            <div className="mb-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-[#EAF0FF]/60">ABV (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  value={editAbv}
+                  onChange={(e) => setEditAbv(e.target.value)}
+                  placeholder="13.5"
+                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Producer</label>
+                <input
+                  type="text"
+                  value={editProducer}
+                  onChange={(e) => setEditProducer(e.target.value)}
+                  placeholder="Chateau Margaux"
+                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Region</label>
+                <input
+                  type="text"
+                  value={editRegion}
+                  onChange={(e) => setEditRegion(e.target.value)}
+                  placeholder="Bordeaux, France"
+                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Vintage</label>
+                <input
+                  type="number"
+                  min="1900"
+                  max="2100"
+                  value={editVintage}
+                  onChange={(e) => setEditVintage(e.target.value)}
+                  placeholder="2019"
+                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Varietal</label>
+                <input
+                  type="text"
+                  value={editVarietal}
+                  onChange={(e) => setEditVarietal(e.target.value)}
+                  placeholder="Cabernet Sauvignon"
+                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#5A6A7A]"
+                />
+              </div>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={handleSave}
@@ -276,6 +399,48 @@ export default function GuideItemDetailPage() {
                 {item.description || "No description yet."}
               </p>
             </div>
+            {Array.isArray(item.prices) && (item.prices as { label: string; price: number }[]).length > 0 && (
+              <div className="sm:col-span-2">
+                <p className="text-xs text-[#EAF0FF]/60">Prices</p>
+                <div className="mt-1 flex flex-wrap gap-3">
+                  {(item.prices as { label: string; price: number }[]).map((p, i) => (
+                    <span key={i} className="text-[#EAF0FF]">
+                      <span className="text-[#EAF0FF]/60">{p.label}:</span> ${Number(p.price).toFixed(2)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {item.abv != null && (
+              <div>
+                <p className="text-xs text-[#EAF0FF]/60">ABV</p>
+                <p className="text-[#EAF0FF]">{Number(item.abv)}%</p>
+              </div>
+            )}
+            {item.producer && (
+              <div>
+                <p className="text-xs text-[#EAF0FF]/60">Producer</p>
+                <p className="text-[#EAF0FF]">{item.producer}</p>
+              </div>
+            )}
+            {item.region && (
+              <div>
+                <p className="text-xs text-[#EAF0FF]/60">Region</p>
+                <p className="text-[#EAF0FF]">{item.region}</p>
+              </div>
+            )}
+            {item.vintage != null && (
+              <div>
+                <p className="text-xs text-[#EAF0FF]/60">Vintage</p>
+                <p className="text-[#EAF0FF]">{item.vintage}</p>
+              </div>
+            )}
+            {item.varietal && (
+              <div>
+                <p className="text-xs text-[#EAF0FF]/60">Varietal</p>
+                <p className="text-[#EAF0FF]">{item.varietal}</p>
+              </div>
+            )}
           </div>
         )}
       </div>

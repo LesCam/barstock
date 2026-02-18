@@ -31,6 +31,15 @@ export const guideItemCreateSchema = z.object({
   inventoryItemId: z.string().uuid(),
   description: z.string().max(1000).optional(),
   sortOrder: z.number().int().min(0).default(0),
+  prices: z.array(z.object({
+    label: z.string().min(1).max(50),
+    price: z.number().min(0),
+  })).optional(),
+  abv: z.number().min(0).max(100).optional(),
+  producer: z.string().max(200).optional(),
+  region: z.string().max(200).optional(),
+  vintage: z.number().int().min(1900).max(2100).optional(),
+  varietal: z.string().max(200).optional(),
 });
 
 export const guideItemUpdateSchema = z.object({
@@ -40,6 +49,15 @@ export const guideItemUpdateSchema = z.object({
   description: z.string().max(1000).nullish(),
   sortOrder: z.number().int().min(0).optional(),
   active: z.boolean().optional(),
+  prices: z.array(z.object({
+    label: z.string().min(1).max(50),
+    price: z.number().min(0),
+  })).nullish(),
+  abv: z.number().min(0).max(100).nullish(),
+  producer: z.string().max(200).nullish(),
+  region: z.string().max(200).nullish(),
+  vintage: z.number().int().min(1900).max(2100).nullish(),
+  varietal: z.string().max(200).nullish(),
 });
 
 export const guideItemListSchema = z.object({

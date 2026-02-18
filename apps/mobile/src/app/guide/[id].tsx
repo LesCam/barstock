@@ -70,6 +70,17 @@ export default function GuideItemDetail() {
           </Text>
         </View>
 
+        {Array.isArray(item.prices) && (item.prices as { label: string; price: number }[]).length > 0 && (
+          <View style={styles.pricesRow}>
+            {(item.prices as { label: string; price: number }[]).map((p, i) => (
+              <View key={i} style={styles.priceChip}>
+                <Text style={styles.priceChipLabel}>{p.label}</Text>
+                <Text style={styles.priceChipValue}>${Number(p.price).toFixed(2)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {item.description ? (
           <View style={styles.descriptionContainer}>
             <Text style={styles.sectionTitle}>Description</Text>
@@ -77,12 +88,49 @@ export default function GuideItemDetail() {
           </View>
         ) : null}
 
+        {(item.abv != null || item.producer || item.region || item.vintage != null || item.varietal) && (
+          <View style={styles.detailsCard}>
+            {item.abv != null && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>ABV</Text>
+                <Text style={styles.detailValue}>{Number(item.abv)}%</Text>
+              </View>
+            )}
+            {item.producer ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Producer</Text>
+                <Text style={styles.detailValue}>{item.producer}</Text>
+              </View>
+            ) : null}
+            {item.region ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Region</Text>
+                <Text style={styles.detailValue}>{item.region}</Text>
+              </View>
+            ) : null}
+            {item.vintage != null && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Vintage</Text>
+                <Text style={styles.detailValue}>{item.vintage}</Text>
+              </View>
+            ) : null}
+            {item.varietal ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Varietal</Text>
+                <Text style={styles.detailValue}>{item.varietal}</Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+
         {item.inventoryItem.barcode ? (
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Barcode</Text>
-            <Text style={styles.detailValue}>
-              {item.inventoryItem.barcode}
-            </Text>
+          <View style={styles.detailsCard}>
+            <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+              <Text style={styles.detailLabel}>Barcode</Text>
+              <Text style={styles.detailValue}>
+                {item.inventoryItem.barcode}
+              </Text>
+            </View>
           </View>
         ) : null}
       </View>
@@ -127,6 +175,29 @@ const styles = StyleSheet.create({
     color: "#5A6A7A",
     textTransform: "capitalize",
   },
+  pricesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 16,
+  },
+  priceChip: {
+    backgroundColor: "#16283F",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  priceChipLabel: {
+    fontSize: 11,
+    color: "#5A6A7A",
+    marginBottom: 2,
+  },
+  priceChipValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#E9B44C",
+  },
   descriptionContainer: {
     backgroundColor: "#16283F",
     borderRadius: 10,
@@ -146,13 +217,18 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: "#EAF0FF",
   },
-  detailRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  detailsCard: {
     backgroundColor: "#16283F",
     borderRadius: 10,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.06)",
   },
   detailLabel: { fontSize: 13, color: "#5A6A7A" },
   detailValue: { fontSize: 13, fontWeight: "500", color: "#EAF0FF" },

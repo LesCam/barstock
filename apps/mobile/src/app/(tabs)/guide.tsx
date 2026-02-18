@@ -128,6 +128,13 @@ export default function GuideTab() {
                 <Text style={styles.categoryLabel} numberOfLines={1}>
                   {item.category.name}
                 </Text>
+                {Array.isArray(item.prices) && (item.prices as { label: string; price: number }[]).length > 0 && (
+                  <Text style={styles.priceLabel}>
+                    {(item.prices as { label: string; price: number }[]).length === 1
+                      ? `$${Number((item.prices as any[])[0].price).toFixed(2)}`
+                      : `$${Number(Math.min(...(item.prices as any[]).map((p: any) => p.price))).toFixed(2)}+`}
+                  </Text>
+                )}
               </View>
             </TouchableOpacity>
           );
@@ -185,6 +192,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#5A6A7A",
     marginTop: 2,
+  },
+  priceLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#E9B44C",
+    marginTop: 4,
   },
   empty: {
     textAlign: "center",
