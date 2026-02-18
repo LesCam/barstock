@@ -1,6 +1,7 @@
-import { router, protectedProcedure } from "../trpc";
+import { router, protectedProcedure, checkLocationRole } from "../trpc";
 import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
+import { Role } from "@barstock/types";
 import type { VarianceReason } from "@barstock/types";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -25,11 +26,16 @@ export const sessionsRouter = router({
       locationId: z.string().uuid(),
       openOnly: z.boolean().default(false),
     }))
-    .query(({ ctx, input }) =>
-      ctx.prisma.inventorySession.findMany({
+    .query(({ ctx, input }) => {
+      // Staff see only their own sessions; manager+ see all
+      const isManager = checkLocationRole(input.locationId, Role.manager, ctx.user)
+        || ctx.user.highestRole === Role.business_admin
+        || ctx.user.highestRole === Role.platform_admin;
+      return ctx.prisma.inventorySession.findMany({
         where: {
           locationId: input.locationId,
           ...(input.openOnly && { endedTs: null }),
+          ...(!isManager && { createdBy: ctx.user.userId }),
         },
         include: {
           createdByUser: { select: { email: true } },
@@ -37,8 +43,8 @@ export const sessionsRouter = router({
           _count: { select: { lines: true } },
         },
         orderBy: { startedTs: "desc" },
-      })
-    ),
+      });
+    }),
 
   getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))

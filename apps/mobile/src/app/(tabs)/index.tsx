@@ -1,4 +1,13 @@
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from "react-native";
+import { useState } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
@@ -22,18 +31,73 @@ function itemsLabel(type: string, count: number) {
 
 export default function SessionsTab() {
   const { selectedLocationId } = useAuth();
+  const [creating, setCreating] = useState(false);
+
+  const utils = trpc.useUtils();
+
   const { data: sessions, isLoading } = trpc.sessions.list.useQuery(
     { locationId: selectedLocationId!, openOnly: false },
     { enabled: !!selectedLocationId, refetchOnMount: "always" }
   );
 
+  const createSession = trpc.sessions.create.useMutation();
+  const closeMutation = trpc.sessions.close.useMutation({
+    onSuccess() {
+      Alert.alert("Session Closed", "Adjustments have been created.");
+      utils.sessions.list.invalidate();
+    },
+    onError(error: { message: string }) {
+      Alert.alert("Error", error.message);
+    },
+  });
+
+  const openSessions = sessions?.filter((s: any) => !s.endedTs) ?? [];
+  const closedSessions = sessions?.filter((s: any) => s.endedTs) ?? [];
+
+  async function handleStartCount() {
+    if (creating || !selectedLocationId) return;
+    setCreating(true);
+    try {
+      const session = await createSession.mutateAsync({
+        locationId: selectedLocationId,
+        sessionType: "shift",
+        startedTs: new Date(),
+      });
+      router.push(`/session/${session.id}`);
+    } catch (e: any) {
+      Alert.alert("Error", e.message ?? "Failed to create session");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function handleClose(sessionId: string, lineCount: number) {
+    Alert.alert(
+      "Close Session",
+      `Close this session with ${lineCount} items counted?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Close",
+          style: "destructive",
+          onPress: () => closeMutation.mutate({ sessionId }),
+        },
+      ]
+    );
+  }
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
-        style={styles.newButton}
-        onPress={() => router.push("/count/new")}
+        style={[styles.newButton, creating && styles.newButtonDisabled]}
+        onPress={handleStartCount}
+        disabled={creating}
       >
-        <Text style={styles.newButtonText}>Start Inventory Count</Text>
+        {creating ? (
+          <ActivityIndicator color="#0B1623" />
+        ) : (
+          <Text style={styles.newButtonText}>Start Inventory Count</Text>
+        )}
       </TouchableOpacity>
 
       <View style={styles.secondaryRow}>
@@ -52,34 +116,77 @@ export default function SessionsTab() {
         </TouchableOpacity>
       </View>
 
+      {/* Open Sessions */}
+      {openSessions.length > 0 && (
+        <View style={styles.openSection}>
+          <Text style={styles.sectionTitle}>Open Sessions</Text>
+          <Text style={styles.openWarning}>
+            Starting a new count will close any open session.
+          </Text>
+          {openSessions.map((s: any) => (
+            <View key={s.id} style={styles.openCard}>
+              <TouchableOpacity
+                style={styles.openCardInfo}
+                onPress={() => router.push(`/session/${s.id}`)}
+              >
+                <Text style={styles.openCardTitle}>{sessionLabel(s.sessionType)}</Text>
+                <Text style={styles.openCardDate}>
+                  {new Date(s.startedTs).toLocaleString()}
+                  {s.createdByUser?.email ? ` — ${s.createdByUser.email}` : ""}
+                </Text>
+                <Text style={styles.openCardCount}>
+                  {itemsLabel(s.sessionType, s._count.lines)}
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.openCardActions}>
+                <TouchableOpacity onPress={() => router.push(`/session/${s.id}`)}>
+                  <Text style={styles.resumeText}>Resume</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  disabled={closeMutation.isPending}
+                  onPress={() => handleClose(s.id, s._count.lines)}
+                >
+                  <Text style={styles.closeText}>
+                    {closeMutation.isPending ? "Closing..." : "Close"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* History */}
       {isLoading ? (
         <Text style={styles.loading}>Loading sessions...</Text>
-      ) : (
-        <FlatList
-          data={sessions}
-          keyExtractor={(s) => s.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() => router.push(`/session/${item.id}`)}
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{sessionLabel(item.sessionType)}</Text>
-                <Text style={item.endedTs ? styles.badgeClosed : styles.badgeOpen}>
-                  {item.endedTs ? "Closed" : "Open"}
+      ) : closedSessions.length > 0 ? (
+        <>
+          <Text style={styles.sectionTitle}>History</Text>
+          <FlatList
+            data={closedSessions}
+            keyExtractor={(s) => s.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() => router.push(`/session/${item.id}`)}
+              >
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>{sessionLabel(item.sessionType)}</Text>
+                  <Text style={styles.badgeClosed}>Closed</Text>
+                </View>
+                <Text style={styles.cardDate}>
+                  {new Date(item.startedTs).toLocaleString()}
+                  {item.createdByUser?.email ? ` — ${item.createdByUser.email}` : ""}
                 </Text>
-              </View>
-              <Text style={styles.cardDate}>
-                {new Date(item.startedTs).toLocaleString()}
-              </Text>
-              <Text style={styles.cardLines}>
-                {itemsLabel(item.sessionType, item._count.lines)}
-              </Text>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      )}
+                <Text style={styles.cardLines}>
+                  {itemsLabel(item.sessionType, item._count.lines)}
+                </Text>
+              </TouchableOpacity>
+            )}
+            contentContainerStyle={{ paddingBottom: 20 }}
+          />
+        </>
+      ) : null}
     </View>
   );
 }
@@ -90,6 +197,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E9B44C", borderRadius: 8,
     padding: 14, alignItems: "center", marginBottom: 12,
   },
+  newButtonDisabled: { opacity: 0.6 },
   newButtonText: { color: "#0B1623", fontSize: 16, fontWeight: "700" },
   secondaryRow: {
     flexDirection: "row",
@@ -110,6 +218,65 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#42A5F5",
   },
   transferButtonText: { color: "#42A5F5", fontSize: 14, fontWeight: "700" },
+
+  // Open sessions
+  openSection: { marginBottom: 16 },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#8899AA",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  openWarning: {
+    fontSize: 13,
+    color: "#E9B44C",
+    marginBottom: 10,
+  },
+  openCard: {
+    backgroundColor: "#152238",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E9B44C",
+  },
+  openCardInfo: { flex: 1 },
+  openCardTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#EAF0FF",
+  },
+  openCardDate: {
+    fontSize: 12,
+    color: "#8899AA",
+    marginTop: 2,
+  },
+  openCardCount: {
+    fontSize: 13,
+    color: "#6B7FA0",
+    marginTop: 2,
+  },
+  openCardActions: {
+    alignItems: "flex-end",
+    gap: 12,
+    marginLeft: 12,
+  },
+  resumeText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#42A5F5",
+  },
+  closeText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#dc2626",
+  },
+
+  // History
   loading: { textAlign: "center", color: "#5A6A7A", marginTop: 40 },
   card: {
     backgroundColor: "#16283F", borderRadius: 8, padding: 16,
@@ -119,10 +286,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: "600", color: "#EAF0FF" },
   cardDate: { fontSize: 12, color: "#8899AA", marginTop: 4 },
   cardLines: { fontSize: 13, color: "#5A6A7A", marginTop: 4 },
-  badgeOpen: {
-    backgroundColor: "#1E3550", color: "#E9B44C",
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, fontSize: 12, overflow: "hidden",
-  },
   badgeClosed: {
     backgroundColor: "#1E3550", color: "#5A6A7A",
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, fontSize: 12, overflow: "hidden",

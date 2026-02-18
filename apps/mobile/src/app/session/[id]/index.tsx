@@ -107,11 +107,25 @@ export default function SessionDetailScreen() {
   const expectedTotal = expectedChecklist.length;
   const expectedCounted = expectedChecklist.filter((i: any) => i.counted).length;
 
-  function handleExpectedItemTap(item: { inventoryItemId: string; name: string; type: string; subAreaId?: string }) {
+  function handleExpectedItemTap(item: { inventoryItemId: string; name: string; type: string; subAreaId?: string; subAreaName?: string }) {
     if (!areaSelected) return;
-    // In full location mode, use the item's own subAreaId
-    const subAreaForItem = fullLocationMode ? (item.subAreaId ?? "") : (selectedSubAreaId ?? "");
-    const params = `subAreaId=${subAreaForItem}&areaName=${encodeURIComponent(areaLabel)}&itemId=${item.inventoryItemId}`;
+    // In full location mode, use the item's own subAreaId and auto-select it
+    let subAreaForItem = selectedSubAreaId ?? "";
+    let labelForItem = areaLabel;
+    if (fullLocationMode && item.subAreaId) {
+      subAreaForItem = item.subAreaId;
+      labelForItem = item.subAreaName ?? "Full Location";
+      // Auto-select this item's area/subarea in the picker
+      for (const area of (areas as BarArea[]) ?? []) {
+        const sa = area.subAreas.find((s: { id: string }) => s.id === item.subAreaId);
+        if (sa) {
+          setSelectedAreaId(area.id);
+          setSelectedSubAreaId(sa.id);
+          break;
+        }
+      }
+    }
+    const params = `subAreaId=${subAreaForItem}&areaName=${encodeURIComponent(labelForItem)}&itemId=${item.inventoryItemId}`;
 
     if (item.type === "liquor" || item.type === "wine") {
       Alert.alert(item.name, "How do you want to count this?", [
@@ -344,88 +358,78 @@ export default function SessionDetailScreen() {
             <View style={styles.areaPickerHeader}>
               <Text style={styles.areaPickerLabel}>Count Area</Text>
               <TouchableOpacity
-                onPress={() => {
-                  if (fullLocationMode) {
-                    setFullLocationMode(false);
-                    const first = areas[0] as BarArea;
-                    setSelectedAreaId(first.id);
-                    if (first.subAreas.length > 0) {
-                      setSelectedSubAreaId(first.subAreas[0].id);
-                    }
-                  } else {
-                    setFullLocationMode(true);
-                    setSelectedAreaId(null);
-                    setSelectedSubAreaId(null);
-                  }
-                }}
+                onPress={() => setFullLocationMode(!fullLocationMode)}
               >
                 <Text style={[styles.fullLocationLink, fullLocationMode && styles.fullLocationLinkActive]}>
-                  {fullLocationMode ? "Select Area" : "Full Location"}
+                  {fullLocationMode ? "Area View" : "Full Location"}
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {!fullLocationMode && (
-              <>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.areaPills}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.areaPills}
+            >
+              {(areas as BarArea[]).map((area) => (
+                <TouchableOpacity
+                  key={area.id}
+                  style={[
+                    styles.areaPill,
+                    selectedAreaId === area.id && styles.areaPillActive,
+                  ]}
+                  onPress={() => handleAreaSelect(area)}
                 >
-                  {(areas as BarArea[]).map((area) => (
-                    <TouchableOpacity
-                      key={area.id}
-                      style={[
-                        styles.areaPill,
-                        selectedAreaId === area.id && styles.areaPillActive,
-                      ]}
-                      onPress={() => handleAreaSelect(area)}
-                    >
-                      <Text
-                        style={[
-                          styles.areaPillText,
-                          selectedAreaId === area.id && styles.areaPillTextActive,
-                        ]}
-                      >
-                        {area.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                {selectedArea && selectedArea.subAreas.length > 0 && (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.subAreaPills}
+                  <Text
+                    style={[
+                      styles.areaPillText,
+                      selectedAreaId === area.id && styles.areaPillTextActive,
+                    ]}
                   >
-                    {selectedArea.subAreas.map((sa: { id: string; name: string }) => (
-                      <TouchableOpacity
-                        key={sa.id}
-                        style={[
-                          styles.subAreaPill,
-                          selectedSubAreaId === sa.id && styles.subAreaPillActive,
-                        ]}
-                        onPress={() => setSelectedSubAreaId(sa.id)}
-                      >
-                        <Text
-                          style={[
-                            styles.subAreaPillText,
-                            selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
-                          ]}
-                        >
-                          {sa.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
-              </>
+                    {area.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {selectedArea && selectedArea.subAreas.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.subAreaPills}
+              >
+                {selectedArea.subAreas.map((sa: { id: string; name: string }) => (
+                  <TouchableOpacity
+                    key={sa.id}
+                    style={[
+                      styles.subAreaPill,
+                      selectedSubAreaId === sa.id && styles.subAreaPillActive,
+                    ]}
+                    onPress={() => setSelectedSubAreaId(sa.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.subAreaPillText,
+                        selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
+                      ]}
+                    >
+                      {sa.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             )}
 
             {areaSelected && (
               <View style={styles.areaBanner}>
-                <Text style={styles.areaBannerText}>{areaLabel}</Text>
+                <Text style={styles.areaBannerText}>
+                  {fullLocationMode ? "Full Audit" : areaLabel}
+                </Text>
+                {fullLocationMode && selectedSubArea && selectedArea && (
+                  <Text style={styles.areaBannerSub}>
+                    Counting in: {selectedArea.name} — {selectedSubArea.name}
+                  </Text>
+                )}
               </View>
             )}
           </View>
@@ -854,6 +858,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   areaBannerText: { color: "#EAF0FF", fontSize: 14, fontWeight: "600" },
+  areaBannerSub: { color: "#8899AA", fontSize: 12, marginTop: 2 },
 
   // Count actions
   actions: { flexDirection: "row", gap: 8, marginBottom: 12 },
