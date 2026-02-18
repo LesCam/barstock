@@ -422,6 +422,15 @@ async function main() {
   });
   console.log(`Created bar areas + sub-areas for both locations`);
 
+  // ── Scale Profiles ─────────────────────────────────────────
+  await prisma.scaleProfile.createMany({
+    data: [
+      { locationId: location1.id, name: "Main Bar Scale" },
+      { locationId: location1.id, name: "Kitchen Scale" },
+    ],
+  });
+  console.log(`Created 2 scale profiles for ${location1.name}`);
+
   // ── Business Settings ───────────────────────────────────────
   await prisma.businessSettings.create({
     data: {

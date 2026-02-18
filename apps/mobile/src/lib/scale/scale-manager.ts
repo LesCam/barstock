@@ -32,6 +32,10 @@ const SKALE_CMD_TARE = 0x10;
 const SKALE_CMD_UNIT_GRAMS = 0x03;
 const SKALE_CMD_DISPLAY_WEIGHT = 0xec;
 
+// Standard BLE Battery Service
+const BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb";
+const BATTERY_LEVEL_CHARACTERISTIC_UUID = "00002a19-0000-1000-8000-00805f9b34fb";
+
 const KEEPALIVE_INTERVAL_MS = 30_000;
 
 type ScaleType = "standard" | "skale2";
@@ -100,8 +104,10 @@ export class ScaleManager {
   private connectedDevice: Device | null = null;
   private scaleType: ScaleType | null = null;
   private monitorSubscription: Subscription | null = null;
+  private batterySubscription: Subscription | null = null;
   private disconnectSubscription: Subscription | null = null;
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  private _batteryLevel: number | null = null;
 
   /**
    * Scan for nearby BLE scale devices (5 s).
@@ -183,6 +189,9 @@ export class ScaleManager {
     } else {
       this.monitorStandard(device, deviceId);
     }
+
+    // Attempt to read battery level (best-effort, non-blocking)
+    this.monitorBattery(device).catch(() => {});
   }
 
   /** Handle unexpected BLE disconnection — clean up state and notify listeners. */
@@ -190,11 +199,14 @@ export class ScaleManager {
     this.stopKeepalive();
     this.monitorSubscription?.remove();
     this.monitorSubscription = null;
+    this.batterySubscription?.remove();
+    this.batterySubscription = null;
     this.disconnectSubscription?.remove();
     this.disconnectSubscription = null;
     this.connectedDeviceId = null;
     this.connectedDevice = null;
     this.scaleType = null;
+    this._batteryLevel = null;
     this.disconnectListeners.forEach((listener) => listener());
   }
 
@@ -276,6 +288,48 @@ export class ScaleManager {
     );
   }
 
+  /** Attempt to read and monitor battery level via standard BLE Battery Service. */
+  private async monitorBattery(device: Device): Promise<void> {
+    try {
+      const services = await device.services();
+      let hasBatteryService = false;
+      for (const service of services) {
+        if (service.uuid.toLowerCase() === BATTERY_SERVICE_UUID) {
+          hasBatteryService = true;
+          break;
+        }
+      }
+      if (!hasBatteryService) return;
+
+      // Read initial value
+      const char = await device.readCharacteristicForService(
+        BATTERY_SERVICE_UUID,
+        BATTERY_LEVEL_CHARACTERISTIC_UUID
+      );
+      if (char?.value) {
+        const buf = Buffer.from(char.value, "base64");
+        if (buf.length >= 1) {
+          this._batteryLevel = buf[0];
+        }
+      }
+
+      // Monitor for updates
+      this.batterySubscription = device.monitorCharacteristicForService(
+        BATTERY_SERVICE_UUID,
+        BATTERY_LEVEL_CHARACTERISTIC_UUID,
+        (_error, characteristic) => {
+          if (!characteristic?.value) return;
+          const buf = Buffer.from(characteristic.value, "base64");
+          if (buf.length >= 1) {
+            this._batteryLevel = buf[0];
+          }
+        }
+      );
+    } catch {
+      // Battery service not available — that's fine
+    }
+  }
+
   /** Send a command byte to the Skale 2. */
   private async sendSkaleCommand(device: Device, command: number): Promise<void> {
     const data = Buffer.from([command]).toString("base64");
@@ -321,6 +375,8 @@ export class ScaleManager {
     this.stopKeepalive();
     this.monitorSubscription?.remove();
     this.monitorSubscription = null;
+    this.batterySubscription?.remove();
+    this.batterySubscription = null;
     this.disconnectSubscription?.remove();
     this.disconnectSubscription = null;
 
@@ -329,6 +385,7 @@ export class ScaleManager {
     this.connectedDeviceId = null;
     this.connectedDevice = null;
     this.scaleType = null;
+    this._batteryLevel = null;
   }
 
   onReading(listener: ScaleListener): () => void {
@@ -347,6 +404,14 @@ export class ScaleManager {
 
   get currentScaleType() {
     return this.scaleType;
+  }
+
+  get batteryLevel(): number | null {
+    return this._batteryLevel;
+  }
+
+  get deviceId(): string | null {
+    return this.connectedDeviceId;
   }
 }
 

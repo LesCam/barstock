@@ -221,6 +221,7 @@ model Location {
   barAreas         BarArea[]
   guideCategories  ProductGuideCategory[]
   guideItems       ProductGuideItem[]
+  scaleProfiles    ScaleProfile[]
 
   @@map("locations")
 }
@@ -249,6 +250,7 @@ model User {
   auditLogs             AuditLog[]
   notifications         Notification[]
   passwordResetTokens   PasswordResetToken[]
+  scaleProfileConnections ScaleProfile[]
 
   @@map("users")
 }
@@ -599,6 +601,26 @@ model BottleMeasurement {
   subArea       SubArea?         @relation(fields: [subAreaId], references: [id])
 
   @@map("bottle_measurements")
+}
+
+// ─── Scale Profiles ─────────────────────────────────────────
+
+model ScaleProfile {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId            String    @map("location_id") @db.Uuid
+  name                  String
+  lastHeartbeatAt       DateTime? @map("last_heartbeat_at") @db.Timestamptz()
+  lastConnectedByUserId String?   @map("last_connected_by_user_id") @db.Uuid
+  batteryLevel          Int?      @map("battery_level")
+  lastBatteryAlertAt    DateTime? @map("last_battery_alert_at") @db.Timestamptz()
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  location            Location @relation(fields: [locationId], references: [id])
+  lastConnectedByUser User?    @relation(fields: [lastConnectedByUserId], references: [id])
+
+  @@unique([locationId, name])
+  @@index([locationId], map: "ix_scale_profiles_location")
+  @@map("scale_profiles")
 }
 
 // ─── Bar Areas ──────────────────────────────────────────────

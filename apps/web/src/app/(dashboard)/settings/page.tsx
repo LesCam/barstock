@@ -27,6 +27,7 @@ export default function SettingsPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const businessId = user?.businessId as string | undefined;
+  const locationId = user?.locationIds?.[0] as string | undefined;
   const canEdit = ADMIN_ROLES.includes(user?.highestRole ?? "");
 
   if (!businessId) {
@@ -38,6 +39,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold text-[#EAF0FF]">Settings</h1>
       <BusinessProfileSection businessId={businessId} canEdit={canEdit} />
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
+      {locationId && <ScaleProfilesSection locationId={locationId} canEdit={canEdit} />}
     </div>
   );
 }
@@ -403,6 +405,203 @@ function CapabilityTogglesSection({ businessId, canEdit }: { businessId: string;
 
       {updateMutation.error && (
         <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
+      )}
+    </div>
+  );
+}
+
+function ScaleProfilesSection({ locationId, canEdit }: { locationId: string; canEdit: boolean }) {
+  const utils = trpc.useUtils();
+  const { data: profiles } = trpc.scaleProfiles.list.useQuery(
+    { locationId },
+    { refetchInterval: 30_000 }
+  );
+
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+
+  const createMutation = trpc.scaleProfiles.create.useMutation({
+    onSuccess: () => {
+      utils.scaleProfiles.list.invalidate({ locationId });
+      setAdding(false);
+      setNewName("");
+    },
+  });
+
+  const updateMutation = trpc.scaleProfiles.update.useMutation({
+    onSuccess: () => {
+      utils.scaleProfiles.list.invalidate({ locationId });
+      setEditingId(null);
+      setEditName("");
+    },
+  });
+
+  const deleteMutation = trpc.scaleProfiles.delete.useMutation({
+    onSuccess: () => {
+      utils.scaleProfiles.list.invalidate({ locationId });
+    },
+  });
+
+  function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    createMutation.mutate({ locationId, name: newName.trim() });
+  }
+
+  function handleUpdate(e: React.FormEvent, profileId: string) {
+    e.preventDefault();
+    if (!editName.trim()) return;
+    updateMutation.mutate({ profileId, name: editName.trim() });
+  }
+
+  function handleDelete(profileId: string, name: string) {
+    if (!confirm(`Delete scale profile "${name}"?`)) return;
+    deleteMutation.mutate({ profileId });
+  }
+
+  function formatLastSeen(date: Date | null): string {
+    if (!date) return "Never";
+    const secs = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+    if (secs < 60) return "Just now";
+    if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+    if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+    return `${Math.floor(secs / 86400)}d ago`;
+  }
+
+  function userName(user: { firstName?: string | null; lastName?: string | null; email: string } | null): string {
+    if (!user) return "—";
+    if (user.firstName || user.lastName) return [user.firstName, user.lastName].filter(Boolean).join(" ");
+    return user.email;
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Scale Profiles</h2>
+        {canEdit && !adding && (
+          <button
+            onClick={() => setAdding(true)}
+            className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#D4A43C]"
+          >
+            Add Profile
+          </button>
+        )}
+      </div>
+
+      {adding && (
+        <form onSubmit={handleCreate} className="mb-4 flex items-center gap-2">
+          <input
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="e.g. Main Bar Scale"
+            autoFocus
+            className="flex-1 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] sm:max-w-xs"
+          />
+          <button
+            type="submit"
+            disabled={createMutation.isPending || !newName.trim()}
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+          >
+            {createMutation.isPending ? "Adding..." : "Add"}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAdding(false); setNewName(""); }}
+            className="rounded-md border border-white/10 px-3 py-2 text-sm text-[#EAF0FF]/80 hover:bg-white/5"
+          >
+            Cancel
+          </button>
+        </form>
+      )}
+      {createMutation.error && (
+        <p className="mb-3 text-sm text-red-600">{createMutation.error.message}</p>
+      )}
+
+      {!profiles ? (
+        <div className="text-[#EAF0FF]/60 text-sm">Loading scale profiles...</div>
+      ) : profiles.length === 0 ? (
+        <div className="text-[#EAF0FF]/40 text-sm">No scale profiles yet. Add one to start tracking scale connections.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-left text-[#EAF0FF]/60">
+                <th className="pb-2 pr-4 font-medium">Name</th>
+                <th className="pb-2 pr-4 font-medium">Status</th>
+                <th className="pb-2 pr-4 font-medium">Connected By</th>
+                <th className="pb-2 pr-4 font-medium">Battery</th>
+                <th className="pb-2 pr-4 font-medium">Last Seen</th>
+                {canEdit && <th className="pb-2 font-medium">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {profiles.map((profile) => (
+                <tr key={profile.id} className="border-b border-white/5">
+                  <td className="py-3 pr-4">
+                    {editingId === profile.id ? (
+                      <form onSubmit={(e) => handleUpdate(e, profile.id)} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          autoFocus
+                          className="w-40 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                        />
+                        <button type="submit" disabled={updateMutation.isPending} className="text-[#E9B44C] hover:text-[#D4A43C] text-xs font-medium">Save</button>
+                        <button type="button" onClick={() => setEditingId(null)} className="text-[#EAF0FF]/60 hover:text-[#EAF0FF] text-xs">Cancel</button>
+                      </form>
+                    ) : (
+                      <span className="font-medium text-[#EAF0FF]">{profile.name}</span>
+                    )}
+                  </td>
+                  <td className="py-3 pr-4">
+                    <span className="flex items-center gap-2">
+                      <span className={`inline-block h-2.5 w-2.5 rounded-full ${profile.isConnected ? "bg-green-500" : "bg-gray-500"}`} />
+                      <span className={profile.isConnected ? "text-green-400" : "text-[#EAF0FF]/40"}>
+                        {profile.isConnected ? "Connected" : "Offline"}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="py-3 pr-4 text-[#EAF0FF]/80">{userName(profile.lastConnectedByUser)}</td>
+                  <td className="py-3 pr-4">
+                    {profile.batteryLevel != null ? (
+                      <span className={profile.batteryLevel < 20 ? "text-red-400" : profile.batteryLevel < 40 ? "text-amber-400" : "text-[#EAF0FF]/80"}>
+                        {profile.batteryLevel}%
+                      </span>
+                    ) : (
+                      <span className="text-[#EAF0FF]/30">—</span>
+                    )}
+                  </td>
+                  <td className="py-3 pr-4 text-[#EAF0FF]/60">{formatLastSeen(profile.lastHeartbeatAt)}</td>
+                  {canEdit && (
+                    <td className="py-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => { setEditingId(profile.id); setEditName(profile.name); }}
+                          className="text-[#EAF0FF]/60 hover:text-[#E9B44C] text-xs font-medium"
+                        >
+                          Rename
+                        </button>
+                        <button
+                          onClick={() => handleDelete(profile.id, profile.name)}
+                          className="text-[#EAF0FF]/60 hover:text-red-400 text-xs font-medium"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {(updateMutation.error || deleteMutation.error) && (
+        <p className="mt-3 text-sm text-red-600">{(updateMutation.error || deleteMutation.error)?.message}</p>
       )}
     </div>
   );

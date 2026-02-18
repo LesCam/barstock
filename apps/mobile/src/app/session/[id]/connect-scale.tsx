@@ -10,9 +10,14 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
+import { getProfileForDevice, setProfileForDevice } from "@/lib/scale/scale-mappings";
+import { useScaleHeartbeat } from "@/lib/scale/use-scale-heartbeat";
+import { ScaleProfilePicker } from "@/components/ScaleProfilePicker";
+import { useAuth } from "@/lib/auth-context";
 
 export default function ConnectScaleScreen() {
   const { id: sessionId } = useLocalSearchParams<{ id: string }>();
+  const { selectedLocationId } = useAuth();
 
   const [scanning, setScanning] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; name: string }>>(
@@ -24,6 +29,15 @@ export default function ConnectScaleScreen() {
   );
   const [lastReading, setLastReading] = useState<ScaleReading | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
+
+  // Scale profile state
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState<string | null>(null);
+  const [showProfilePicker, setShowProfilePicker] = useState(false);
+  const [pendingDeviceId, setPendingDeviceId] = useState<string | null>(null);
+
+  // Heartbeat while connected with a profile
+  useScaleHeartbeat(profileId);
 
   // Subscribe to scale readings
   useEffect(() => {
@@ -39,6 +53,8 @@ export default function ConnectScaleScreen() {
       setConnected(false);
       setConnectedDeviceName(null);
       setLastReading(null);
+      setProfileId(null);
+      setProfileName(null);
     });
     return unsubscribe;
   }, []);
@@ -67,11 +83,35 @@ export default function ConnectScaleScreen() {
       await scaleManager.connect(deviceId);
       setConnected(true);
       setConnectedDeviceName(name);
+
+      // Check for existing profile mapping
+      const existingProfileId = await getProfileForDevice(deviceId);
+      if (existingProfileId) {
+        setProfileId(existingProfileId);
+      } else if (selectedLocationId) {
+        setPendingDeviceId(deviceId);
+        setShowProfilePicker(true);
+      }
     } catch {
       Alert.alert("Connection Failed", "Could not connect to scale. Please try again.");
     } finally {
       setConnecting(null);
     }
+  }, [selectedLocationId]);
+
+  const handleProfileSelect = useCallback(async (selectedProfileId: string, selectedProfileName: string) => {
+    if (pendingDeviceId) {
+      await setProfileForDevice(pendingDeviceId, selectedProfileId);
+    }
+    setProfileId(selectedProfileId);
+    setProfileName(selectedProfileName);
+    setShowProfilePicker(false);
+    setPendingDeviceId(null);
+  }, [pendingDeviceId]);
+
+  const handleProfilePickerCancel = useCallback(() => {
+    setShowProfilePicker(false);
+    setPendingDeviceId(null);
   }, []);
 
   const handleDisconnect = useCallback(async () => {
@@ -79,6 +119,8 @@ export default function ConnectScaleScreen() {
     setConnected(false);
     setConnectedDeviceName(null);
     setLastReading(null);
+    setProfileId(null);
+    setProfileName(null);
   }, []);
 
   const handleContinue = useCallback(() => {
@@ -122,7 +164,9 @@ export default function ConnectScaleScreen() {
               <Text style={styles.connectedLabel}>Scale Connected</Text>
             </View>
             <Text style={styles.deviceNameConnected}>
-              {connectedDeviceName ?? "Scale"}
+              {profileName
+                ? `${profileName} (${connectedDeviceName ?? "Scale"})`
+                : connectedDeviceName ?? "Scale"}
             </Text>
             {lastReading && (
               <Text style={styles.liveWeight}>{formatWeight(lastReading)}</Text>
@@ -159,7 +203,6 @@ export default function ConnectScaleScreen() {
             {devices.map((device) => (
               <View key={device.id} style={styles.deviceRow}>
                 <View style={styles.deviceInfo}>
-                  <Text style={styles.signalIcon}>📶</Text>
                   <Text style={styles.deviceName}>{device.name}</Text>
                 </View>
                 <TouchableOpacity
@@ -217,6 +260,15 @@ export default function ConnectScaleScreen() {
           <Text style={styles.troubleshootText}>Troubleshooting Tips</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Profile Picker Overlay */}
+      {showProfilePicker && selectedLocationId && (
+        <ScaleProfilePicker
+          locationId={selectedLocationId}
+          onSelect={handleProfileSelect}
+          onCancel={handleProfilePickerCancel}
+        />
+      )}
     </View>
   );
 }
@@ -340,9 +392,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     flex: 1,
-  },
-  signalIcon: {
-    fontSize: 18,
   },
   deviceName: {
     color: "#EAF0FF",

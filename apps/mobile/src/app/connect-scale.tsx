@@ -9,8 +9,14 @@ import {
   Alert,
 } from "react-native";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
+import { getProfileForDevice, setProfileForDevice } from "@/lib/scale/scale-mappings";
+import { useScaleHeartbeat } from "@/lib/scale/use-scale-heartbeat";
+import { ScaleProfilePicker } from "@/components/ScaleProfilePicker";
+import { useAuth } from "@/lib/auth-context";
 
 export default function ConnectScaleSettingsScreen() {
+  const { selectedLocationId } = useAuth();
+
   const [scanning, setScanning] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; name: string }>>(
     []
@@ -21,6 +27,15 @@ export default function ConnectScaleSettingsScreen() {
   );
   const [lastReading, setLastReading] = useState<ScaleReading | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
+
+  // Scale profile state
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState<string | null>(null);
+  const [showProfilePicker, setShowProfilePicker] = useState(false);
+  const [pendingDeviceId, setPendingDeviceId] = useState<string | null>(null);
+
+  // Heartbeat while connected with a profile
+  useScaleHeartbeat(profileId);
 
   useEffect(() => {
     const unsubscribe = scaleManager.onReading((reading) => {
@@ -34,6 +49,8 @@ export default function ConnectScaleSettingsScreen() {
       setConnected(false);
       setConnectedDeviceName(null);
       setLastReading(null);
+      setProfileId(null);
+      setProfileName(null);
     });
     return unsubscribe;
   }, []);
@@ -61,6 +78,17 @@ export default function ConnectScaleSettingsScreen() {
       await scaleManager.connect(deviceId);
       setConnected(true);
       setConnectedDeviceName(name);
+
+      // Check for existing profile mapping
+      const existingProfileId = await getProfileForDevice(deviceId);
+      if (existingProfileId) {
+        setProfileId(existingProfileId);
+        // Profile name will show from the mapping
+      } else if (selectedLocationId) {
+        // No mapping — show picker
+        setPendingDeviceId(deviceId);
+        setShowProfilePicker(true);
+      }
     } catch {
       Alert.alert(
         "Connection Failed",
@@ -69,6 +97,21 @@ export default function ConnectScaleSettingsScreen() {
     } finally {
       setConnecting(null);
     }
+  }, [selectedLocationId]);
+
+  const handleProfileSelect = useCallback(async (selectedProfileId: string, selectedProfileName: string) => {
+    if (pendingDeviceId) {
+      await setProfileForDevice(pendingDeviceId, selectedProfileId);
+    }
+    setProfileId(selectedProfileId);
+    setProfileName(selectedProfileName);
+    setShowProfilePicker(false);
+    setPendingDeviceId(null);
+  }, [pendingDeviceId]);
+
+  const handleProfilePickerCancel = useCallback(() => {
+    setShowProfilePicker(false);
+    setPendingDeviceId(null);
   }, []);
 
   const handleDisconnect = useCallback(async () => {
@@ -76,6 +119,8 @@ export default function ConnectScaleSettingsScreen() {
     setConnected(false);
     setConnectedDeviceName(null);
     setLastReading(null);
+    setProfileId(null);
+    setProfileName(null);
   }, []);
 
   const handleTroubleshooting = useCallback(() => {
@@ -111,7 +156,9 @@ export default function ConnectScaleSettingsScreen() {
               <Text style={styles.connectedLabel}>Scale Connected</Text>
             </View>
             <Text style={styles.deviceNameConnected}>
-              {connectedDeviceName ?? "Scale"}
+              {profileName
+                ? `${profileName} (${connectedDeviceName ?? "Scale"})`
+                : connectedDeviceName ?? "Scale"}
             </Text>
             {lastReading && (
               <Text style={styles.liveWeight}>{formatWeight(lastReading)}</Text>
@@ -187,6 +234,15 @@ export default function ConnectScaleSettingsScreen() {
           <Text style={styles.troubleshootText}>Troubleshooting Tips</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Profile Picker Overlay */}
+      {showProfilePicker && selectedLocationId && (
+        <ScaleProfilePicker
+          locationId={selectedLocationId}
+          onSelect={handleProfileSelect}
+          onCancel={handleProfilePickerCancel}
+        />
+      )}
     </View>
   );
 }

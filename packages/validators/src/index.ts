@@ -14,3 +14,4 @@ export * from "./user.schema";
 export * from "./vendor.schema";
 export * from "./product-guide.schema";
 export * from "./transfer.schema";
+export * from "./scale-profile.schema";
