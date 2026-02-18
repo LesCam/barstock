@@ -172,4 +172,59 @@ export const sessionsRouter = router({
         lastCountedAt: item.last_counted_at,
       }));
     }),
+
+  expectedItemsForLocation: protectedProcedure
+    .input(z.object({ locationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Return active inventory items for this location, listed once per
+      // distinct sub-area they've historically been counted in.
+      // e.g. "Bud Light Cans" appears under Walk-In AND Main Bar if counted in both.
+      const items = await ctx.prisma.$queryRaw<
+        Array<{
+          id: string;
+          name: string;
+          type: string;
+          base_uom: string;
+          sub_area_id: string | null;
+          sub_area_name: string | null;
+          bar_area_name: string | null;
+        }>
+      >(Prisma.sql`
+        WITH distinct_placements AS (
+          SELECT DISTINCT ON (sl.inventory_item_id, sl.sub_area_id)
+            sl.inventory_item_id,
+            sl.sub_area_id
+          FROM inventory_session_lines sl
+          INNER JOIN inventory_sessions s ON s.id = sl.session_id
+          WHERE s.location_id = ${input.locationId}::uuid
+            AND sl.sub_area_id IS NOT NULL
+        )
+        SELECT
+          i.id,
+          i.name,
+          i.type,
+          i.base_uom,
+          dp.sub_area_id,
+          sa.name AS sub_area_name,
+          ba.name AS bar_area_name
+        FROM inventory_items i
+        LEFT JOIN distinct_placements dp ON dp.inventory_item_id = i.id
+        LEFT JOIN sub_areas sa ON sa.id = dp.sub_area_id
+        LEFT JOIN bar_areas ba ON ba.id = sa.bar_area_id
+        WHERE i.location_id = ${input.locationId}::uuid
+          AND i.active = true
+        ORDER BY ba.name NULLS LAST, sa.name NULLS LAST, i.name ASC
+      `);
+
+      return items.map((item) => ({
+        inventoryItemId: item.id,
+        name: item.name,
+        type: item.type,
+        baseUom: item.base_uom,
+        subAreaId: item.sub_area_id,
+        subAreaName: item.sub_area_name
+          ? `${item.bar_area_name} — ${item.sub_area_name}`
+          : "Unassigned",
+      }));
+    }),
 });

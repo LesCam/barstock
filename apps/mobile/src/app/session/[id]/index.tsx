@@ -37,6 +37,7 @@ export default function SessionDetailScreen() {
 
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedSubAreaId, setSelectedSubAreaId] = useState<string | null>(null);
+  const [fullLocationMode, setFullLocationMode] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [uncountedItems, setUncountedItems] = useState<UncountedItem[]>([]);
   const [varianceItem, setVarianceItem] = useState<{
@@ -62,39 +63,55 @@ export default function SessionDetailScreen() {
   );
 
   // Live expected items for currently selected area
-  const { data: expectedItems } = trpc.sessions.expectedItemsForArea.useQuery(
+  const { data: expectedItemsForArea } = trpc.sessions.expectedItemsForArea.useQuery(
     {
       locationId: selectedLocationId!,
       barAreaId: selectedAreaId!,
       subAreaId: selectedSubAreaId ?? undefined,
     },
-    { enabled: !!selectedLocationId && !!selectedAreaId }
+    { enabled: !!selectedLocationId && !!selectedAreaId && !fullLocationMode }
   );
+
+  // Full location expected items (all active items)
+  const { data: expectedItemsForLocation } = trpc.sessions.expectedItemsForLocation.useQuery(
+    { locationId: selectedLocationId! },
+    { enabled: !!selectedLocationId && fullLocationMode }
+  );
+
+  const expectedItems = fullLocationMode ? expectedItemsForLocation : expectedItemsForArea;
 
   // Compute which expected items have been counted in this session
   const expectedChecklist = useMemo(() => {
     if (!expectedItems || !session?.lines) return [];
+    if (fullLocationMode) {
+      // In full location mode, match by both itemId + subAreaId
+      // so Bud Light in Walk-In and Bud Light in Main Bar are tracked separately
+      const countedPairs = new Set(
+        session.lines.map((l: any) => `${l.inventoryItemId}|${l.subArea?.id ?? ""}`)
+      );
+      return expectedItems.map((item: any) => ({
+        ...item,
+        counted: countedPairs.has(`${item.inventoryItemId}|${item.subAreaId ?? ""}`),
+      }));
+    }
+    // Area mode: just check by itemId
     const countedItemIds = new Set(
-      session.lines
-        .filter((l: any) =>
-          selectedSubAreaId
-            ? l.subArea?.id === selectedSubAreaId
-            : l.subArea?.barArea?.id === selectedAreaId
-        )
-        .map((l: any) => l.inventoryItemId)
+      session.lines.map((l: any) => l.inventoryItemId)
     );
     return expectedItems.map((item: any) => ({
       ...item,
       counted: countedItemIds.has(item.inventoryItemId),
     }));
-  }, [expectedItems, session?.lines, selectedAreaId, selectedSubAreaId]);
+  }, [expectedItems, session?.lines, fullLocationMode]);
 
   const expectedTotal = expectedChecklist.length;
   const expectedCounted = expectedChecklist.filter((i: any) => i.counted).length;
 
-  function handleExpectedItemTap(item: { inventoryItemId: string; name: string; type: string }) {
+  function handleExpectedItemTap(item: { inventoryItemId: string; name: string; type: string; subAreaId?: string }) {
     if (!areaSelected) return;
-    const params = `subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}&itemId=${item.inventoryItemId}`;
+    // In full location mode, use the item's own subAreaId
+    const subAreaForItem = fullLocationMode ? (item.subAreaId ?? "") : (selectedSubAreaId ?? "");
+    const params = `subAreaId=${subAreaForItem}&areaName=${encodeURIComponent(areaLabel)}&itemId=${item.inventoryItemId}`;
 
     if (item.type === "liquor" || item.type === "wine") {
       Alert.alert(item.name, "How do you want to count this?", [
@@ -296,12 +313,14 @@ export default function SessionDetailScreen() {
   }
 
   const isOpen = !session.endedTs;
-  const areaSelected = !!selectedSubAreaId || (!!selectedAreaId && selectedArea?.subAreas.length === 0);
-  const areaLabel = selectedArea
-    ? selectedSubArea
-      ? `${selectedArea.name} — ${selectedSubArea.name}`
-      : selectedArea.name
-    : "Select Area";
+  const areaSelected = fullLocationMode || !!selectedSubAreaId || (!!selectedAreaId && selectedArea?.subAreas.length === 0);
+  const areaLabel = fullLocationMode
+    ? "Full Location"
+    : selectedArea
+      ? selectedSubArea
+        ? `${selectedArea.name} — ${selectedSubArea.name}`
+        : selectedArea.name
+      : "Select Area";
   const lineCount = session.lines.length;
 
   return (
@@ -322,59 +341,86 @@ export default function SessionDetailScreen() {
         {/* Area Picker */}
         {isOpen && areas && areas.length > 0 && (
           <View style={styles.areaPicker}>
-            <Text style={styles.areaPickerLabel}>Count Area</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.areaPills}
-            >
-              {(areas as BarArea[]).map((area) => (
-                <TouchableOpacity
-                  key={area.id}
-                  style={[
-                    styles.areaPill,
-                    selectedAreaId === area.id && styles.areaPillActive,
-                  ]}
-                  onPress={() => handleAreaSelect(area)}
-                >
-                  <Text
-                    style={[
-                      styles.areaPillText,
-                      selectedAreaId === area.id && styles.areaPillTextActive,
-                    ]}
-                  >
-                    {area.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {selectedArea && selectedArea.subAreas.length > 0 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.subAreaPills}
+            <View style={styles.areaPickerHeader}>
+              <Text style={styles.areaPickerLabel}>Count Area</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  if (fullLocationMode) {
+                    setFullLocationMode(false);
+                    const first = areas[0] as BarArea;
+                    setSelectedAreaId(first.id);
+                    if (first.subAreas.length > 0) {
+                      setSelectedSubAreaId(first.subAreas[0].id);
+                    }
+                  } else {
+                    setFullLocationMode(true);
+                    setSelectedAreaId(null);
+                    setSelectedSubAreaId(null);
+                  }
+                }}
               >
-                {selectedArea.subAreas.map((sa: { id: string; name: string }) => (
-                  <TouchableOpacity
-                    key={sa.id}
-                    style={[
-                      styles.subAreaPill,
-                      selectedSubAreaId === sa.id && styles.subAreaPillActive,
-                    ]}
-                    onPress={() => setSelectedSubAreaId(sa.id)}
-                  >
-                    <Text
+                <Text style={[styles.fullLocationLink, fullLocationMode && styles.fullLocationLinkActive]}>
+                  {fullLocationMode ? "Select Area" : "Full Location"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {!fullLocationMode && (
+              <>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.areaPills}
+                >
+                  {(areas as BarArea[]).map((area) => (
+                    <TouchableOpacity
+                      key={area.id}
                       style={[
-                        styles.subAreaPillText,
-                        selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
+                        styles.areaPill,
+                        selectedAreaId === area.id && styles.areaPillActive,
                       ]}
+                      onPress={() => handleAreaSelect(area)}
                     >
-                      {sa.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+                      <Text
+                        style={[
+                          styles.areaPillText,
+                          selectedAreaId === area.id && styles.areaPillTextActive,
+                        ]}
+                      >
+                        {area.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                {selectedArea && selectedArea.subAreas.length > 0 && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.subAreaPills}
+                  >
+                    {selectedArea.subAreas.map((sa: { id: string; name: string }) => (
+                      <TouchableOpacity
+                        key={sa.id}
+                        style={[
+                          styles.subAreaPill,
+                          selectedSubAreaId === sa.id && styles.subAreaPillActive,
+                        ]}
+                        onPress={() => setSelectedSubAreaId(sa.id)}
+                      >
+                        <Text
+                          style={[
+                            styles.subAreaPillText,
+                            selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
+                          ]}
+                        >
+                          {sa.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+              </>
             )}
 
             {areaSelected && (
@@ -428,33 +474,78 @@ export default function SessionDetailScreen() {
         {isOpen && expectedTotal > 0 && (
           <View style={styles.expectedSection}>
             <Text style={styles.expectedTitle}>
-              Expected in {areaLabel} — {expectedCounted}/{expectedTotal}
+              Expected{fullLocationMode ? " at Location" : ` in ${areaLabel}`} — {expectedCounted}/{expectedTotal}
             </Text>
-            {expectedChecklist.map((item: any) =>
-              item.counted ? (
-                <View
-                  key={item.inventoryItemId}
-                  style={[styles.expectedRow, styles.expectedRowCounted]}
-                >
-                  <View style={[styles.expectedCheck, styles.expectedCheckDone]}>
-                    <Text style={styles.expectedCheckmark}>✓</Text>
+            {fullLocationMode ? (
+              // Group by area name for full location view
+              (() => {
+                const groups = new Map<string, typeof expectedChecklist>();
+                for (const item of expectedChecklist) {
+                  const area = (item as any).subAreaName ?? "Unassigned";
+                  if (!groups.has(area)) groups.set(area, []);
+                  groups.get(area)!.push(item);
+                }
+                return Array.from(groups.entries()).map(([area, items]) => (
+                  <View key={area}>
+                    <Text style={styles.expectedGroupHeader}>{area}</Text>
+                    {items.map((item: any) => {
+                      const key = `${item.inventoryItemId}|${item.subAreaId ?? ""}`;
+                      return item.counted ? (
+                        <View
+                          key={key}
+                          style={[styles.expectedRow, styles.expectedRowCounted]}
+                        >
+                          <View style={[styles.expectedCheck, styles.expectedCheckDone]}>
+                            <Text style={styles.expectedCheckmark}>✓</Text>
+                          </View>
+                          <Text style={[styles.expectedName, styles.expectedNameCounted]}>
+                            {item.name}
+                          </Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          key={key}
+                          style={styles.expectedRow}
+                          onPress={() => handleExpectedItemTap(item)}
+                        >
+                          <View style={styles.expectedCheck} />
+                          <Text style={styles.expectedName}>{item.name}</Text>
+                          <Text style={styles.expectedType}>
+                            {item.type.replace("_", " ")}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                  <Text style={[styles.expectedName, styles.expectedNameCounted]}>
-                    {item.name}
-                  </Text>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  key={item.inventoryItemId}
-                  style={styles.expectedRow}
-                  onPress={() => handleExpectedItemTap(item)}
-                >
-                  <View style={styles.expectedCheck} />
-                  <Text style={styles.expectedName}>{item.name}</Text>
-                  <Text style={styles.expectedType}>
-                    {item.type.replace("_", " ")}
-                  </Text>
-                </TouchableOpacity>
+                ));
+              })()
+            ) : (
+              expectedChecklist.map((item: any) =>
+                item.counted ? (
+                  <View
+                    key={item.inventoryItemId}
+                    style={[styles.expectedRow, styles.expectedRowCounted]}
+                  >
+                    <View style={[styles.expectedCheck, styles.expectedCheckDone]}>
+                      <Text style={styles.expectedCheckmark}>✓</Text>
+                    </View>
+                    <Text style={[styles.expectedName, styles.expectedNameCounted]}>
+                      {item.name}
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    key={item.inventoryItemId}
+                    style={styles.expectedRow}
+                    onPress={() => handleExpectedItemTap(item)}
+                  >
+                    <View style={styles.expectedCheck} />
+                    <Text style={styles.expectedName}>{item.name}</Text>
+                    <Text style={styles.expectedType}>
+                      {item.type.replace("_", " ")}
+                    </Text>
+                  </TouchableOpacity>
+                )
               )
             )}
           </View>
@@ -706,13 +797,26 @@ const styles = StyleSheet.create({
 
   // Area picker
   areaPicker: { marginBottom: 16 },
+  areaPickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   areaPickerLabel: {
     color: "#8899AA",
     fontSize: 13,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 8,
+  },
+  fullLocationLink: {
+    color: "#8899AA",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  fullLocationLinkActive: {
+    color: "#E9B44C",
   },
   areaPills: { flexDirection: "row", marginBottom: 8 },
   areaPill: {
@@ -801,6 +905,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#2BA8A0",
   },
   expectedCheckmark: { color: "#fff", fontSize: 12, fontWeight: "bold" },
+  expectedGroupHeader: {
+    color: "#E9B44C",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 10,
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   expectedName: { color: "#EAF0FF", fontSize: 14, flex: 1 },
   expectedType: {
     color: "#5A6A7A",
