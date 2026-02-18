@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     directToArtistAllowed: false,
     proofPhotoRequired: true,
     proofPhotoRetentionDays: 90,
+    voiceCommandsEnabled: false,
   },
 };
 

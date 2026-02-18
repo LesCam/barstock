@@ -3,9 +3,14 @@ import { Tabs } from "expo-router";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import LocationPicker from "@/components/LocationPicker";
 import { VoiceButton } from "@/components/VoiceButton";
+import { trpc } from "@/lib/trpc";
 
 export default function TabsLayout() {
   const { user, selectedLocationId } = useAuth();
+  const { data: capabilities } = trpc.settings.capabilities.useQuery(
+    { businessId: user?.businessId ?? "" },
+    { enabled: !!user?.businessId, staleTime: 5 * 60 * 1000 }
+  );
 
   // Hooks must be called before early returns (Rules of Hooks)
   const canAccessSessions = usePermission("canAccessSessions");
@@ -67,7 +72,7 @@ export default function TabsLayout() {
           options={{ title: "Settings", tabBarLabel: "Settings" }}
         />
       </Tabs>
-      <VoiceButton />
+      {capabilities?.voiceCommandsEnabled && <VoiceButton />}
     </View>
   );
 }

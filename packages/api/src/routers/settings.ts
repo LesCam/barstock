@@ -4,6 +4,15 @@ import { SettingsService } from "../services/settings.service";
 import { AuditService } from "../services/audit.service";
 
 export const settingsRouter = router({
+  capabilities: protectedProcedure
+    .use(requireBusinessAccess())
+    .input(settingsGetSchema)
+    .query(async ({ ctx, input }) => {
+      const service = new SettingsService(ctx.prisma);
+      const settings = await service.getSettings(input.businessId);
+      return settings.capabilities;
+    }),
+
   get: protectedProcedure
     .use(requireRole("business_admin"))
     .use(requireBusinessAccess())

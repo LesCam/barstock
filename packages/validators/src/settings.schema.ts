@@ -9,6 +9,7 @@ export const capabilityTogglesSchema = z.object({
   directToArtistAllowed: z.boolean().default(false),
   proofPhotoRequired: z.boolean().default(true),
   proofPhotoRetentionDays: z.number().int().min(0).default(90),
+  voiceCommandsEnabled: z.boolean().default(false),
 });
 
 export type CapabilityToggles = z.infer<typeof capabilityTogglesSchema>;

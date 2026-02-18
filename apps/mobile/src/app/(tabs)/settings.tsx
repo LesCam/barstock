@@ -9,6 +9,11 @@ export default function SettingsTab() {
   const canManageTareWeights = usePermission("canManageTareWeights");
   const canAccessScale = usePermission("canAccessScale");
 
+  const { data: capabilities } = trpc.settings.capabilities.useQuery(
+    { businessId: user?.businessId ?? "" },
+    { enabled: !!user?.businessId, staleTime: 5 * 60 * 1000 }
+  );
+
   const { data: locations } = trpc.locations.listByBusiness.useQuery(
     { businessId: user?.businessId ?? "" },
     { enabled: !!user?.businessId && (user?.locationIds.length ?? 0) > 1 }
@@ -62,6 +67,15 @@ export default function SettingsTab() {
       )}
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Voice Commands</Text>
+        <View style={styles.card}>
+          <Text style={capabilities?.voiceCommandsEnabled ? styles.enabledText : styles.disabledText}>
+            {capabilities?.voiceCommandsEnabled ? "Enabled" : "Not available"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>About</Text>
         <View style={styles.card}>
           <Text style={styles.rowText}>BarStock v1.0.0</Text>
@@ -89,4 +103,6 @@ const styles = StyleSheet.create({
   rowText: { fontSize: 15, color: "#EAF0FF" },
   switchText: { fontSize: 15, color: "#E9B44C", fontWeight: "500" },
   logoutText: { fontSize: 15, color: "#dc2626", fontWeight: "500" },
+  enabledText: { fontSize: 15, color: "#22c55e", fontWeight: "500" },
+  disabledText: { fontSize: 15, color: "#5A6A7A" },
 });

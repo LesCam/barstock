@@ -21,6 +21,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
   discountApprovalRule: "Discount Approval Rule",
   directToArtistAllowed: "Direct-to-Artist Allowed",
   proofPhotoRequired: "Proof Photo Required",
+  voiceCommandsEnabled: "Voice Commands",
 };
 
 export default function SettingsPage() {
