@@ -7,7 +7,7 @@ export default function SessionsTab() {
   const { selectedLocationId } = useAuth();
   const { data: sessions, isLoading } = trpc.sessions.list.useQuery(
     { locationId: selectedLocationId!, openOnly: false },
-    { enabled: !!selectedLocationId }
+    { enabled: !!selectedLocationId, refetchOnMount: "always" }
   );
 
   return (
@@ -37,7 +37,7 @@ export default function SessionsTab() {
                 </Text>
               </View>
               <Text style={styles.cardDate}>
-                {new Date(item.startedTs).toLocaleDateString()}
+                {new Date(item.startedTs).toLocaleString()}
               </Text>
               <Text style={styles.cardLines}>{item._count.lines} items counted</Text>
             </TouchableOpacity>
@@ -50,27 +50,27 @@ export default function SessionsTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f9fafb", padding: 16 },
+  container: { flex: 1, backgroundColor: "#0B1623", padding: 16 },
   newButton: {
-    backgroundColor: "#2563eb", borderRadius: 8,
+    backgroundColor: "#E9B44C", borderRadius: 8,
     padding: 14, alignItems: "center", marginBottom: 16,
   },
-  newButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  loading: { textAlign: "center", color: "#999", marginTop: 40 },
+  newButtonText: { color: "#0B1623", fontSize: 16, fontWeight: "700" },
+  loading: { textAlign: "center", color: "#5A6A7A", marginTop: 40 },
   card: {
-    backgroundColor: "#fff", borderRadius: 8, padding: 16,
-    marginBottom: 12, borderWidth: 1, borderColor: "#e5e7eb",
+    backgroundColor: "#16283F", borderRadius: 8, padding: 16,
+    marginBottom: 12, borderWidth: 1, borderColor: "#1E3550",
   },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  cardTitle: { fontSize: 16, fontWeight: "600", textTransform: "capitalize" },
-  cardDate: { fontSize: 12, color: "#666", marginTop: 4 },
-  cardLines: { fontSize: 13, color: "#444", marginTop: 4 },
+  cardTitle: { fontSize: 16, fontWeight: "600", color: "#EAF0FF", textTransform: "capitalize" },
+  cardDate: { fontSize: 12, color: "#8899AA", marginTop: 4 },
+  cardLines: { fontSize: 13, color: "#5A6A7A", marginTop: 4 },
   badgeOpen: {
-    backgroundColor: "#dbeafe", color: "#1d4ed8",
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, fontSize: 12,
+    backgroundColor: "#1E3550", color: "#E9B44C",
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, fontSize: 12, overflow: "hidden",
   },
   badgeClosed: {
-    backgroundColor: "#f3f4f6", color: "#6b7280",
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, fontSize: 12,
+    backgroundColor: "#1E3550", color: "#5A6A7A",
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, fontSize: 12, overflow: "hidden",
   },
 });
