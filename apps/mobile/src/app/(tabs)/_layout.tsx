@@ -1,6 +1,8 @@
+import { View } from "react-native";
 import { Tabs } from "expo-router";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import LocationPicker from "@/components/LocationPicker";
+import { VoiceButton } from "@/components/VoiceButton";
 
 export default function TabsLayout() {
   const { user, selectedLocationId } = useAuth();
@@ -17,52 +19,55 @@ export default function TabsLayout() {
   }
 
   return (
-    <Tabs
-      screenOptions={{
-        headerStyle: { backgroundColor: "#0B1623" },
-        headerTintColor: "#EAF0FF",
-        headerTitleStyle: { fontWeight: "600" },
-        tabBarStyle: { backgroundColor: "#0B1623", borderTopColor: "#1E3550" },
-        tabBarActiveTintColor: "#E9B44C",
-        tabBarInactiveTintColor: "#5A6A7A",
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Sessions",
-          tabBarLabel: "Sessions",
-          href: canAccessSessions ? undefined : null,
+    <View style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={{
+          headerStyle: { backgroundColor: "#0B1623" },
+          headerTintColor: "#EAF0FF",
+          headerTitleStyle: { fontWeight: "600" },
+          tabBarStyle: { backgroundColor: "#0B1623", borderTopColor: "#1E3550" },
+          tabBarActiveTintColor: "#E9B44C",
+          tabBarInactiveTintColor: "#5A6A7A",
         }}
-      />
-      <Tabs.Screen
-        name="art"
-        options={{
-          title: "Art",
-          tabBarLabel: "Art",
-          href: canAccessArt ? undefined : null,
-        }}
-      />
-      <Tabs.Screen
-        name="inventory"
-        options={{
-          title: "Inventory",
-          tabBarLabel: "Inventory",
-          href: canAccessInventory ? undefined : null,
-        }}
-      />
-      <Tabs.Screen
-        name="guide"
-        options={{
-          title: "Product Guide",
-          tabBarLabel: "Guide",
-          href: canAccessGuide ? undefined : null,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{ title: "Settings", tabBarLabel: "Settings" }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Sessions",
+            tabBarLabel: "Sessions",
+            href: canAccessSessions ? undefined : null,
+          }}
+        />
+        <Tabs.Screen
+          name="art"
+          options={{
+            title: "Art",
+            tabBarLabel: "Art",
+            href: canAccessArt ? undefined : null,
+          }}
+        />
+        <Tabs.Screen
+          name="inventory"
+          options={{
+            title: "Inventory",
+            tabBarLabel: "Inventory",
+            href: canAccessInventory ? undefined : null,
+          }}
+        />
+        <Tabs.Screen
+          name="guide"
+          options={{
+            title: "Product Guide",
+            tabBarLabel: "Guide",
+            href: canAccessGuide ? undefined : null,
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{ title: "Settings", tabBarLabel: "Settings" }}
+        />
+      </Tabs>
+      <VoiceButton />
+    </View>
   );
 }

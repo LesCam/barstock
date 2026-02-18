@@ -13,6 +13,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "BarStock uses the camera to scan barcodes for inventory counting.",
         "NSBluetoothAlwaysUsageDescription": "BarStock connects to Bluetooth scales for bottle weighing.",
+        "NSMicrophoneUsageDescription": "BarStock uses the microphone for voice commands.",
+        "NSSpeechRecognitionUsageDescription": "BarStock uses speech recognition for voice commands.",
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -45,7 +47,11 @@
         {
           "neverForLocation": true
         }
-      ]
+      ],
+      ["expo-speech-recognition", {
+        "microphonePermission": "BarStock uses the microphone for voice commands.",
+        "speechRecognitionPermission": "BarStock uses speech recognition for voice commands."
+      }]
     ],
     "extra": {
       "router": {},

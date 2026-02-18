@@ -8,14 +8,26 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
 import { getMappingForDevice, setMappingForDevice } from "@/lib/scale/scale-mappings";
 import { useScaleHeartbeat } from "@/lib/scale/use-scale-heartbeat";
 import { ScaleProfilePicker } from "@/components/ScaleProfilePicker";
 import { useAuth } from "@/lib/auth-context";
+import { trpc } from "@/lib/trpc";
 
 export default function ConnectScaleSettingsScreen() {
   const { selectedLocationId } = useAuth();
+  const { profileId: voiceProfileId } = useLocalSearchParams<{ profileId?: string }>();
+
+  // Look up the voice-selected profile name
+  const { data: profiles } = trpc.scaleProfiles.list.useQuery(
+    { locationId: selectedLocationId! },
+    { enabled: !!selectedLocationId && !!voiceProfileId },
+  );
+  const voiceProfile = voiceProfileId
+    ? profiles?.find((p) => p.id === voiceProfileId)
+    : undefined;
 
   const [scanning, setScanning] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; name: string }>>(
@@ -84,6 +96,11 @@ export default function ConnectScaleSettingsScreen() {
       if (existing) {
         setProfileId(existing.profileId);
         setProfileName(existing.profileName || null);
+      } else if (voiceProfile) {
+        // Voice command pre-selected a profile — auto-assign it
+        await setMappingForDevice(deviceId, voiceProfile.id, voiceProfile.name);
+        setProfileId(voiceProfile.id);
+        setProfileName(voiceProfile.name);
       } else if (selectedLocationId) {
         // No mapping — show picker
         setPendingDeviceId(deviceId);
@@ -97,7 +114,7 @@ export default function ConnectScaleSettingsScreen() {
     } finally {
       setConnecting(null);
     }
-  }, [selectedLocationId]);
+  }, [selectedLocationId, voiceProfile]);
 
   const handleProfileSelect = useCallback(async (selectedProfileId: string, selectedProfileName: string) => {
     if (pendingDeviceId) {
@@ -145,6 +162,14 @@ export default function ConnectScaleSettingsScreen() {
         <Text style={styles.subtitle}>
           Pair a Bluetooth supported scale to weigh bottles
         </Text>
+
+        {voiceProfile && !connected && (
+          <View style={styles.voiceBanner}>
+            <Text style={styles.voiceBannerText}>
+              Voice command: will connect as "{voiceProfile.name}"
+            </Text>
+          </View>
+        )}
 
         {/* Connected Scale Card */}
         {connected && (
@@ -404,5 +429,18 @@ const styles = StyleSheet.create({
     color: "#8899AA",
     fontSize: 14,
     textDecorationLine: "underline",
+  },
+  voiceBanner: {
+    backgroundColor: "#1E3550",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: "#E9B44C",
+  },
+  voiceBannerText: {
+    color: "#E9B44C",
+    fontSize: 14,
+    fontWeight: "500",
   },
 });
