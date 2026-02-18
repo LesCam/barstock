@@ -10,6 +10,9 @@ export default function TabsLayout() {
     return <LocationPicker />;
   }
 
+  const role = user?.highestRole;
+  const isCuratorOnly = role === "curator";
+
   return (
     <Tabs
       screenOptions={{
@@ -23,7 +26,11 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{ title: "Sessions", tabBarLabel: "Sessions" }}
+        options={{
+          title: "Sessions",
+          tabBarLabel: "Sessions",
+          href: isCuratorOnly ? null : undefined,
+        }}
       />
       <Tabs.Screen
         name="art"
@@ -31,7 +38,11 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="inventory"
-        options={{ title: "Inventory", tabBarLabel: "Inventory" }}
+        options={{
+          title: "Inventory",
+          tabBarLabel: "Inventory",
+          href: isCuratorOnly ? null : undefined,
+        }}
       />
       <Tabs.Screen
         name="guide"
