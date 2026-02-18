@@ -29,14 +29,17 @@ function itemsLabel(type: string, count: number) {
   return `${count} item${count !== 1 ? "s" : ""} counted`;
 }
 
+const INITIAL_LIMIT = 10;
+
 export default function SessionsTab() {
   const { selectedLocationId } = useAuth();
   const [creating, setCreating] = useState(false);
+  const [limit, setLimit] = useState(INITIAL_LIMIT);
 
   const utils = trpc.useUtils();
 
   const { data: sessions, isLoading } = trpc.sessions.list.useQuery(
-    { locationId: selectedLocationId!, openOnly: false },
+    { locationId: selectedLocationId!, openOnly: false, limit },
     { enabled: !!selectedLocationId, refetchOnMount: "always" }
   );
 
@@ -183,6 +186,16 @@ export default function SessionsTab() {
                 </Text>
               </TouchableOpacity>
             )}
+            ListFooterComponent={
+              closedSessions.length >= limit ? (
+                <TouchableOpacity
+                  style={styles.showMore}
+                  onPress={() => setLimit((prev) => prev + 20)}
+                >
+                  <Text style={styles.showMoreText}>Show More</Text>
+                </TouchableOpacity>
+              ) : null
+            }
             contentContainerStyle={{ paddingBottom: 20 }}
           />
         </>
@@ -289,5 +302,14 @@ const styles = StyleSheet.create({
   badgeClosed: {
     backgroundColor: "#1E3550", color: "#5A6A7A",
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, fontSize: 12, overflow: "hidden",
+  },
+  showMore: {
+    alignItems: "center",
+    paddingVertical: 14,
+  },
+  showMoreText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#42A5F5",
   },
 });

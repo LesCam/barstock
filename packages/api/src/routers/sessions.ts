@@ -25,6 +25,7 @@ export const sessionsRouter = router({
     .input(z.object({
       locationId: z.string().uuid(),
       openOnly: z.boolean().default(false),
+      limit: z.number().int().min(1).max(500).optional(),
     }))
     .query(({ ctx, input }) => {
       // Staff see only their own sessions; manager+ see all
@@ -37,6 +38,7 @@ export const sessionsRouter = router({
           ...(input.openOnly && { endedTs: null }),
           ...(!isManager && { createdBy: ctx.user.userId }),
         },
+        ...(input.limit && { take: input.limit }),
         include: {
           createdByUser: { select: { email: true } },
           closedByUser: { select: { email: true } },

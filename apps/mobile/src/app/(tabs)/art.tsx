@@ -54,7 +54,7 @@ export default function ArtTab() {
   const { data, isLoading, refetch } = trpc.artworks.list.useQuery(
     {
       businessId: user!.businessId,
-      status: selectedStatus as any,
+      status: selectedStatus ?? undefined,
       limit: 50,
     },
     { enabled: !!user?.businessId }
