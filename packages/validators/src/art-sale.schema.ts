@@ -13,6 +13,7 @@ export const artSaleCreateSchema = z.object({
 export const artSaleListSchema = z.object({
   businessId: z.string().uuid(),
   artistId: z.string().uuid().optional(),
+  artworkId: z.string().uuid().optional(),
   cursor: z.string().uuid().optional(),
   limit: z.number().int().min(1).max(100).default(50),
 });

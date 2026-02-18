@@ -180,11 +180,11 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 function SaleInfo({ artworkId, businessId }: { artworkId: string; businessId: string }) {
   const { data } = trpc.artSales.list.useQuery(
-    { businessId, limit: 1 },
-    { enabled: !!businessId }
+    { businessId, artworkId, limit: 1 },
+    { enabled: !!businessId && !!artworkId }
   );
 
-  const sale = data?.items?.find((s: any) => s.artworkId === artworkId);
+  const sale = data?.items?.[0];
   if (!sale) return null;
 
   return (

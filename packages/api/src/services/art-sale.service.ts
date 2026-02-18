@@ -80,10 +80,11 @@ export class ArtSaleService {
   }
 
   async list(params: ArtSaleListInput) {
-    const { businessId, artistId, cursor, limit } = params;
+    const { businessId, artistId, artworkId, cursor, limit } = params;
 
     const where: Record<string, unknown> = { businessId };
     if (artistId) where.artistId = artistId;
+    if (artworkId) where.artworkId = artworkId;
 
     const items = await this.prisma.artSale.findMany({
       where,
