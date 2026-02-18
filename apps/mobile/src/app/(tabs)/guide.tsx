@@ -101,6 +101,7 @@ export default function GuideTab() {
         contentContainerStyle={styles.grid}
         renderItem={({ item }: { item: any }) => {
           const imgUrl = resolveImageUrl(item.imageUrl);
+          const prices = Array.isArray(item.prices) ? (item.prices as any[]) : [];
           return (
             <TouchableOpacity
               style={[styles.card, { width: CARD_WIDTH }]}
@@ -128,11 +129,11 @@ export default function GuideTab() {
                 <Text style={styles.categoryLabel} numberOfLines={1}>
                   {item.category.name}
                 </Text>
-                {Array.isArray(item.prices) && (item.prices as { label: string; price: number }[]).length > 0 && (
+                {prices.length > 0 && (
                   <Text style={styles.priceLabel}>
-                    {(item.prices as { label: string; price: number }[]).length === 1
-                      ? `$${Number((item.prices as any[])[0].price).toFixed(2)}`
-                      : `$${Number(Math.min(...(item.prices as any[]).map((p: any) => p.price))).toFixed(2)}+`}
+                    {prices.length === 1
+                      ? `$${Number(prices[0].price).toFixed(2)}`
+                      : `$${Number(Math.min(...prices.map((p: any) => p.price))).toFixed(2)}+`}
                   </Text>
                 )}
               </View>

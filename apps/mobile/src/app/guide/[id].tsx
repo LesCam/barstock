@@ -39,6 +39,7 @@ export default function GuideItemDetail() {
   }
 
   const imgUrl = resolveImageUrl(item.imageUrl);
+  const prices = Array.isArray(item.prices) ? (item.prices as { label: string; price: number }[]) : [];
 
   return (
     <ScrollView style={styles.container}>
@@ -70,9 +71,9 @@ export default function GuideItemDetail() {
           </Text>
         </View>
 
-        {Array.isArray(item.prices) && (item.prices as { label: string; price: number }[]).length > 0 && (
+        {prices.length > 0 && (
           <View style={styles.pricesRow}>
-            {(item.prices as { label: string; price: number }[]).map((p, i) => (
+            {prices.map((p, i) => (
               <View key={i} style={styles.priceChip}>
                 <Text style={styles.priceChipLabel}>{p.label}</Text>
                 <Text style={styles.priceChipValue}>${Number(p.price).toFixed(2)}</Text>
@@ -108,7 +109,7 @@ export default function GuideItemDetail() {
                 <Text style={styles.detailValue}>{item.region}</Text>
               </View>
             ) : null}
-            {item.vintage != null && (
+            {item.vintage != null ? (
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Vintage</Text>
                 <Text style={styles.detailValue}>{item.vintage}</Text>
