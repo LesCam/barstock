@@ -8,7 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 
@@ -32,7 +32,11 @@ function itemsLabel(type: string, count: number) {
 const INITIAL_LIMIT = 10;
 
 export default function SessionsTab() {
-  const { selectedLocationId } = useAuth();
+  const { user, selectedLocationId } = useAuth();
+
+  if (user?.highestRole === "curator") {
+    return <Redirect href="/(tabs)/art" />;
+  }
   const [creating, setCreating] = useState(false);
   const [limit, setLimit] = useState(INITIAL_LIMIT);
 
