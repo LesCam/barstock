@@ -4,8 +4,9 @@ import { useAuth, usePermission } from "@/lib/auth-context";
 import LocationPicker from "@/components/LocationPicker";
 import { VoiceButton } from "@/components/VoiceButton";
 import { trpc } from "@/lib/trpc";
+import { VoicePreferenceProvider, useVoicePreference } from "@/lib/voice-preference";
 
-export default function TabsLayout() {
+function TabsLayout() {
   const { user, selectedLocationId } = useAuth();
   const { data: capabilities } = trpc.settings.capabilities.useQuery(
     { businessId: user?.businessId ?? "" },
@@ -17,6 +18,8 @@ export default function TabsLayout() {
   const canAccessArt = usePermission("canAccessArt");
   const canAccessInventory = usePermission("canAccessInventory");
   const canAccessGuide = usePermission("canAccessGuide");
+
+  const { voiceUserEnabled } = useVoicePreference();
 
   // Multi-location user without a selection — show picker instead of tabs
   if (user && user.locationIds.length > 1 && !selectedLocationId) {
@@ -72,7 +75,17 @@ export default function TabsLayout() {
           options={{ title: "Settings", tabBarLabel: "Settings" }}
         />
       </Tabs>
-      {capabilities?.voiceCommandsEnabled && <VoiceButton />}
+      {capabilities?.voiceCommandsEnabled && voiceUserEnabled && <VoiceButton />}
     </View>
   );
 }
+
+function TabsLayoutWrapper() {
+  return (
+    <VoicePreferenceProvider>
+      <TabsLayout />
+    </VoicePreferenceProvider>
+  );
+}
+
+export default TabsLayoutWrapper;

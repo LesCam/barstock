@@ -1,13 +1,15 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, Switch, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
+import { useVoicePreference } from "@/lib/voice-preference";
 
 export default function SettingsTab() {
   const router = useRouter();
   const { user, signOut, selectedLocationId, selectLocation } = useAuth();
   const canManageTareWeights = usePermission("canManageTareWeights");
   const canAccessScale = usePermission("canAccessScale");
+  const { voiceUserEnabled, setVoiceUserEnabled } = useVoicePreference();
 
   const { data: capabilities } = trpc.settings.capabilities.useQuery(
     { businessId: user?.businessId ?? "" },
@@ -68,11 +70,21 @@ export default function SettingsTab() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Voice Commands</Text>
-        <View style={styles.card}>
-          <Text style={capabilities?.voiceCommandsEnabled ? styles.enabledText : styles.disabledText}>
-            {capabilities?.voiceCommandsEnabled ? "Enabled" : "Not available"}
-          </Text>
-        </View>
+        {capabilities?.voiceCommandsEnabled ? (
+          <View style={[styles.card, styles.toggleRow]}>
+            <Text style={styles.rowText}>Voice Commands</Text>
+            <Switch
+              value={voiceUserEnabled}
+              onValueChange={setVoiceUserEnabled}
+              trackColor={{ false: "#1E3550", true: "#E9B44C" }}
+              thumbColor="#EAF0FF"
+            />
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.disabledText}>Not available</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -103,6 +115,6 @@ const styles = StyleSheet.create({
   rowText: { fontSize: 15, color: "#EAF0FF" },
   switchText: { fontSize: 15, color: "#E9B44C", fontWeight: "500" },
   logoutText: { fontSize: 15, color: "#dc2626", fontWeight: "500" },
-  enabledText: { fontSize: 15, color: "#22c55e", fontWeight: "500" },
+  toggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   disabledText: { fontSize: 15, color: "#5A6A7A" },
 });
