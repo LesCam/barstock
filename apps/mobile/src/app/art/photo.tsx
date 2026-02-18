@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
 import { useRef, useState } from "react";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -11,41 +12,46 @@ export default function ArtworkPhotoScreen() {
   const utils = trpc.useUtils();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
-  const [capturing, setCapturing] = useState(false);
+  const [preview, setPreview] = useState<{ uri: string; base64: string } | null>(null);
 
   const addPhoto = trpc.artworks.addPhoto.useMutation({
     onSuccess: () => {
       utils.artworks.getById.invalidate({ id: artworkId });
+      utils.artworks.list.invalidate();
       router.back();
     },
     onError: (err) => {
-      setCapturing(false);
       Alert.alert("Error", err.message);
     },
   });
 
   async function handleCapture() {
-    if (!cameraRef.current || capturing) return;
-    setCapturing(true);
+    if (!cameraRef.current) return;
 
     try {
       const photo = await cameraRef.current.takePictureAsync({ base64: true });
-      if (!photo?.base64) {
+      if (!photo?.base64 || !photo?.uri) {
         Alert.alert("Error", "Failed to capture photo.");
-        setCapturing(false);
         return;
       }
-
-      addPhoto.mutate({
-        businessId: user!.businessId,
-        artworkId: artworkId!,
-        base64Data: photo.base64,
-        filename: `artwork-${artworkId}-${Date.now()}.jpg`,
-      });
+      setPreview({ uri: photo.uri, base64: photo.base64 });
     } catch {
       Alert.alert("Error", "Failed to capture photo.");
-      setCapturing(false);
     }
+  }
+
+  function handleRetake() {
+    setPreview(null);
+  }
+
+  function handleUsePhoto() {
+    if (!preview) return;
+    addPhoto.mutate({
+      businessId: user!.businessId,
+      artworkId: artworkId!,
+      base64Data: preview.base64,
+      filename: `artwork-${artworkId}-${Date.now()}.jpg`,
+    });
   }
 
   if (!permission) return null;
@@ -66,26 +72,58 @@ export default function ArtworkPhotoScreen() {
     );
   }
 
-  const busy = capturing || addPhoto.isPending;
+  // Preview mode — show captured photo with Use / Retake
+  if (preview) {
+    return (
+      <View style={styles.container}>
+        <Image
+          source={{ uri: preview.uri }}
+          style={styles.previewImage}
+          contentFit="contain"
+        />
 
+        <View style={styles.previewControls}>
+          <TouchableOpacity
+            style={styles.retakeButton}
+            onPress={handleRetake}
+            disabled={addPhoto.isPending}
+          >
+            <Text style={styles.retakeText}>Retake</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.usePhotoButton,
+              addPhoto.isPending && styles.usePhotoButtonDisabled,
+            ]}
+            onPress={handleUsePhoto}
+            disabled={addPhoto.isPending}
+            activeOpacity={0.7}
+          >
+            {addPhoto.isPending ? (
+              <ActivityIndicator color="#0B1623" />
+            ) : (
+              <Text style={styles.usePhotoText}>Use Photo</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Camera mode
   return (
     <View style={styles.container}>
       <CameraView ref={cameraRef} style={styles.camera} facing="back" />
 
       <View style={styles.controls}>
-        {busy ? (
-          <View style={styles.captureButton}>
-            <ActivityIndicator color="#0B1623" />
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.captureButton}
-            onPress={handleCapture}
-            activeOpacity={0.7}
-          >
-            <View style={styles.captureInner} />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={styles.captureButton}
+          onPress={handleCapture}
+          activeOpacity={0.7}
+        >
+          <View style={styles.captureInner} />
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -134,6 +172,45 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   closeText: { color: "#FFF", fontSize: 15, fontWeight: "500" },
+  // Preview
+  previewImage: {
+    flex: 1,
+  },
+  previewControls: {
+    position: "absolute",
+    bottom: 40,
+    left: 20,
+    right: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  retakeButton: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  retakeText: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#FFF",
+  },
+  usePhotoButton: {
+    flex: 1,
+    backgroundColor: "#E9B44C",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  usePhotoButtonDisabled: { opacity: 0.6 },
+  usePhotoText: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0B1623",
+  },
+  // Permission
   permissionContainer: {
     flex: 1,
     backgroundColor: "#0B1623",
