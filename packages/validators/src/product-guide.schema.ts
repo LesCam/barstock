@@ -83,6 +83,11 @@ export const guideItemRemoveImageSchema = z.object({
   locationId: z.string().uuid(),
 });
 
+export const guideItemDeleteSchema = z.object({
+  id: z.string().uuid(),
+  locationId: z.string().uuid(),
+});
+
 // ─── Types ──────────────────────────────────────────────────
 
 export type GuideCategoryCreateInput = z.infer<typeof guideCategoryCreateSchema>;
@@ -92,3 +97,4 @@ export type GuideItemCreateInput = z.infer<typeof guideItemCreateSchema>;
 export type GuideItemUpdateInput = z.infer<typeof guideItemUpdateSchema>;
 export type GuideItemListInput = z.infer<typeof guideItemListSchema>;
 export type GuideItemGetInput = z.infer<typeof guideItemGetSchema>;
+export type GuideItemDeleteInput = z.infer<typeof guideItemDeleteSchema>;

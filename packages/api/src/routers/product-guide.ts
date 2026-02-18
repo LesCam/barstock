@@ -14,6 +14,7 @@ import {
   guideItemGetSchema,
   guideItemUploadImageSchema,
   guideItemRemoveImageSchema,
+  guideItemDeleteSchema,
 } from "@barstock/validators";
 import { ProductGuideService } from "../services/product-guide.service";
 
@@ -105,5 +106,14 @@ export const productGuideRouter = router({
     .mutation(async ({ ctx, input }) => {
       const service = new ProductGuideService(ctx.prisma);
       return service.removeItemImage(input.id, input.locationId, ctx.user.userId);
+    }),
+
+  deleteItem: protectedProcedure
+    .use(requireRole("manager"))
+    .use(requireLocationAccess())
+    .input(guideItemDeleteSchema)
+    .mutation(async ({ ctx, input }) => {
+      const service = new ProductGuideService(ctx.prisma);
+      return service.deleteItem(input.id, input.locationId, ctx.user.userId);
     }),
 });

@@ -57,6 +57,12 @@ export default function GuideItemDetailPage() {
     },
   });
 
+  const deleteItem = trpc.productGuide.deleteItem.useMutation({
+    onSuccess: () => {
+      router.push("/guide");
+    },
+  });
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !locationId) return;
@@ -157,6 +163,17 @@ export default function GuideItemDetailPage() {
               Edit
             </button>
           )}
+          <button
+            onClick={() => {
+              if (confirm(`Delete "${item.inventoryItem.name}" from the guide? This cannot be undone.`)) {
+                deleteItem.mutate({ id, locationId: locationId! });
+              }
+            }}
+            disabled={deleteItem.isPending}
+            className="rounded-md border border-red-500/30 px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+          >
+            {deleteItem.isPending ? "Deleting..." : "Delete"}
+          </button>
         </div>
       </div>
 

@@ -284,6 +284,37 @@ export class ProductGuideService {
     return item;
   }
 
+  async deleteItem(id: string, locationId: string, actorUserId: string) {
+    // Remove stored image if any
+    const existing = await this.prisma.productGuideItem.findUniqueOrThrow({
+      where: { id },
+      select: { imageKey: true, inventoryItem: { select: { name: true } } },
+    });
+
+    if (existing.imageKey) {
+      const storage = createStorageAdapter();
+      await storage.delete(existing.imageKey);
+    }
+
+    await this.prisma.productGuideItem.delete({ where: { id } });
+
+    const location = await this.prisma.location.findUnique({
+      where: { id: locationId },
+      select: { businessId: true },
+    });
+
+    if (location) {
+      await this.audit.log({
+        businessId: location.businessId,
+        actorUserId,
+        actionType: "guide_item.deleted",
+        objectType: "guide_item",
+        objectId: id,
+        metadata: { name: existing.inventoryItem.name },
+      });
+    }
+  }
+
   // ─── Public API ───────────────────────────────────────────
 
   async getPublicGuide(locationId: string) {
