@@ -138,10 +138,7 @@ export default function GuideItemDetailPage() {
             {item.inventoryItem.name}
           </h1>
           <p className="text-sm text-[#EAF0FF]/60">
-            {item.category.name} &middot;{" "}
-            <span className="capitalize">
-              {item.inventoryItem.type.replace("_", " ")}
-            </span>
+            {item.category.name}
           </p>
         </div>
         <div className="flex gap-2">
@@ -387,9 +384,9 @@ export default function GuideItemDetailPage() {
               <p className="font-medium text-[#EAF0FF]">{item.category.name}</p>
             </div>
             <div>
-              <p className="text-xs text-[#EAF0FF]/60">Type</p>
+              <p className="text-xs text-[#EAF0FF]/60">Category</p>
               <p className="capitalize text-[#EAF0FF]">
-                {item.inventoryItem.type.replace("_", " ")}
+                {item.inventoryItem.category?.name ?? "Uncategorized"}
               </p>
             </div>
             {item.inventoryItem.barcode && (

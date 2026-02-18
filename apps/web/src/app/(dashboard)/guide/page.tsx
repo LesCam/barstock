@@ -87,7 +87,7 @@ export default function ProductGuidePage() {
   const filteredInventory = inventoryItems?.filter(
     (i: any) =>
       i.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
-      i.type.toLowerCase().includes(inventorySearch.toLowerCase())
+      (i.category?.name ?? "").toLowerCase().includes(inventorySearch.toLowerCase())
   );
 
   function startEditCategory(cat: any) {
@@ -296,7 +296,7 @@ export default function ProductGuidePage() {
                   >
                     {inv.name}{" "}
                     <span className="text-xs text-[#5A6A7A]">
-                      {inv.type.replace("_", " ")}
+                      {inv.category?.name ?? ""}
                     </span>
                   </button>
                 ))}
@@ -503,7 +503,7 @@ export default function ProductGuidePage() {
                   {item.category.name}
                 </p>
                 <p className="mt-1 text-xs capitalize text-[#5A6A7A]">
-                  {item.inventoryItem.type.replace("_", " ")}
+                  {item.inventoryItem.category?.name ?? ""}
                 </p>
               </div>
             </Link>

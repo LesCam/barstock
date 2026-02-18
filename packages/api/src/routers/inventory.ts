@@ -13,6 +13,7 @@ export const inventoryRouter = router({
     .query(({ ctx, input }) =>
       ctx.prisma.inventoryItem.findMany({
         where: { locationId: input.locationId, active: true },
+        include: { category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } } },
         orderBy: { name: "asc" },
       })
     ),
@@ -23,6 +24,7 @@ export const inventoryRouter = router({
       ctx.prisma.inventoryItem.findUniqueOrThrow({
         where: { id: input.id },
         include: {
+          category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } },
           priceHistory: { orderBy: { effectiveFromTs: "desc" }, take: 5 },
           bottleTemplates: { where: { enabled: true }, take: 1 },
         },
@@ -80,6 +82,7 @@ export const inventoryRouter = router({
     .query(({ ctx, input }) =>
       ctx.prisma.inventoryItem.findFirst({
         where: { locationId: input.locationId, barcode: input.barcode, active: true },
+        include: { category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } } },
       })
     ),
 
@@ -111,6 +114,7 @@ export const inventoryRouter = router({
       const [items, stockRows] = await Promise.all([
         ctx.prisma.inventoryItem.findMany({
           where: { locationId: input.locationId, active: true },
+          include: { category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } } },
           orderBy: { name: "asc" },
         }),
         ctx.prisma.consumptionEvent.groupBy({

@@ -4,19 +4,10 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
-import { InventoryItemType, UOM } from "@barstock/types";
+import { UOM } from "@barstock/types";
 
-type SortKey = "name" | "type";
+type SortKey = "name" | "category";
 type SortDir = "asc" | "desc";
-
-const TYPE_LABELS: Record<string, string> = {
-  packaged_beer: "Packaged Beer",
-  keg_beer: "Keg Beer",
-  liquor: "Liquor",
-  wine: "Wine",
-  food: "Food",
-  misc: "Misc",
-};
 
 const UOM_LABELS: Record<string, string> = {
   units: "Units",
@@ -31,6 +22,7 @@ export default function InventoryPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const locationId = user?.locationIds?.[0];
+  const businessId = user?.businessId;
   const utils = trpc.useUtils();
 
   const { data: items, isLoading } = trpc.inventory.list.useQuery(
@@ -43,6 +35,11 @@ export default function InventoryPage() {
     { enabled: !!locationId }
   );
 
+  const { data: categories } = trpc.itemCategories.list.useQuery(
+    { businessId: businessId! },
+    { enabled: !!businessId }
+  );
+
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -50,7 +47,7 @@ export default function InventoryPage() {
 
   // Create form state
   const [newName, setNewName] = useState("");
-  const [newType, setNewType] = useState<string>(InventoryItemType.packaged_beer);
+  const [newCategoryId, setNewCategoryId] = useState<string>("");
   const [newBarcode, setNewBarcode] = useState("");
   const [newVendorSku, setNewVendorSku] = useState("");
   const [newPackSize, setNewPackSize] = useState("");
@@ -68,7 +65,7 @@ export default function InventoryPage() {
 
   function resetCreateForm() {
     setNewName("");
-    setNewType(InventoryItemType.packaged_beer);
+    setNewCategoryId(categories?.[0]?.id ?? "");
     setNewBarcode("");
     setNewVendorSku("");
     setNewPackSize("");
@@ -77,11 +74,11 @@ export default function InventoryPage() {
   }
 
   function handleCreate() {
-    if (!locationId || !newName.trim()) return;
+    if (!locationId || !newName.trim() || !newCategoryId) return;
     createMut.mutate({
       locationId,
       name: newName.trim(),
-      type: newType as any,
+      categoryId: newCategoryId,
       baseUom: UOM.units as any,
       barcode: newBarcode.trim() || undefined,
       vendorSku: newVendorSku.trim() || undefined,
@@ -105,12 +102,16 @@ export default function InventoryPage() {
     const filtered = items?.filter(
       (item) =>
         item.name.toLowerCase().includes(filter.toLowerCase()) ||
-        item.type.toLowerCase().includes(filter.toLowerCase())
+        (item.category?.name ?? "").toLowerCase().includes(filter.toLowerCase())
     );
     if (!filtered) return [];
     return [...filtered].sort((a, b) => {
-      const aVal = a[sortKey].toLowerCase();
-      const bVal = b[sortKey].toLowerCase();
+      const aVal = sortKey === "category"
+        ? (a.category?.name ?? "").toLowerCase()
+        : a.name.toLowerCase();
+      const bVal = sortKey === "category"
+        ? (b.category?.name ?? "").toLowerCase()
+        : b.name.toLowerCase();
       if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
       if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
       return 0;
@@ -164,14 +165,15 @@ export default function InventoryPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Type</label>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Category</label>
               <select
-                value={newType}
-                onChange={(e) => setNewType(e.target.value)}
+                value={newCategoryId}
+                onChange={(e) => setNewCategoryId(e.target.value)}
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
               >
-                {Object.entries(TYPE_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
+                <option value="">Select category...</option>
+                {categories?.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
             </div>
@@ -241,7 +243,7 @@ export default function InventoryPage() {
           <div className="mt-3 flex items-center gap-3">
             <button
               onClick={handleCreate}
-              disabled={!newName.trim() || createMut.isPending}
+              disabled={!newName.trim() || !newCategoryId || createMut.isPending}
               className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
             >
               {createMut.isPending ? "Creating..." : "Create Item"}
@@ -269,7 +271,7 @@ export default function InventoryPage() {
             <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
               <tr>
                 <SortHeader label="Name" field="name" />
-                <SortHeader label="Type" field="type" />
+                <SortHeader label="Category" field="category" />
                 <th className="px-4 py-3">On Hand</th>
                 <th className="px-4 py-3">Value</th>
                 <th className="px-4 py-3">Status</th>
@@ -285,7 +287,7 @@ export default function InventoryPage() {
                     className="cursor-pointer hover:bg-[#0B1623]/60"
                   >
                     <td className="px-4 py-3 font-medium">{item.name}</td>
-                    <td className="px-4 py-3">{item.type.replace("_", " ")}</td>
+                    <td className="px-4 py-3">{item.category?.name ?? "—"}</td>
                     <td className="px-4 py-3">{oh?.quantity?.toFixed(1) ?? "—"}</td>
                     <td className="px-4 py-3">
                       {oh?.totalValue != null ? `$${oh.totalValue.toFixed(2)}` : "—"}

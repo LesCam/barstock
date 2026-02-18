@@ -9,11 +9,11 @@ import { ItemSearchBar } from "@/components/ItemSearchBar";
 interface SelectedItem {
   id: string;
   name: string;
-  type: string;
   barcode: string | null;
   packSize: unknown;
   containerSize: unknown;
   baseUom: string;
+  category?: { id: string; name: string; countingMethod: string } | null;
 }
 
 type CountType = "individual" | "full_pack";
@@ -99,7 +99,6 @@ export default function PackagedCountScreen() {
               "Set this item aside — the barcode hasn't been registered yet."
             );
           }}
-          itemTypeFilter={undefined}
           placeholder="Search packaged items or scan..."
         />
 
@@ -111,7 +110,7 @@ export default function PackagedCountScreen() {
                 <Text style={styles.itemName}>{selectedItem.name}</Text>
                 <View style={styles.typeBadge}>
                   <Text style={styles.typeBadgeText}>
-                    {selectedItem.type.replace("_", " ")}
+                    {selectedItem.category?.name ?? "Uncategorized"}
                   </Text>
                 </View>
               </View>

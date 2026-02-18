@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 
-type SortKey = "itemName" | "itemType" | "variance" | "variancePercent" | "valueImpact";
+type SortKey = "itemName" | "categoryName" | "variance" | "variancePercent" | "valueImpact";
 type SortDir = "asc" | "desc";
 
 export default function ReportsPage() {
@@ -48,7 +48,7 @@ export default function ReportsPage() {
     const lc = filter.toLowerCase();
     const filtered = variance?.items.filter((item) =>
       item.itemName.toLowerCase().includes(lc) ||
-      (item.itemType ?? "").toLowerCase().includes(lc)
+      (item.categoryName ?? "").toLowerCase().includes(lc)
     );
     if (!filtered) return [];
     return [...filtered].sort((a, b) => {
@@ -136,7 +136,7 @@ export default function ReportsPage() {
             <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
               <tr>
                 <SortHeader label="Item" field="itemName" />
-                <SortHeader label="Type" field="itemType" />
+                <SortHeader label="Category" field="categoryName" />
                 <th className="px-4 py-3">Theoretical</th>
                 <th className="px-4 py-3">Actual</th>
                 <SortHeader label="Variance" field="variance" />
@@ -148,7 +148,7 @@ export default function ReportsPage() {
               {sortedItems.map((item) => (
                 <tr key={item.inventoryItemId} className="hover:bg-[#16283F]/60">
                   <td className="px-4 py-3 font-medium">{item.itemName}</td>
-                  <td className="px-4 py-3">{(item as any).itemType?.replace("_", " ") ?? "—"}</td>
+                  <td className="px-4 py-3">{item.categoryName ?? "—"}</td>
                   <td className="px-4 py-3">{item.theoretical.toFixed(1)}</td>
                   <td className="px-4 py-3">{item.actual.toFixed(1)}</td>
                   <td

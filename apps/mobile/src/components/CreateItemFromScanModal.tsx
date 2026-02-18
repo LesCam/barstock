@@ -15,10 +15,8 @@ import { useAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
 
-const DENSITY_MAP: Record<string, number> = { wine: 0.99, liquor: 0.95 };
 const DEFAULT_DENSITY = 0.95;
 
-type ItemType = "liquor" | "wine";
 type WeightKind = "full" | "tare";
 
 interface Props {
@@ -37,13 +35,29 @@ export function CreateItemFromScanModal({
   const { user } = useAuth();
   const businessId = user?.businessId ?? "";
 
+  // Fetch weighable categories
+  const { data: categories } = trpc.itemCategories.list.useQuery(
+    { businessId },
+    { enabled: !!businessId }
+  );
+  const weighableCategories = categories?.filter(
+    (c) => c.countingMethod === "weighable"
+  );
+
   // Form state
   const [name, setName] = useState("");
   const [containerSizeMl, setContainerSizeMl] = useState("750");
-  const [itemType, setItemType] = useState<ItemType>("liquor");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [newVendorName, setNewVendorName] = useState("");
   const [addingNewVendor, setAddingNewVendor] = useState(false);
+
+  // Auto-select first weighable category
+  useEffect(() => {
+    if (!selectedCategoryId && weighableCategories?.length) {
+      setSelectedCategoryId(weighableCategories[0].id);
+    }
+  }, [weighableCategories, selectedCategoryId]);
 
   // Scale weight capture
   const [capturedWeight, setCapturedWeight] = useState<{
@@ -99,11 +113,11 @@ export function CreateItemFromScanModal({
     const fullG =
       capturedWeight?.kind === "full" ? capturedWeight.grams : undefined;
 
-    // If no scale weight captured, auto-calculate from volume using type-based density
-    const density = DENSITY_MAP[itemType] ?? DEFAULT_DENSITY;
+    // Use category's default density, or fall back to 0.95
+    const selectedCategory = weighableCategories?.find((c) => c.id === selectedCategoryId);
+    const density = selectedCategory?.defaultDensity ? Number(selectedCategory.defaultDensity) : DEFAULT_DENSITY;
     const finalEmptyG = emptyG;
     const finalFullG = fullG ?? (emptyG ? undefined : Math.round(sizeMl * density + 300));
-    // We need at least one weight — if no scale, estimate full from volume + typical glass weight
     const submitEmptyG = finalEmptyG;
     const submitFullG = finalFullG;
 
@@ -112,7 +126,7 @@ export function CreateItemFromScanModal({
       name: name.trim(),
       barcode,
       containerSizeMl: sizeMl,
-      type: itemType,
+      categoryId: selectedCategoryId,
       vendorId: selectedVendorId ?? undefined,
       newVendorName:
         addingNewVendor && newVendorName.trim()
@@ -124,7 +138,7 @@ export function CreateItemFromScanModal({
   }
 
   const sizeMl = parseInt(containerSizeMl) || 0;
-  const canSave = name.trim().length > 0 && sizeMl > 0;
+  const canSave = name.trim().length > 0 && sizeMl > 0 && !!selectedCategoryId;
 
   return (
     <Modal visible animationType="slide" transparent>
@@ -176,41 +190,28 @@ export function CreateItemFromScanModal({
               keyboardType="numeric"
             />
 
-            {/* Type toggle */}
-            <Text style={styles.label}>Type</Text>
+            {/* Category */}
+            <Text style={styles.label}>Category</Text>
             <View style={styles.toggleRow}>
-              <TouchableOpacity
-                style={[
-                  styles.toggleBtn,
-                  itemType === "liquor" && styles.toggleBtnActive,
-                ]}
-                onPress={() => setItemType("liquor")}
-              >
-                <Text
+              {weighableCategories?.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
                   style={[
-                    styles.toggleText,
-                    itemType === "liquor" && styles.toggleTextActive,
+                    styles.toggleBtn,
+                    selectedCategoryId === cat.id && styles.toggleBtnActive,
                   ]}
+                  onPress={() => setSelectedCategoryId(cat.id)}
                 >
-                  Liquor
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.toggleBtn,
-                  itemType === "wine" && styles.toggleBtnActive,
-                ]}
-                onPress={() => setItemType("wine")}
-              >
-                <Text
-                  style={[
-                    styles.toggleText,
-                    itemType === "wine" && styles.toggleTextActive,
-                  ]}
-                >
-                  Wine
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.toggleText,
+                      selectedCategoryId === cat.id && styles.toggleTextActive,
+                    ]}
+                  >
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             {/* Vendor section */}

@@ -15,16 +15,7 @@ import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
-import { InventoryItemType, UOM } from "@barstock/types";
-
-const ITEM_TYPES = [
-  { value: InventoryItemType.packaged_beer, label: "Packaged Beer" },
-  { value: InventoryItemType.keg_beer, label: "Keg Beer" },
-  { value: InventoryItemType.liquor, label: "Liquor" },
-  { value: InventoryItemType.wine, label: "Wine" },
-  { value: InventoryItemType.food, label: "Food" },
-  { value: InventoryItemType.misc, label: "Misc" },
-] as const;
+import { UOM } from "@barstock/types";
 
 const CONTAINER_UOMS = [
   { value: UOM.ml, label: "ml" },
@@ -32,14 +23,11 @@ const CONTAINER_UOMS = [
   { value: UOM.L, label: "L" },
 ] as const;
 
-function typeLabel(type: string): string {
-  return ITEM_TYPES.find((t) => t.value === type)?.label ?? type;
-}
-
 export default function ManageItemsScreen() {
   const router = useRouter();
   const { selectedLocationId, user } = useAuth();
   const locationId = selectedLocationId ?? user?.locationIds[0] ?? "";
+  const businessId = user?.businessId ?? "";
 
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -48,7 +36,7 @@ export default function ManageItemsScreen() {
 
   // Form state
   const [formName, setFormName] = useState("");
-  const [formType, setFormType] = useState<InventoryItemType>(InventoryItemType.packaged_beer);
+  const [formCategoryId, setFormCategoryId] = useState<string>("");
   const [formBarcode, setFormBarcode] = useState("");
   const [formContainerSize, setFormContainerSize] = useState("");
   const [formContainerUom, setFormContainerUom] = useState<UOM>(UOM.ml);
@@ -59,6 +47,11 @@ export default function ManageItemsScreen() {
   const { data: items, isLoading } = trpc.inventory.list.useQuery(
     { locationId },
     { enabled: !!locationId }
+  );
+
+  const { data: categories } = trpc.itemCategories.list.useQuery(
+    { businessId },
+    { enabled: !!businessId }
   );
 
   const createMutation = trpc.inventory.create.useMutation({
@@ -79,14 +72,14 @@ export default function ManageItemsScreen() {
     return items.filter(
       (item) =>
         item.name.toLowerCase().includes(q) ||
-        item.type.toLowerCase().includes(q) ||
+        (item.category?.name ?? "").toLowerCase().includes(q) ||
         (item.barcode && item.barcode.toLowerCase().includes(q))
     );
   }, [items, search]);
 
   function resetForm() {
     setFormName("");
-    setFormType(InventoryItemType.packaged_beer);
+    setFormCategoryId(categories?.[0]?.id ?? "");
     setFormBarcode("");
     setFormContainerSize("");
     setFormContainerUom(UOM.ml);
@@ -98,11 +91,15 @@ export default function ManageItemsScreen() {
       Alert.alert("Name Required", "Please enter a name for the item.");
       return;
     }
+    if (!formCategoryId) {
+      Alert.alert("Category Required", "Please select a category for the item.");
+      return;
+    }
 
     const input: any = {
       locationId,
       name: formName.trim(),
-      type: formType,
+      categoryId: formCategoryId,
       baseUom: UOM.units,
     };
 
@@ -187,7 +184,7 @@ export default function ManageItemsScreen() {
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemType}>{typeLabel(item.type)}</Text>
+              <Text style={styles.itemType}>{item.category?.name ?? "Uncategorized"}</Text>
             </View>
             {item.barcode && (
               <Text style={styles.itemBarcode}>#{item.barcode}</Text>
@@ -238,25 +235,25 @@ export default function ManageItemsScreen() {
                     autoFocus
                   />
 
-                  {/* Type */}
-                  <Text style={styles.fieldLabel}>Type</Text>
+                  {/* Category */}
+                  <Text style={styles.fieldLabel}>Category *</Text>
                   <View style={styles.typeGrid}>
-                    {ITEM_TYPES.map((t) => (
+                    {categories?.map((cat) => (
                       <TouchableOpacity
-                        key={t.value}
+                        key={cat.id}
                         style={[
                           styles.typeChip,
-                          formType === t.value && styles.typeChipActive,
+                          formCategoryId === cat.id && styles.typeChipActive,
                         ]}
-                        onPress={() => setFormType(t.value)}
+                        onPress={() => setFormCategoryId(cat.id)}
                       >
                         <Text
                           style={[
                             styles.typeChipText,
-                            formType === t.value && styles.typeChipTextActive,
+                            formCategoryId === cat.id && styles.typeChipTextActive,
                           ]}
                         >
-                          {t.label}
+                          {cat.name}
                         </Text>
                       </TouchableOpacity>
                     ))}

@@ -6,11 +6,11 @@ function formatStock(
   qty: number | null,
   containerSize: unknown,
   baseUom: string,
-  type: string
+  countingMethod: string
 ): string {
   if (qty === null || qty === 0) return "\u2014";
 
-  if (type === "packaged_beer") {
+  if (countingMethod === "unit_count") {
     return `${qty} units`;
   }
 
@@ -69,10 +69,10 @@ export default function InventoryItemDetailScreen() {
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>{item.name}</Text>
-      <Text style={styles.type}>{item.type.replace("_", " ")}</Text>
+      <Text style={styles.type}>{item.category?.name ?? "Uncategorized"}</Text>
 
       <View style={styles.card}>
-        <DetailRow label="Type" value={item.type.replace("_", " ")} />
+        <DetailRow label="Category" value={item.category?.name ?? "Uncategorized"} />
         {item.barcode && <DetailRow label="Barcode" value={item.barcode} />}
         {item.containerSize && (
           <DetailRow
@@ -86,7 +86,7 @@ export default function InventoryItemDetailScreen() {
       <View style={styles.card}>
         <DetailRow
           label="On Hand"
-          value={formatStock(onHandQty, item.containerSize, item.baseUom, item.type)}
+          value={formatStock(onHandQty, item.containerSize, item.baseUom, item.category?.countingMethod ?? "unit_count")}
         />
         <DetailRow label="Last Location" value={locationText} />
       </View>

@@ -6,18 +6,18 @@ import { BarcodeScanner } from "./BarcodeScanner";
 interface InventoryItem {
   id: string;
   name: string;
-  type: string;
   barcode: string | null;
   packSize: unknown;
   containerSize: unknown;
   baseUom: string;
+  category?: { id: string; name: string; countingMethod: string; defaultDensity: unknown } | null;
 }
 
 interface ItemSearchBarProps {
   locationId: string;
   onItemSelected: (item: InventoryItem) => void;
   onBarcodeNotFound?: (barcode: string) => void;
-  itemTypeFilter?: string[];
+  countingMethodFilter?: string;
   placeholder?: string;
 }
 
@@ -25,7 +25,7 @@ export function ItemSearchBar({
   locationId,
   onItemSelected,
   onBarcodeNotFound,
-  itemTypeFilter,
+  countingMethodFilter,
   placeholder = "Search items or scan barcode...",
 }: ItemSearchBarProps) {
   const [query, setQuery] = useState("");
@@ -47,8 +47,8 @@ export function ItemSearchBar({
   const filteredItems = useMemo(() => {
     if (!items) return [];
     let list = items as InventoryItem[];
-    if (itemTypeFilter?.length) {
-      list = list.filter((i) => itemTypeFilter.includes(i.type));
+    if (countingMethodFilter) {
+      list = list.filter((i) => i.category?.countingMethod === countingMethodFilter);
     }
     if (!query.trim()) return list;
     // Strip accents so "creme" matches "Crème", etc.
@@ -58,11 +58,11 @@ export function ItemSearchBar({
     return list.filter(
       (i) =>
         normalize(i.name).includes(q) ||
-        normalize(i.type.replace("_", " ")).includes(q) ||
+        normalize(i.category?.name ?? "").includes(q) ||
         (i.barcode && i.barcode.includes(query.trim())) ||
         (i.containerSize != null && String(Number(i.containerSize)).includes(query.trim()))
     );
-  }, [items, query, itemTypeFilter]);
+  }, [items, query, countingMethodFilter]);
 
   function handleSelect(item: InventoryItem) {
     Keyboard.dismiss();
@@ -143,7 +143,7 @@ export function ItemSearchBar({
                 >
                   <Text style={styles.resultName}>{item.name}</Text>
                   <Text style={styles.resultMeta}>
-                    {item.type.replace("_", " ")}
+                    {item.category?.name ?? "Uncategorized"}
                     {item.containerSize != null ? ` · ${Number(item.containerSize)}ml` : ""}
                     {item.barcode ? ` · ${item.barcode}` : ""}
                   </Text>

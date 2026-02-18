@@ -26,15 +26,15 @@ interface TemplateRow {
   emptyBottleWeightG: number | null;
   fullBottleWeightG: number | null;
   densityGPerMl: number | null;
-  inventoryItem: { name: string; type: string; barcode: string | null };
+  inventoryItem: { name: string; barcode: string | null; category?: { id: string; name: string; countingMethod: string } | null };
 }
 
 interface SelectedItem {
   id: string;
   name: string;
-  type: string;
   barcode: string | null;
   containerSize: unknown;
+  category?: { id: string; name: string; countingMethod: string } | null;
   prefill?: {
     tareG: number | null;
     fullG: number | null;
@@ -248,9 +248,9 @@ export default function TareWeightsScreen() {
         addItemWithPrefill({
           id: item.id,
           name: (item as any).name,
-          type: (item as any).type,
           barcode: (item as any).barcode,
           containerSize: (item as any).containerSize,
+          category: (item as any).category,
         });
       } else {
         setCreatingFromScan({ barcode });
@@ -501,8 +501,8 @@ export default function TareWeightsScreen() {
                   setShowAddSearch(false);
                   setCreatingFromScan({ barcode });
                 }}
-                itemTypeFilter={["liquor", "wine"]}
-                placeholder="Search liquor/wine items..."
+                countingMethodFilter="weighable"
+                placeholder="Search weighable items..."
               />
             </View>
           </View>

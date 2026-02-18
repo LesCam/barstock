@@ -9,17 +9,14 @@ export const Role = {
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
-/** Matches PostgreSQL inventory_item_type_t */
-export const InventoryItemType = {
-  packaged_beer: "packaged_beer",
-  keg_beer: "keg_beer",
-  liquor: "liquor",
-  wine: "wine",
-  food: "food",
-  misc: "misc",
+/** Matches PostgreSQL counting_method_t */
+export const CountingMethod = {
+  weighable: "weighable",
+  unit_count: "unit_count",
+  keg: "keg",
 } as const;
-export type InventoryItemType =
-  (typeof InventoryItemType)[keyof typeof InventoryItemType];
+export type CountingMethod =
+  (typeof CountingMethod)[keyof typeof CountingMethod];
 
 /** Matches PostgreSQL uom_t */
 export const UOM = {

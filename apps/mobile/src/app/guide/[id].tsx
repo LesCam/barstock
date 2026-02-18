@@ -67,7 +67,7 @@ export default function GuideItemDetail() {
             <Text style={styles.badgeText}>{item.category.name}</Text>
           </View>
           <Text style={styles.type}>
-            {item.inventoryItem.type.replace("_", " ")}
+            {item.inventoryItem.category?.name ?? item.category.name}
           </Text>
         </View>
 

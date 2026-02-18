@@ -13,11 +13,11 @@ import type { ScaleReading } from "@/lib/scale/scale-manager";
 interface SelectedItem {
   id: string;
   name: string;
-  type: string;
   barcode: string | null;
   packSize: unknown;
   containerSize: unknown;
   baseUom: string;
+  category?: { id: string; name: string; countingMethod: string; defaultDensity: unknown } | null;
 }
 
 export default function LiquorWeighScreen() {
@@ -196,8 +196,8 @@ export default function LiquorWeighScreen() {
             setUseManual(false);
           }}
           onBarcodeNotFound={handleBarcodeNotFound}
-          itemTypeFilter={["liquor", "wine"]}
-          placeholder="Search liquor/wine or scan..."
+          countingMethodFilter="weighable"
+          placeholder="Search weighable items or scan..."
         />
 
         {selectedItem && (

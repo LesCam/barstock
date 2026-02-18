@@ -16,7 +16,7 @@ export const mappingsRouter = router({
       ctx.prisma.pOSItemMapping.findMany({
         where: { locationId: input.locationId },
         include: {
-          inventoryItem: { select: { name: true, type: true } },
+          inventoryItem: { select: { name: true, category: { select: { name: true } } } },
           pourProfile: { select: { name: true, oz: true } },
           tapLine: { select: { name: true } },
         },

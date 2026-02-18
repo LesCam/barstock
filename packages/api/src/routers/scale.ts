@@ -2,12 +2,7 @@ import { router, protectedProcedure, requirePermission } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-const DENSITY_MAP: Record<string, number> = { wine: 0.99, liquor: 0.95 };
 const DEFAULT_DENSITY = 0.95;
-
-function densityForType(type: string): number {
-  return DENSITY_MAP[type] ?? DEFAULT_DENSITY;
-}
 
 export const scaleRouter = router({
   /** Bottle templates for a location (includes org-level) */
@@ -27,7 +22,13 @@ export const scaleRouter = router({
           ],
         },
         include: {
-          inventoryItem: { select: { name: true, type: true, barcode: true } },
+          inventoryItem: {
+            select: {
+              name: true,
+              barcode: true,
+              category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } },
+            },
+          },
         },
       });
     }),
@@ -38,7 +39,10 @@ export const scaleRouter = router({
     .query(async ({ ctx, input }) => {
       const item = await ctx.prisma.inventoryItem.findFirst({
         where: { locationId: input.locationId, barcode: input.barcode },
-        select: { id: true, name: true, type: true, barcode: true, containerSize: true },
+        select: {
+          id: true, name: true, barcode: true, containerSize: true,
+          category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } },
+        },
       });
       if (!item) return null;
 
@@ -207,7 +211,7 @@ export const scaleRouter = router({
       name: z.string().min(1).max(255),
       barcode: z.string().optional(),
       containerSizeMl: z.number().positive(),
-      type: z.enum(["liquor", "wine"]).default("liquor"),
+      categoryId: z.string().uuid(),
       vendorId: z.string().uuid().optional(),
       newVendorName: z.string().min(1).max(255).optional(),
       emptyBottleWeightG: z.number().positive().optional(),
@@ -220,6 +224,17 @@ export const scaleRouter = router({
       const location = await ctx.prisma.location.findUniqueOrThrow({
         where: { id: input.locationId },
       });
+
+      // Validate category exists, is weighable, and belongs to this business
+      const category = await ctx.prisma.inventoryItemCategory.findUniqueOrThrow({
+        where: { id: input.categoryId },
+      });
+      if (category.businessId !== location.businessId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Category does not belong to this business" });
+      }
+      if (category.countingMethod !== "weighable") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Category must use weighable counting method" });
+      }
 
       return ctx.prisma.$transaction(async (tx) => {
         // 1. Create vendor if newVendorName provided and no vendorId
@@ -239,7 +254,7 @@ export const scaleRouter = router({
           data: {
             locationId: input.locationId,
             name: input.name,
-            type: input.type,
+            categoryId: input.categoryId,
             barcode: input.barcode || null,
             vendorId: vendorId || null,
             baseUom: "units",
@@ -248,18 +263,17 @@ export const scaleRouter = router({
           },
         });
 
-        // 3. Determine weights and density using type-based defaults
-        const typeDensity = densityForType(input.type);
+        // 3. Determine weights and density using category default
+        const catDensity = category.defaultDensity ? Number(category.defaultDensity) : DEFAULT_DENSITY;
         let emptyG = input.emptyBottleWeightG ?? null;
         let fullG = input.fullBottleWeightG ?? null;
-        let density: number = typeDensity;
+        let density: number = catDensity;
 
         if (emptyG != null && fullG != null) {
           // Both measured — derive actual density
           const liquidG = fullG - emptyG;
-          density = (liquidG > 0 && input.containerSizeMl > 0) ? liquidG / input.containerSizeMl : typeDensity;
+          density = (liquidG > 0 && input.containerSizeMl > 0) ? liquidG / input.containerSizeMl : catDensity;
         }
-        // If only one weight provided, the other stays null — derived on-the-fly using density
 
         // 4. Create bottle template
         const template = await tx.bottleTemplate.create({

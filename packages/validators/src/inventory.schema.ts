@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { InventoryItemType, UOM } from "@barstock/types";
+import { UOM } from "@barstock/types";
 
 export const inventoryItemCreateSchema = z.object({
   locationId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  type: z.nativeEnum(InventoryItemType),
+  categoryId: z.string().uuid(),
   barcode: z.string().optional(),
   vendorSku: z.string().optional(),
   baseUom: z.nativeEnum(UOM),
@@ -16,7 +16,7 @@ export const inventoryItemCreateSchema = z.object({
 
 export const inventoryItemUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  type: z.nativeEnum(InventoryItemType).optional(),
+  categoryId: z.string().uuid().optional(),
   barcode: z.string().nullable().optional(),
   vendorSku: z.string().nullable().optional(),
   baseUom: z.nativeEnum(UOM).optional(),

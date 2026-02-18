@@ -22,7 +22,7 @@ export const transfersRouter = router({
           quantityDelta: { gt: 0 }, // Only show the "to" side to avoid duplicates
         },
         include: {
-          inventoryItem: { select: { name: true, type: true, baseUom: true } },
+          inventoryItem: { select: { name: true, baseUom: true, category: { select: { name: true } } } },
         },
         orderBy: { eventTs: "desc" },
         take: input.limit,

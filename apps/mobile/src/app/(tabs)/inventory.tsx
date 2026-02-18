@@ -7,11 +7,11 @@ function formatStock(
   qty: number | null,
   containerSize: unknown,
   baseUom: string,
-  type: string
+  countingMethod: string
 ): string {
   if (qty === null || qty === 0) return "\u2014";
 
-  if (type === "packaged_beer") {
+  if (countingMethod === "unit_count") {
     return `${qty} units`;
   }
 
@@ -50,14 +50,14 @@ export default function InventoryTab() {
           >
             <View style={styles.info}>
               <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.type}>{item.type.replace("_", " ")}</Text>
+              <Text style={styles.type}>{item.category?.name ?? "Uncategorized"}</Text>
             </View>
             <Text style={styles.stock}>
               {formatStock(
                 item.onHandQty,
                 item.containerSize,
                 item.baseUom,
-                item.type
+                item.category?.countingMethod ?? "unit_count"
               )}
             </Text>
           </TouchableOpacity>

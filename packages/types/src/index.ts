@@ -1,6 +1,6 @@
 export {
   Role,
-  InventoryItemType,
+  CountingMethod,
   UOM,
   SourceSystem,
   MappingMode,
@@ -15,7 +15,7 @@ export {
 
 export type {
   Role as RoleType,
-  InventoryItemType as InventoryItemTypeType,
+  CountingMethod as CountingMethodType,
   UOM as UOMType,
   SourceSystem as SourceSystemType,
   MappingMode as MappingModeType,

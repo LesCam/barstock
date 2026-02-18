@@ -110,6 +110,41 @@ async function main() {
   });
   console.log(`Granted admin access to ${location2.name}`);
 
+  // ── Item Categories ─────────────────────────────────────────
+  const catPackagedBeer = await prisma.inventoryItemCategory.create({
+    data: { businessId: business.id, name: "Packaged Beer", countingMethod: "unit_count", sortOrder: 0 },
+  });
+  const catKegBeer = await prisma.inventoryItemCategory.create({
+    data: { businessId: business.id, name: "Keg Beer", countingMethod: "keg", sortOrder: 1 },
+  });
+  const catLiquor = await prisma.inventoryItemCategory.create({
+    data: { businessId: business.id, name: "Liquor", countingMethod: "weighable", defaultDensity: 0.95, sortOrder: 2 },
+  });
+  const catWine = await prisma.inventoryItemCategory.create({
+    data: { businessId: business.id, name: "Wine", countingMethod: "weighable", defaultDensity: 0.99, sortOrder: 3 },
+  });
+  const catFood = await prisma.inventoryItemCategory.create({
+    data: { businessId: business.id, name: "Food", countingMethod: "unit_count", sortOrder: 4 },
+  });
+  const catMisc = await prisma.inventoryItemCategory.create({
+    data: { businessId: business.id, name: "Misc", countingMethod: "unit_count", sortOrder: 5 },
+  });
+  console.log(`Created 6 default item categories`);
+
+  // Also create categories for the platform business
+  for (const cat of [
+    { name: "Packaged Beer", countingMethod: "unit_count" as const, sortOrder: 0 },
+    { name: "Keg Beer", countingMethod: "keg" as const, sortOrder: 1 },
+    { name: "Liquor", countingMethod: "weighable" as const, defaultDensity: 0.95, sortOrder: 2 },
+    { name: "Wine", countingMethod: "weighable" as const, defaultDensity: 0.99, sortOrder: 3 },
+    { name: "Food", countingMethod: "unit_count" as const, sortOrder: 4 },
+    { name: "Misc", countingMethod: "unit_count" as const, sortOrder: 5 },
+  ]) {
+    await prisma.inventoryItemCategory.create({
+      data: { businessId: platformBiz.id, ...cat },
+    });
+  }
+
   // ── Keg Sizes ────────────────────────────────────────────────
   const halfBarrel = await prisma.kegSize.create({
     data: { name: "Half Barrel (15.5 gal)", totalOz: 1984 },
@@ -126,7 +161,7 @@ async function main() {
   const budLight = await prisma.inventoryItem.create({
     data: {
       locationId: location1.id,
-      type: "packaged_beer",
+      categoryId: catPackagedBeer.id,
       name: "Bud Light 12oz Can",
       barcode: "018200007712",
       baseUom: "units",
@@ -138,7 +173,7 @@ async function main() {
   const ipaKeg = await prisma.inventoryItem.create({
     data: {
       locationId: location1.id,
-      type: "keg_beer",
+      categoryId: catKegBeer.id,
       name: "Local IPA",
       baseUom: "oz",
     },
@@ -147,7 +182,7 @@ async function main() {
   const lagerKeg = await prisma.inventoryItem.create({
     data: {
       locationId: location1.id,
-      type: "keg_beer",
+      categoryId: catKegBeer.id,
       name: "House Lager",
       baseUom: "oz",
     },
@@ -156,7 +191,7 @@ async function main() {
   const jackDaniels = await prisma.inventoryItem.create({
     data: {
       locationId: location1.id,
-      type: "liquor",
+      categoryId: catLiquor.id,
       name: "Jack Daniel's Old No. 7",
       barcode: "082184090466",
       baseUom: "oz",
@@ -166,7 +201,7 @@ async function main() {
   const greyGoose = await prisma.inventoryItem.create({
     data: {
       locationId: location1.id,
-      type: "liquor",
+      categoryId: catLiquor.id,
       name: "Grey Goose Vodka",
       barcode: "080480280024",
       baseUom: "oz",
@@ -176,7 +211,7 @@ async function main() {
   const captainMorgan = await prisma.inventoryItem.create({
     data: {
       locationId: location1.id,
-      type: "liquor",
+      categoryId: catLiquor.id,
       name: "Captain Morgan Spiced Rum",
       baseUom: "oz",
     },
@@ -185,7 +220,7 @@ async function main() {
   const houseRed = await prisma.inventoryItem.create({
     data: {
       locationId: location1.id,
-      type: "wine",
+      categoryId: catWine.id,
       name: "House Red Blend (750ml)",
       baseUom: "ml",
     },
@@ -194,7 +229,7 @@ async function main() {
   const prosecco = await prisma.inventoryItem.create({
     data: {
       locationId: location1.id,
-      type: "wine",
+      categoryId: catWine.id,
       name: "Prosecco (750ml)",
       baseUom: "ml",
     },
@@ -360,7 +395,7 @@ async function main() {
   const loc2Beer = await prisma.inventoryItem.create({
     data: {
       locationId: location2.id,
-      type: "packaged_beer",
+      categoryId: catPackagedBeer.id,
       name: "Heineken 12oz Bottle",
       barcode: "087000764002",
       baseUom: "units",
@@ -372,7 +407,7 @@ async function main() {
   const loc2Whisky = await prisma.inventoryItem.create({
     data: {
       locationId: location2.id,
-      type: "liquor",
+      categoryId: catLiquor.id,
       name: "Jameson Irish Whiskey",
       baseUom: "oz",
     },

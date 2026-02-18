@@ -37,7 +37,7 @@ export default function DraftPage() {
   const { data: kegSizes } = trpc.draft.listKegSizes.useQuery();
 
   const kegBeerProducts =
-    products?.filter((p: any) => p.type === "keg_beer") ?? [];
+    products?.filter((p: any) => p.category?.countingMethod === "keg") ?? [];
   const storageKegs =
     kegs?.filter((k: any) => k.status === "in_storage") ?? [];
 

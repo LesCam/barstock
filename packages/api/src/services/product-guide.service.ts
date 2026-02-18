@@ -109,7 +109,7 @@ export class ProductGuideService {
         varietal: data.varietal,
       },
       include: {
-        inventoryItem: { select: { name: true, type: true } },
+        inventoryItem: { select: { name: true, category: { select: { name: true } } } },
         category: { select: { name: true } },
       },
     });
@@ -142,7 +142,7 @@ export class ProductGuideService {
       where,
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
       include: {
-        inventoryItem: { select: { name: true, type: true } },
+        inventoryItem: { select: { name: true, category: { select: { name: true } } } },
         category: { select: { id: true, name: true } },
       },
     });
@@ -152,7 +152,7 @@ export class ProductGuideService {
     return this.prisma.productGuideItem.findUniqueOrThrow({
       where: { id },
       include: {
-        inventoryItem: { select: { name: true, type: true, barcode: true } },
+        inventoryItem: { select: { name: true, barcode: true, category: { select: { name: true } } } },
         category: { select: { id: true, name: true } },
       },
     });
@@ -176,7 +176,7 @@ export class ProductGuideService {
       where: { id },
       data: updateData,
       include: {
-        inventoryItem: { select: { name: true, type: true } },
+        inventoryItem: { select: { name: true, category: { select: { name: true } } } },
         category: { select: { id: true, name: true } },
       },
     });
@@ -226,7 +226,7 @@ export class ProductGuideService {
       where: { id },
       data: { imageUrl: url, imageKey: key },
       include: {
-        inventoryItem: { select: { name: true, type: true } },
+        inventoryItem: { select: { name: true, category: { select: { name: true } } } },
         category: { select: { id: true, name: true } },
       },
     });
@@ -341,7 +341,7 @@ export class ProductGuideService {
             varietal: true,
             sortOrder: true,
             inventoryItem: {
-              select: { name: true, type: true },
+              select: { name: true, category: { select: { name: true } } },
             },
           },
         },

@@ -25,11 +25,11 @@ interface BarArea {
 interface SelectedItem {
   id: string;
   name: string;
-  type: string;
   barcode: string | null;
   packSize: unknown;
   containerSize: unknown;
   baseUom: string;
+  category?: { id: string; name: string; countingMethod: string } | null;
 }
 
 interface LoggedTransfer {
@@ -279,7 +279,7 @@ export default function TransferScreen() {
             <View style={styles.itemCard}>
               <Text style={styles.itemName}>{selectedItem.name}</Text>
               <Text style={styles.itemType}>
-                {selectedItem.type.replace("_", " ")}
+                {selectedItem.category?.name ?? "Uncategorized"}
               </Text>
             </View>
 

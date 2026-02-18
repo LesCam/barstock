@@ -20,15 +20,12 @@ enum RoleT {
   @@map("role_t")
 }
 
-enum InventoryItemTypeT {
-  packaged_beer
-  keg_beer
-  liquor
-  wine
-  food
-  misc
+enum CountingMethodT {
+  weighable
+  unit_count
+  keg
 
-  @@map("inventory_item_type_t")
+  @@map("counting_method_t")
 }
 
 enum UomT {
@@ -184,6 +181,7 @@ model Business {
   artworks         Artwork[]
   artSales         ArtSale[]
   vendors          Vendor[]
+  itemCategories   InventoryItemCategory[]
 
   @@map("businesses")
 }
@@ -268,12 +266,33 @@ model UserLocation {
   @@map("user_locations")
 }
 
+// ─── Item Categories ────────────────────────────────────────
+
+model InventoryItemCategory {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId      String          @map("business_id") @db.Uuid
+  name            String          @db.VarChar(100)
+  countingMethod  CountingMethodT @map("counting_method")
+  defaultDensity  Decimal?        @map("default_density") @db.Decimal(6, 4)
+  sortOrder       Int             @default(0) @map("sort_order")
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
+
+  business       Business        @relation(fields: [businessId], references: [id])
+  inventoryItems InventoryItem[]
+
+  @@unique([businessId, name])
+  @@index([businessId], map: "ix_item_categories_business")
+  @@map("inventory_item_categories")
+}
+
 // ─── Inventory ───────────────────────────────────────────────
 
 model InventoryItem {
   id         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   locationId String             @map("location_id") @db.Uuid
-  type       InventoryItemTypeT
+  categoryId String?            @map("category_id") @db.Uuid
   name       String
   barcode    String?
   vendorSku  String?            @map("vendor_sku")
@@ -287,6 +306,7 @@ model InventoryItem {
   createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz()
 
   location           Location             @relation(fields: [locationId], references: [id])
+  category           InventoryItemCategory? @relation(fields: [categoryId], references: [id])
   vendor             Vendor?              @relation(fields: [vendorId], references: [id])
   priceHistory       PriceHistory[]
   kegInstances       KegInstance[]

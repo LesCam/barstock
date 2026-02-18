@@ -10,7 +10,7 @@ import type { ExtendedPrismaClient } from "@barstock/database";
 export interface VarianceItem {
   inventoryItemId: string;
   itemName: string;
-  itemType: string;
+  categoryName: string | null;
   theoretical: number;
   actual: number;
   variance: number;
@@ -45,6 +45,7 @@ export class VarianceService {
     const inventoryItems = await this.prisma.inventoryItem.findMany({
       where: { locationId, active: true },
       include: {
+        category: { select: { name: true } },
         priceHistory: {
           where: {
             effectiveFromTs: { lte: toDate },
@@ -108,7 +109,7 @@ export class VarianceService {
       items.push({
         inventoryItemId: item.id,
         itemName: item.name,
-        itemType: item.type,
+        categoryName: item.category?.name ?? null,
         theoretical: Math.abs(theoretical),
         actual: Math.abs(actual),
         variance,

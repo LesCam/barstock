@@ -4,16 +4,7 @@ import { use, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { InventoryItemType, UOM } from "@barstock/types";
-
-const TYPE_LABELS: Record<string, string> = {
-  packaged_beer: "Packaged Beer",
-  keg_beer: "Keg Beer",
-  liquor: "Liquor",
-  wine: "Wine",
-  food: "Food",
-  misc: "Misc",
-};
+import { UOM } from "@barstock/types";
 
 const UOM_LABELS: Record<string, string> = {
   units: "Units",
@@ -41,16 +32,20 @@ export default function InventoryDetailPage({
     { locationId: locationId! },
     { enabled: !!locationId }
   );
-  const isKegBeer = item?.type === "keg_beer";
+  const isKeg = item?.category?.countingMethod === "keg";
   const { data: kegSizes } = trpc.inventory.kegSizesForItem.useQuery(
     { inventoryItemId: id, businessId: businessId! },
-    { enabled: !!businessId && isKegBeer === true }
+    { enabled: !!businessId && isKeg === true }
+  );
+  const { data: categories } = trpc.itemCategories.list.useQuery(
+    { businessId: businessId! },
+    { enabled: !!businessId }
   );
 
   // --- Edit state ---
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
-  const [editType, setEditType] = useState("");
+  const [editCategoryId, setEditCategoryId] = useState("");
   const [editBarcode, setEditBarcode] = useState("");
   const [editVendorSku, setEditVendorSku] = useState("");
   const [editPackSize, setEditPackSize] = useState("");
@@ -89,7 +84,7 @@ export default function InventoryDetailPage({
   function startEdit() {
     if (!item) return;
     setEditName(item.name);
-    setEditType(item.type);
+    setEditCategoryId(item.categoryId ?? "");
     setEditBarcode(item.barcode ?? "");
     setEditVendorSku(item.vendorSku ?? "");
     setEditPackSize(item.packSize != null ? String(item.packSize) : "");
@@ -102,7 +97,7 @@ export default function InventoryDetailPage({
     updateMut.mutate({
       id,
       name: editName.trim(),
-      type: editType as any,
+      categoryId: editCategoryId || undefined,
       baseUom: UOM.units as any,
       barcode: editBarcode.trim() || null,
       vendorSku: editVendorSku.trim() || null,
@@ -181,7 +176,7 @@ export default function InventoryDetailPage({
         </div>
 
         <p className="mt-1 text-sm text-[#EAF0FF]/60">
-          {TYPE_LABELS[item.type] ?? item.type} &middot; {UOM_LABELS[item.baseUom] ?? item.baseUom}
+          {item.category?.name ?? "Uncategorized"} &middot; {UOM_LABELS[item.baseUom] ?? item.baseUom}
         </p>
       </div>
 
@@ -225,14 +220,15 @@ export default function InventoryDetailPage({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Type</label>
+                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Category</label>
                 <select
-                  value={editType}
-                  onChange={(e) => setEditType(e.target.value)}
+                  value={editCategoryId}
+                  onChange={(e) => setEditCategoryId(e.target.value)}
                   className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
                 >
-                  {Object.entries(TYPE_LABELS).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
+                  <option value="">Select category...</option>
+                  {categories?.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
                 </select>
               </div>
@@ -317,8 +313,8 @@ export default function InventoryDetailPage({
         ) : (
           <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-4">
             <div>
-              <dt className="text-[#EAF0FF]/60">Type</dt>
-              <dd className="text-[#EAF0FF]">{TYPE_LABELS[item.type] ?? item.type}</dd>
+              <dt className="text-[#EAF0FF]/60">Category</dt>
+              <dd className="text-[#EAF0FF]">{item.category?.name ?? "Uncategorized"}</dd>
             </div>
             <div>
               <dt className="text-[#EAF0FF]/60">Barcode</dt>
@@ -409,7 +405,7 @@ export default function InventoryDetailPage({
               <dt className="text-[#EAF0FF]/60">Unit Cost</dt>
               <dd className="text-[#EAF0FF]">
                 {itemOnHand.unitCost != null
-                  ? `$${Number(itemOnHand.unitCost).toFixed(isKegBeer ? 4 : 2)}`
+                  ? `$${Number(itemOnHand.unitCost).toFixed(isKeg ? 4 : 2)}`
                   : "—"}
               </dd>
             </div>
@@ -445,8 +441,8 @@ export default function InventoryDetailPage({
 
         {showAddPrice && (
           <div className="mb-3 rounded-md border border-white/10 bg-[#0B1623] p-3">
-            {/* Entry mode toggle — only show for keg_beer items */}
-            {isKegBeer && (
+            {/* Entry mode toggle — only show for keg items */}
+            {isKeg && (
               <div className="mb-3">
                 <div className="inline-flex rounded-md border border-white/10">
                   <button
@@ -476,7 +472,7 @@ export default function InventoryDetailPage({
             )}
 
             <div className="flex flex-wrap items-end gap-3">
-              {priceEntryMode === "per_container" && isKegBeer ? (
+              {priceEntryMode === "per_container" && isKeg ? (
                 <>
                   {/* Keg size selector */}
                   <div>
@@ -556,7 +552,7 @@ export default function InventoryDetailPage({
               )}
             </div>
 
-            {isKegBeer && priceEntryMode === "per_container" && (
+            {isKeg && priceEntryMode === "per_container" && (
               <p className="mt-2 text-xs text-[#EAF0FF]/40">
                 Enter the full keg price. We'll calculate the per-oz cost automatically.
               </p>
@@ -570,7 +566,7 @@ export default function InventoryDetailPage({
               <thead className="border-b border-white/10 text-xs uppercase text-[#EAF0FF]/60">
                 <tr>
                   <th className="px-4 py-2">Unit Cost</th>
-                  {isKegBeer && <th className="px-4 py-2">Keg Cost</th>}
+                  {isKeg && <th className="px-4 py-2">Keg Cost</th>}
                   <th className="px-4 py-2">Currency</th>
                   <th className="px-4 py-2">Effective From</th>
                   <th className="px-4 py-2">Effective To</th>
@@ -580,7 +576,7 @@ export default function InventoryDetailPage({
                 {item.priceHistory.map((price) => (
                   <tr key={price.id} className="hover:bg-white/5">
                     <td className="px-4 py-2">${Number(price.unitCost).toFixed(4)}</td>
-                    {isKegBeer && (
+                    {isKeg && (
                       <td className="px-4 py-2">
                         {(price as any).containerCost != null
                           ? `$${Number((price as any).containerCost).toFixed(2)}`

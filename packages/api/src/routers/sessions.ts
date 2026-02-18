@@ -56,7 +56,12 @@ export const sessionsRouter = router({
         include: {
           lines: {
             include: {
-              inventoryItem: { select: { name: true, type: true, baseUom: true, packSize: true } },
+              inventoryItem: {
+                select: {
+                  name: true, baseUom: true, packSize: true,
+                  category: { select: { id: true, name: true, countingMethod: true } },
+                },
+              },
               tapLine: { select: { name: true } },
               subArea: { select: { id: true, name: true, barArea: { select: { id: true, name: true } } } },
             },
@@ -133,8 +138,10 @@ export const sessionsRouter = router({
         Array<{
           inventory_item_id: string;
           name: string;
-          type: string;
+          type: string | null;
           base_uom: string;
+          counting_method: string | null;
+          category_name: string | null;
           sub_area_id: string;
           sub_area_name: string;
           last_counted_at: Date;
@@ -157,13 +164,15 @@ export const sessionsRouter = router({
         SELECT
           r.inventory_item_id,
           i.name,
-          i.type,
           i.base_uom,
+          c.counting_method::text,
+          c.name AS category_name,
           r.sub_area_id,
           sa.name AS sub_area_name,
           r.created_at AS last_counted_at
         FROM ranked r
         INNER JOIN inventory_items i ON i.id = r.inventory_item_id
+        LEFT JOIN inventory_item_categories c ON c.id = i.category_id
         INNER JOIN sub_areas sa ON sa.id = r.sub_area_id
         WHERE r.rn = 1
           AND r.sub_area_id = ANY(${subAreaIds}::uuid[])
@@ -173,7 +182,8 @@ export const sessionsRouter = router({
       return items.map((item) => ({
         inventoryItemId: item.inventory_item_id,
         name: item.name,
-        type: item.type,
+        countingMethod: item.counting_method,
+        categoryName: item.category_name,
         baseUom: item.base_uom,
         subAreaId: item.sub_area_id,
         subAreaName: item.sub_area_name,
@@ -191,8 +201,10 @@ export const sessionsRouter = router({
         Array<{
           id: string;
           name: string;
-          type: string;
+          type: string | null;
           base_uom: string;
+          counting_method: string | null;
+          category_name: string | null;
           sub_area_id: string | null;
           sub_area_name: string | null;
           bar_area_name: string | null;
@@ -210,12 +222,14 @@ export const sessionsRouter = router({
         SELECT
           i.id,
           i.name,
-          i.type,
           i.base_uom,
+          c.counting_method::text,
+          c.name AS category_name,
           dp.sub_area_id,
           sa.name AS sub_area_name,
           ba.name AS bar_area_name
         FROM inventory_items i
+        LEFT JOIN inventory_item_categories c ON c.id = i.category_id
         LEFT JOIN distinct_placements dp ON dp.inventory_item_id = i.id
         LEFT JOIN sub_areas sa ON sa.id = dp.sub_area_id
         LEFT JOIN bar_areas ba ON ba.id = sa.bar_area_id
@@ -227,7 +241,8 @@ export const sessionsRouter = router({
       return items.map((item) => ({
         inventoryItemId: item.id,
         name: item.name,
-        type: item.type,
+        countingMethod: item.counting_method,
+        categoryName: item.category_name,
         baseUom: item.base_uom,
         subAreaId: item.sub_area_id,
         subAreaName: item.sub_area_name

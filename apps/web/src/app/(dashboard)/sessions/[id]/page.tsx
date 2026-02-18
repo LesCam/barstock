@@ -151,7 +151,7 @@ export default function SessionDetailPage({
     return inventoryItems.filter(
       (item) =>
         item.name.toLowerCase().includes(search) ||
-        item.type.toLowerCase().includes(search)
+        (item.category?.name ?? "").toLowerCase().includes(search)
     );
   }, [inventoryItems, itemSearch]);
 
@@ -262,7 +262,7 @@ export default function SessionDetailPage({
                 <tr key={line.id} className="hover:bg-white/5">
                   <td className="px-4 py-3">{line.inventoryItem.name}</td>
                   <td className="px-4 py-3 capitalize text-xs">
-                    {line.inventoryItem.type.replace("_", " ")}
+                    {line.inventoryItem.category?.name ?? ""}
                   </td>
                   <td className="px-4 py-3">
                     <EditableCell
@@ -346,7 +346,7 @@ export default function SessionDetailPage({
                     >
                       <span>{item.name}</span>
                       <span className="text-xs capitalize text-[#EAF0FF]/40">
-                        {item.type.replace("_", " ")}
+                        {item.category?.name ?? ""}
                       </span>
                     </button>
                   ))}

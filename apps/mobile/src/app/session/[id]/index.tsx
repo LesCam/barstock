@@ -24,7 +24,8 @@ interface BarArea {
 interface UncountedItem {
   inventoryItemId: string;
   name: string;
-  type: string;
+  countingMethod: string;
+  categoryName: string;
   baseUom: string;
   subAreaName: string;
   acknowledged: boolean;
@@ -107,7 +108,7 @@ export default function SessionDetailScreen() {
   const expectedTotal = expectedChecklist.length;
   const expectedCounted = expectedChecklist.filter((i: any) => i.counted).length;
 
-  function handleExpectedItemTap(item: { inventoryItemId: string; name: string; type: string; subAreaId?: string; subAreaName?: string }) {
+  function handleExpectedItemTap(item: { inventoryItemId: string; name: string; countingMethod: string; subAreaId?: string; subAreaName?: string }) {
     if (!areaSelected) return;
     // In full location mode, use the item's own subAreaId and auto-select it
     let subAreaForItem = selectedSubAreaId ?? "";
@@ -127,7 +128,7 @@ export default function SessionDetailScreen() {
     }
     const params = `subAreaId=${subAreaForItem}&areaName=${encodeURIComponent(labelForItem)}&itemId=${item.inventoryItemId}`;
 
-    if (item.type === "liquor" || item.type === "wine") {
+    if (item.countingMethod === "weighable") {
       Alert.alert(item.name, "How do you want to count this?", [
         {
           text: "Weigh Bottle",
@@ -247,7 +248,8 @@ export default function SessionDetailScreen() {
             allExpected.push({
               inventoryItemId: item.inventoryItemId,
               name: item.name,
-              type: item.type,
+              countingMethod: item.countingMethod,
+              categoryName: item.categoryName,
               baseUom: item.baseUom,
               subAreaName: item.subAreaName,
               acknowledged: false,
@@ -515,7 +517,7 @@ export default function SessionDetailScreen() {
                           <View style={styles.expectedCheck} />
                           <Text style={styles.expectedName}>{item.name}</Text>
                           <Text style={styles.expectedType}>
-                            {item.type.replace("_", " ")}
+                            {item.categoryName ?? "Uncategorized"}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -546,7 +548,7 @@ export default function SessionDetailScreen() {
                     <View style={styles.expectedCheck} />
                     <Text style={styles.expectedName}>{item.name}</Text>
                     <Text style={styles.expectedType}>
-                      {item.type.replace("_", " ")}
+                      {item.categoryName ?? "Uncategorized"}
                     </Text>
                   </TouchableOpacity>
                 )
@@ -624,7 +626,7 @@ export default function SessionDetailScreen() {
                           {line.inventoryItem?.name ?? "Unknown"}
                         </Text>
                         <Text style={styles.reviewItemMeta}>
-                          {line.inventoryItem?.type?.replace("_", " ") ?? ""}
+                          {line.inventoryItem?.category?.name ?? ""}
                           {line.subArea ? ` | ${line.subArea.name}` : ""}
                         </Text>
                       </View>

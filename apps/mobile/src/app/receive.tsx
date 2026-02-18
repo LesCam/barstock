@@ -19,11 +19,11 @@ import { ItemSearchBar } from "@/components/ItemSearchBar";
 interface SelectedItem {
   id: string;
   name: string;
-  type: string;
   barcode: string | null;
   packSize: unknown;
   containerSize: unknown;
   baseUom: string;
+  category?: { id: string; name: string; countingMethod: string } | null;
 }
 
 interface Vendor {
@@ -344,7 +344,7 @@ export default function ReceiveStockScreen() {
             <View style={styles.itemCard}>
               <Text style={styles.itemName}>{selectedItem.name}</Text>
               <Text style={styles.itemType}>
-                {selectedItem.type.replace("_", " ")}
+                {selectedItem.category?.name ?? "Uncategorized"}
                 {packSize ? ` — Pack of ${packSize}` : ""}
               </Text>
             </View>
@@ -485,7 +485,7 @@ export default function ReceiveStockScreen() {
                         {line.inventoryItem?.name ?? "Unknown"}
                       </Text>
                       <Text style={styles.reviewItemMeta}>
-                        {line.inventoryItem?.type?.replace("_", " ") ?? ""}
+                        {line.inventoryItem?.category?.name ?? ""}
                         {itemPack ? ` | Pack of ${itemPack}` : ""}
                         {line.subArea ? ` | ${line.subArea.name}` : ""}
                       </Text>
