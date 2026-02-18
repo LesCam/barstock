@@ -10,12 +10,14 @@ import {
 } from "react-native";
 // Note: Scanner and Add-search use absolute-positioned overlays instead of Modal
 // to avoid iOS Modal stacking conflicts that prevent subsequent modals from presenting.
+import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 import { TareWeightEditModal } from "@/components/TareWeightEditModal";
 import { CreateItemFromScanModal } from "@/components/CreateItemFromScanModal";
+import { scaleManager } from "@/lib/scale/scale-manager";
 
 interface TemplateRow {
   id: string;
@@ -42,6 +44,7 @@ interface SelectedItem {
 }
 
 export default function TareWeightsScreen() {
+  const router = useRouter();
   const { selectedLocationId, user } = useAuth();
   const locationId = selectedLocationId ?? user?.locationIds[0] ?? "";
 
@@ -129,6 +132,22 @@ export default function TareWeightsScreen() {
     );
   }, [templates, search]);
 
+
+  function promptScaleOrEdit(template: TemplateRow) {
+    if (scaleManager.isConnected) {
+      setEditingTemplate(template);
+      return;
+    }
+    Alert.alert(
+      "Scale Not Connected",
+      "Connect to a scale for live weighing, or edit weights manually.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Edit Manually", onPress: () => setEditingTemplate(template) },
+        { text: "Connect Scale", onPress: () => router.push("/connect-scale") },
+      ]
+    );
+  }
 
   function handleDelete(template: TemplateRow) {
     Alert.alert(
@@ -301,7 +320,7 @@ export default function TareWeightsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.weightCell}
-              onPress={() => setEditingTemplate(item)}
+              onPress={() => promptScaleOrEdit(item)}
             >
               <Text style={styles.weightText}>
                 {Math.round(Number(item.emptyBottleWeightG))}g
@@ -309,7 +328,7 @@ export default function TareWeightsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.weightCell}
-              onPress={() => setEditingTemplate(item)}
+              onPress={() => promptScaleOrEdit(item)}
             >
               <Text style={styles.weightText}>
                 {Math.round(Number(item.fullBottleWeightG))}g
