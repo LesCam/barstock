@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
-import { getMappingForDevice, setMappingForDevice } from "@/lib/scale/scale-mappings";
+import { getMappingForDevice, setMappingForDevice, getAllMappings } from "@/lib/scale/scale-mappings";
 import { useScaleHeartbeat } from "@/lib/scale/use-scale-heartbeat";
 import { ScaleProfilePicker } from "@/components/ScaleProfilePicker";
 import { useAuth } from "@/lib/auth-context";
@@ -39,6 +39,9 @@ export default function ConnectScaleSettingsScreen() {
   );
   const [lastReading, setLastReading] = useState<ScaleReading | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
+
+  // Saved device → profile mappings (for display in scan list)
+  const [deviceMappings, setDeviceMappings] = useState<Record<string, { profileId: string; profileName: string }>>({});
 
   // Scale profile state
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -75,8 +78,12 @@ export default function ConnectScaleSettingsScreen() {
     setScanning(true);
     setDevices([]);
     try {
-      const found = await scaleManager.scan();
+      const [found, mappings] = await Promise.all([
+        scaleManager.scan(),
+        getAllMappings(),
+      ]);
       setDevices(found);
+      setDeviceMappings(mappings);
     } catch {
       // Scan may fail on simulator or without BLE
     } finally {
@@ -217,10 +224,17 @@ export default function ConnectScaleSettingsScreen() {
               </View>
             )}
 
-            {devices.map((device) => (
+            {devices.map((device) => {
+              const saved = deviceMappings[device.id];
+              return (
               <View key={device.id} style={styles.deviceRow}>
                 <View style={styles.deviceInfo}>
-                  <Text style={styles.deviceName}>{device.name}</Text>
+                  <Text style={styles.deviceName}>
+                    {saved?.profileName || device.name}
+                  </Text>
+                  {saved && (
+                    <Text style={styles.deviceSubName}>{device.name}</Text>
+                  )}
                 </View>
                 <TouchableOpacity
                   style={styles.connectBtn}
@@ -234,7 +248,8 @@ export default function ConnectScaleSettingsScreen() {
                   )}
                 </TouchableOpacity>
               </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -392,6 +407,11 @@ const styles = StyleSheet.create({
     color: "#EAF0FF",
     fontSize: 15,
     fontWeight: "500",
+  },
+  deviceSubName: {
+    color: "#5A6A7A",
+    fontSize: 12,
+    marginTop: 2,
   },
   connectBtn: {
     backgroundColor: "#E9B44C",
