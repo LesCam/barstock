@@ -48,7 +48,7 @@ export const sessionsRouter = router({
         include: {
           lines: {
             include: {
-              inventoryItem: { select: { name: true, type: true, baseUom: true } },
+              inventoryItem: { select: { name: true, type: true, baseUom: true, packSize: true } },
               tapLine: { select: { name: true } },
               subArea: { select: { id: true, name: true, barArea: { select: { id: true, name: true } } } },
             },
@@ -75,6 +75,12 @@ export const sessionsRouter = router({
       const { id, ...data } = input;
       return ctx.prisma.inventorySessionLine.update({ where: { id }, data });
     }),
+
+  deleteLine: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      ctx.prisma.inventorySessionLine.delete({ where: { id: input.id } })
+    ),
 
   close: protectedProcedure
     .input(z.object({ sessionId: z.string().uuid() }).merge(sessionCloseSchema))

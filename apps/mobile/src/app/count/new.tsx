@@ -143,7 +143,9 @@ export default function NewCountScreen() {
                 activeOpacity={0.7}
                 onPress={() => router.push(`/session/${s.id}`)}
               >
-                <Text style={styles.resumeType}>{s.sessionType}</Text>
+                <Text style={styles.resumeType}>
+                  {s.sessionType === "receiving" ? "Receiving" : "Inventory Count"}
+                </Text>
                 <Text style={styles.resumeDate}>
                   {new Date(s.startedTs).toLocaleString()}
                 </Text>

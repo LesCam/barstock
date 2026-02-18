@@ -68,6 +68,10 @@ function RootNavigator() {
         options={{ title: "Transfer Items", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="receive"
+        options={{ title: "Receive Stock", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
         name="guide/[id]"
         options={{ title: "Product Info", headerBackTitle: "Back" }}
       />

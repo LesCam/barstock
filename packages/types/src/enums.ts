@@ -66,6 +66,7 @@ export const EventType = {
   manual_adjustment: "manual_adjustment",
   inventory_count_adjustment: "inventory_count_adjustment",
   transfer: "transfer",
+  receiving: "receiving",
 } as const;
 export type EventType = (typeof EventType)[keyof typeof EventType];
 
@@ -98,6 +99,7 @@ export const SessionType = {
   daily: "daily",
   weekly: "weekly",
   monthly: "monthly",
+  receiving: "receiving",
 } as const;
 export type SessionType = (typeof SessionType)[keyof typeof SessionType];
 
