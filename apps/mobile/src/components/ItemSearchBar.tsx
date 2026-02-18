@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { View, Text, TextInput, TouchableOpacity, FlatList, Modal, StyleSheet } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, StyleSheet } from "react-native";
 import { trpc } from "@/lib/trpc";
 import { BarcodeScanner } from "./BarcodeScanner";
 
@@ -51,12 +51,16 @@ export function ItemSearchBar({
       list = list.filter((i) => itemTypeFilter.includes(i.type));
     }
     if (!query.trim()) return list;
-    const q = query.toLowerCase();
+    // Strip accents so "creme" matches "Crème", etc.
+    const normalize = (s: string) =>
+      s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const q = normalize(query);
     return list.filter(
       (i) =>
-        i.name.toLowerCase().includes(q) ||
-        (i.barcode && i.barcode.includes(q)) ||
-        (i.containerSize != null && String(Number(i.containerSize)).includes(q))
+        normalize(i.name).includes(q) ||
+        normalize(i.type.replace("_", " ")).includes(q) ||
+        (i.barcode && i.barcode.includes(query.trim())) ||
+        (i.containerSize != null && String(Number(i.containerSize)).includes(query.trim()))
     );
   }, [items, query, itemTypeFilter]);
 
@@ -123,28 +127,29 @@ export function ItemSearchBar({
 
       {showResults && query.trim().length > 0 && (
         <View style={styles.dropdown}>
-          <FlatList
-            data={filteredItems}
-            keyExtractor={(i) => i.id}
+          <ScrollView
             keyboardShouldPersistTaps="handled"
             style={styles.list}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.resultRow}
-                onPress={() => handleSelect(item)}
-              >
-                <Text style={styles.resultName}>{item.name}</Text>
-                <Text style={styles.resultMeta}>
-                  {item.type.replace("_", " ")}
-                  {item.containerSize != null ? ` · ${Number(item.containerSize)}ml` : ""}
-                  {item.barcode ? ` · ${item.barcode}` : ""}
-                </Text>
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={
+          >
+            {filteredItems.length === 0 ? (
               <Text style={styles.emptyText}>No matching items</Text>
-            }
-          />
+            ) : (
+              filteredItems.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.resultRow}
+                  onPress={() => handleSelect(item)}
+                >
+                  <Text style={styles.resultName}>{item.name}</Text>
+                  <Text style={styles.resultMeta}>
+                    {item.type.replace("_", " ")}
+                    {item.containerSize != null ? ` · ${Number(item.containerSize)}ml` : ""}
+                    {item.barcode ? ` · ${item.barcode}` : ""}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
         </View>
       )}
 

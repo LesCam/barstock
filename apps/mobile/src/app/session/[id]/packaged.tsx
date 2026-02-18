@@ -77,7 +77,7 @@ export default function PackagedCountScreen() {
               "Set this item aside — the barcode hasn't been registered yet."
             );
           }}
-          itemTypeFilter={["packaged_unit"]}
+          itemTypeFilter={undefined}
           placeholder="Search packaged items or scan..."
         />
 

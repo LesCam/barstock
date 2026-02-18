@@ -12,7 +12,7 @@ export const inventoryRouter = router({
     .input(z.object({ locationId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       ctx.prisma.inventoryItem.findMany({
-        where: { locationId: input.locationId },
+        where: { locationId: input.locationId, active: true },
         orderBy: { name: "asc" },
       })
     ),
