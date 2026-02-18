@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
-import { getProfileForDevice, setProfileForDevice } from "@/lib/scale/scale-mappings";
+import { getMappingForDevice, setMappingForDevice } from "@/lib/scale/scale-mappings";
 import { useScaleHeartbeat } from "@/lib/scale/use-scale-heartbeat";
 import { ScaleProfilePicker } from "@/components/ScaleProfilePicker";
 import { useAuth } from "@/lib/auth-context";
@@ -85,9 +85,10 @@ export default function ConnectScaleScreen() {
       setConnectedDeviceName(name);
 
       // Check for existing profile mapping
-      const existingProfileId = await getProfileForDevice(deviceId);
-      if (existingProfileId) {
-        setProfileId(existingProfileId);
+      const existing = await getMappingForDevice(deviceId);
+      if (existing) {
+        setProfileId(existing.profileId);
+        setProfileName(existing.profileName || null);
       } else if (selectedLocationId) {
         setPendingDeviceId(deviceId);
         setShowProfilePicker(true);
@@ -101,7 +102,7 @@ export default function ConnectScaleScreen() {
 
   const handleProfileSelect = useCallback(async (selectedProfileId: string, selectedProfileName: string) => {
     if (pendingDeviceId) {
-      await setProfileForDevice(pendingDeviceId, selectedProfileId);
+      await setMappingForDevice(pendingDeviceId, selectedProfileId, selectedProfileName);
     }
     setProfileId(selectedProfileId);
     setProfileName(selectedProfileName);
