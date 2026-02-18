@@ -153,6 +153,15 @@ export default function ArtTab() {
           )
         }
       />
+
+      {/* FAB — add artwork */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push("/art/new" as any)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -224,5 +233,27 @@ const styles = StyleSheet.create({
     color: "#5A6A7A",
     marginTop: 40,
     fontSize: 14,
+  },
+  fab: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#E9B44C",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  fabText: {
+    fontSize: 28,
+    fontWeight: "600",
+    color: "#0B1623",
+    marginTop: -2,
   },
 });

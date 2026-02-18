@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Image } from "expo-image";
-import { useLocalSearchParams, router } from "expo-router";
+import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { API_URL } from "@/lib/trpc";
@@ -38,6 +39,16 @@ function resolveImageUrl(url: string | null | undefined): string | null {
 export default function ArtworkDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const utils = trpc.useUtils();
+
+  // Refresh artwork data when returning from photo screen
+  useFocusEffect(
+    useCallback(() => {
+      if (id && user?.businessId) {
+        utils.artworks.getById.invalidate({ id, businessId: user.businessId });
+      }
+    }, [id, user?.businessId])
+  );
 
   const { data: artwork, isLoading } = trpc.artworks.getById.useQuery(
     { id: id!, businessId: user!.businessId },
@@ -119,6 +130,22 @@ export default function ArtworkDetailScreen() {
           <InfoRow label="Notes" value={artwork.notes} />
         )}
       </View>
+
+      {/* Add Photo button — max 3 photos */}
+      {photos.length < 3 && (
+        <TouchableOpacity
+          style={styles.addPhotoButton}
+          onPress={() =>
+            router.push({
+              pathname: "/art/photo" as any,
+              params: { artworkId: artwork.id },
+            })
+          }
+          activeOpacity={0.7}
+        >
+          <Text style={styles.addPhotoButtonText}>Add Photo</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Record Sale button — only for on_wall artworks */}
       {artwork.status === "on_wall" && (
@@ -246,6 +273,17 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 13, color: "#5A6A7A" },
   infoValue: { fontSize: 13, color: "#EAF0FF", fontWeight: "500" },
+  addPhotoButton: {
+    backgroundColor: "#16283F",
+    marginHorizontal: 16,
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  addPhotoButtonText: { fontSize: 15, fontWeight: "600", color: "#E9B44C" },
   sellButton: {
     backgroundColor: "#E9B44C",
     marginHorizontal: 16,

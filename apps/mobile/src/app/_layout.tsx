@@ -80,6 +80,14 @@ function RootNavigator() {
         options={{ title: "Artwork", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="art/new"
+        options={{ title: "New Artwork", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
+        name="art/photo"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="art/sell"
         options={{ title: "Record Sale", headerBackTitle: "Back" }}
       />
