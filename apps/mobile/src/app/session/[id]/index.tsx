@@ -2,8 +2,8 @@ import { useState, useMemo } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
-  SectionList,
   ScrollView,
   Modal,
   StyleSheet,
@@ -47,8 +47,14 @@ export default function SessionDetailScreen() {
   const [varianceReasons, setVarianceReasons] = useState<
     Array<{ itemId: string; reason: VarianceReason }>
   >([]);
+  const [showReview, setShowReview] = useState(false);
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const [editingQty, setEditingQty] = useState("");
 
-  const { data: session, isLoading } = trpc.sessions.getById.useQuery({ id: id! });
+  const { data: session, isLoading } = trpc.sessions.getById.useQuery(
+    { id: id! },
+    { refetchOnMount: "always" }
+  );
 
   const { data: areas } = trpc.areas.listBarAreas.useQuery(
     { locationId: selectedLocationId! },
@@ -112,9 +118,22 @@ export default function SessionDetailScreen() {
       setShowVerification(false);
       Alert.alert("Session Closed", "Adjustments have been created.");
       utils.sessions.getById.invalidate({ id: id! });
+      utils.sessions.list.invalidate();
     },
     onError(error: { message: string }) {
       Alert.alert("Error", error.message);
+    },
+  });
+
+  const updateLine = trpc.sessions.updateLine.useMutation({
+    onSuccess() {
+      utils.sessions.getById.invalidate({ id: id! });
+    },
+  });
+
+  const deleteLine = trpc.sessions.deleteLine.useMutation({
+    onSuccess() {
+      utils.sessions.getById.invalidate({ id: id! });
     },
   });
 
@@ -143,12 +162,10 @@ export default function SessionDetailScreen() {
     }
   }
 
-  // Group session lines by bar area for display
+  // Group session lines by bar area for review modal
   const groupedLines = useMemo(() => {
     if (!session?.lines) return [];
-
     const groups = new Map<string, { areaName: string; lines: typeof session.lines }>();
-
     for (const line of session.lines) {
       const areaName = line.subArea?.barArea?.name ?? "No Area";
       const key = line.subArea?.barArea?.id ?? "none";
@@ -157,8 +174,7 @@ export default function SessionDetailScreen() {
       }
       groups.get(key)!.lines.push(line);
     }
-
-    return Array.from(groups.entries()).map(([key, group]) => ({
+    return Array.from(groups.entries()).map(([_key, group]) => ({
       title: group.areaName,
       data: group.lines,
     }));
@@ -179,27 +195,22 @@ export default function SessionDetailScreen() {
   // Handle close session — triggers verification flow
   async function handleCloseSession() {
     if (workedAreaIds.length === 0) {
-      // No area-tagged items — just close directly
       closeMutation.mutate({ sessionId: id! });
       return;
     }
 
-    // Fetch expected items for each worked area and compare
     try {
       const allExpected: UncountedItem[] = [];
-
       for (const areaId of workedAreaIds) {
         const expected = await utils.sessions.expectedItemsForArea.fetch({
           locationId: selectedLocationId!,
           barAreaId: areaId,
         });
-
         const countedItemIds = new Set(
           session!.lines
             .filter((l: any) => l.subArea?.barArea?.id === areaId)
             .map((l: any) => l.inventoryItemId)
         );
-
         for (const item of expected) {
           if (!countedItemIds.has(item.inventoryItemId)) {
             allExpected.push({
@@ -215,11 +226,7 @@ export default function SessionDetailScreen() {
       }
 
       if (allExpected.length === 0) {
-        // All expected items counted — close directly
-        closeMutation.mutate({
-          sessionId: id!,
-          varianceReasons: varianceReasons,
-        });
+        closeMutation.mutate({ sessionId: id!, varianceReasons });
       } else {
         setUncountedItems(allExpected);
         setShowVerification(true);
@@ -248,10 +255,36 @@ export default function SessionDetailScreen() {
       );
       return;
     }
-    closeMutation.mutate({
-      sessionId: id!,
-      varianceReasons: varianceReasons,
-    });
+    closeMutation.mutate({ sessionId: id!, varianceReasons });
+  }
+
+  function handleSaveEdit(lineId: string) {
+    const val = parseInt(editingQty, 10);
+    if (!val || val <= 0) return;
+    updateLine.mutate({ id: lineId, countUnits: val });
+    setEditingLineId(null);
+    setEditingQty("");
+  }
+
+  function handleDeleteLine(lineId: string, itemName: string) {
+    Alert.alert("Remove Item", `Remove ${itemName}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => deleteLine.mutate({ id: lineId }),
+      },
+    ]);
+  }
+
+  function formatLineValue(line: any) {
+    if (line.countUnits != null)
+      return `${Number(line.countUnits)} ${line.inventoryItem.baseUom}`;
+    if (line.grossWeightGrams != null)
+      return `${Number(line.grossWeightGrams)}g`;
+    if (line.percentRemaining != null)
+      return `${Number(line.percentRemaining)}%`;
+    return "—";
   }
 
   if (isLoading || !session) {
@@ -264,232 +297,294 @@ export default function SessionDetailScreen() {
 
   const isOpen = !session.endedTs;
   const areaSelected = !!selectedSubAreaId || (!!selectedAreaId && selectedArea?.subAreas.length === 0);
-
-  // Build area display label for current selection
   const areaLabel = selectedArea
     ? selectedSubArea
       ? `${selectedArea.name} — ${selectedSubArea.name}`
       : selectedArea.name
     : "Select Area";
+  const lineCount = session.lines.length;
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>{session.sessionType} Session</Text>
+        <Text style={styles.title}>Inventory Count</Text>
         <Text style={isOpen ? styles.badgeOpen : styles.badgeClosed}>
           {isOpen ? "Open" : "Closed"}
         </Text>
       </View>
-
       <Text style={styles.meta}>
         Started: {new Date(session.startedTs).toLocaleString()}
+        {lineCount > 0 ? ` — ${lineCount} item${lineCount !== 1 ? "s" : ""}` : ""}
       </Text>
 
-      {/* Area Picker */}
-      {isOpen && areas && areas.length > 0 && (
-        <View style={styles.areaPicker}>
-          <Text style={styles.areaPickerLabel}>Count Area</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.areaPills}
-          >
-            {(areas as BarArea[]).map((area) => (
-              <TouchableOpacity
-                key={area.id}
-                style={[
-                  styles.areaPill,
-                  selectedAreaId === area.id && styles.areaPillActive,
-                ]}
-                onPress={() => handleAreaSelect(area)}
-              >
-                <Text
-                  style={[
-                    styles.areaPillText,
-                    selectedAreaId === area.id && styles.areaPillTextActive,
-                  ]}
-                >
-                  {area.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Sub-area pills */}
-          {selectedArea && selectedArea.subAreas.length > 0 && (
+      <ScrollView style={styles.mainScroll} showsVerticalScrollIndicator={false}>
+        {/* Area Picker */}
+        {isOpen && areas && areas.length > 0 && (
+          <View style={styles.areaPicker}>
+            <Text style={styles.areaPickerLabel}>Count Area</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              style={styles.subAreaPills}
+              style={styles.areaPills}
             >
-              {selectedArea.subAreas.map((sa: { id: string; name: string }) => (
+              {(areas as BarArea[]).map((area) => (
                 <TouchableOpacity
-                  key={sa.id}
+                  key={area.id}
                   style={[
-                    styles.subAreaPill,
-                    selectedSubAreaId === sa.id && styles.subAreaPillActive,
+                    styles.areaPill,
+                    selectedAreaId === area.id && styles.areaPillActive,
                   ]}
-                  onPress={() => setSelectedSubAreaId(sa.id)}
+                  onPress={() => handleAreaSelect(area)}
                 >
                   <Text
                     style={[
-                      styles.subAreaPillText,
-                      selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
+                      styles.areaPillText,
+                      selectedAreaId === area.id && styles.areaPillTextActive,
                     ]}
                   >
-                    {sa.name}
+                    {area.name}
                   </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          )}
 
-          {/* Current area banner */}
-          {areaSelected && (
-            <View style={styles.areaBanner}>
-              <Text style={styles.areaBannerText}>{areaLabel}</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Count actions — for new items not on expected list */}
-      {isOpen && (
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
-            disabled={!areaSelected}
-            onPress={() =>
-              router.push(
-                `/session/${id}/packaged?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
-              )
-            }
-          >
-            <Text style={styles.actionText}>Count New Item</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
-            disabled={!areaSelected}
-            onPress={() =>
-              router.push(
-                `/session/${id}/liquor?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
-              )
-            }
-          >
-            <Text style={styles.actionText}>Weigh Bottle</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
-            disabled={!areaSelected}
-            onPress={() =>
-              router.push(
-                `/session/${id}/draft?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
-              )
-            }
-          >
-            <Text style={styles.actionText}>Draft Verify</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Expected Items Checklist */}
-      {isOpen && expectedTotal > 0 && (
-        <View style={styles.expectedSection}>
-          <Text style={styles.expectedTitle}>
-            Expected in {areaLabel} — {expectedCounted}/{expectedTotal}
-          </Text>
-          {expectedChecklist.map((item: any) =>
-            item.counted ? (
-              <View
-                key={item.inventoryItemId}
-                style={[styles.expectedRow, styles.expectedRowCounted]}
+            {selectedArea && selectedArea.subAreas.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.subAreaPills}
               >
-                <View style={[styles.expectedCheck, styles.expectedCheckDone]}>
-                  <Text style={styles.expectedCheckmark}>✓</Text>
-                </View>
-                <Text style={[styles.expectedName, styles.expectedNameCounted]}>
-                  {item.name}
-                </Text>
+                {selectedArea.subAreas.map((sa: { id: string; name: string }) => (
+                  <TouchableOpacity
+                    key={sa.id}
+                    style={[
+                      styles.subAreaPill,
+                      selectedSubAreaId === sa.id && styles.subAreaPillActive,
+                    ]}
+                    onPress={() => setSelectedSubAreaId(sa.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.subAreaPillText,
+                        selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
+                      ]}
+                    >
+                      {sa.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            {areaSelected && (
+              <View style={styles.areaBanner}>
+                <Text style={styles.areaBannerText}>{areaLabel}</Text>
               </View>
-            ) : (
-              <TouchableOpacity
-                key={item.inventoryItemId}
-                style={styles.expectedRow}
-                onPress={() => handleExpectedItemTap(item)}
-              >
-                <View style={styles.expectedCheck} />
-                <Text style={styles.expectedName}>{item.name}</Text>
-                <Text style={styles.expectedType}>
-                  {item.type.replace("_", " ")}
-                </Text>
-              </TouchableOpacity>
-            )
-          )}
-        </View>
-      )}
-
-      {/* Counted Items — grouped by area */}
-      <Text style={styles.sectionTitle}>
-        Counted Items ({session.lines.length})
-      </Text>
-
-      <SectionList
-        style={styles.itemList}
-        sections={groupedLines}
-        keyExtractor={(line) => line.id}
-        renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionHeaderText}>{section.title}</Text>
+            )}
           </View>
         )}
-        renderItem={({ item: line }) => (
-          <View style={styles.lineRow}>
-            <View style={styles.lineInfo}>
-              <Text style={styles.lineName}>{line.inventoryItem.name}</Text>
-              {line.subArea && (
-                <Text style={styles.lineSubArea}>{line.subArea.name}</Text>
-              )}
-            </View>
-            <Text style={styles.lineCount}>
-              {line.countUnits != null
-                ? `${Number(line.countUnits)} ${line.inventoryItem.baseUom}`
-                : line.grossWeightGrams != null
-                  ? `${Number(line.grossWeightGrams)}g`
-                  : line.percentRemaining != null
-                    ? `${Number(line.percentRemaining)}%`
-                    : "—"}
+
+        {/* Count actions */}
+        {isOpen && (
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
+              disabled={!areaSelected}
+              onPress={() =>
+                router.push(
+                  `/session/${id}/packaged?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
+                )
+              }
+            >
+              <Text style={styles.actionText}>Count New Item</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
+              disabled={!areaSelected}
+              onPress={() =>
+                router.push(
+                  `/session/${id}/liquor?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
+                )
+              }
+            >
+              <Text style={styles.actionText}>Weigh Bottle</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
+              disabled={!areaSelected}
+              onPress={() =>
+                router.push(
+                  `/session/${id}/draft?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
+                )
+              }
+            >
+              <Text style={styles.actionText}>Draft Verify</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Expected Items Checklist */}
+        {isOpen && expectedTotal > 0 && (
+          <View style={styles.expectedSection}>
+            <Text style={styles.expectedTitle}>
+              Expected in {areaLabel} — {expectedCounted}/{expectedTotal}
             </Text>
+            {expectedChecklist.map((item: any) =>
+              item.counted ? (
+                <View
+                  key={item.inventoryItemId}
+                  style={[styles.expectedRow, styles.expectedRowCounted]}
+                >
+                  <View style={[styles.expectedCheck, styles.expectedCheckDone]}>
+                    <Text style={styles.expectedCheckmark}>✓</Text>
+                  </View>
+                  <Text style={[styles.expectedName, styles.expectedNameCounted]}>
+                    {item.name}
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  key={item.inventoryItemId}
+                  style={styles.expectedRow}
+                  onPress={() => handleExpectedItemTap(item)}
+                >
+                  <View style={styles.expectedCheck} />
+                  <Text style={styles.expectedName}>{item.name}</Text>
+                  <Text style={styles.expectedType}>
+                    {item.type.replace("_", " ")}
+                  </Text>
+                </TouchableOpacity>
+              )
+            )}
           </View>
         )}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No items counted yet.</Text>
-        }
-      />
 
-      {/* Footer actions */}
+        {/* Closed session — show summary inline */}
+        {!isOpen && lineCount > 0 && (
+          <View style={styles.closedSummary}>
+            <Text style={styles.closedSummaryTitle}>
+              {lineCount} item{lineCount !== 1 ? "s" : ""} counted
+            </Text>
+            {session.lines.slice(0, 5).map((line: any) => (
+              <View key={line.id} style={styles.closedLineRow}>
+                <Text style={styles.closedLineName}>{line.inventoryItem.name}</Text>
+                <Text style={styles.closedLineValue}>{formatLineValue(line)}</Text>
+              </View>
+            ))}
+            {lineCount > 5 && (
+              <TouchableOpacity onPress={() => setShowReview(true)}>
+                <Text style={styles.closedShowAll}>Show all {lineCount} items...</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Footer */}
       {isOpen && (
         <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.transferBtn}
-            onPress={() =>
-              router.push(
-                `/transfer?sessionId=${id}&locationId=${selectedLocationId}` as any
-              )
-            }
-          >
-            <Text style={styles.transferBtnText}>Transfer Items</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={handleCloseSession}
-            disabled={closeMutation.isPending}
-          >
-            <Text style={styles.closeBtnText}>
-              {closeMutation.isPending ? "Closing..." : "Close Session"}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.bottomRow}>
+            <TouchableOpacity
+              style={[styles.reviewBtn, lineCount === 0 && styles.btnDisabled]}
+              onPress={() => setShowReview(true)}
+              disabled={lineCount === 0}
+            >
+              <Text style={styles.reviewBtnText}>Review ({lineCount})</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.doneBtn}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.doneBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
+
+      {/* Review Modal */}
+      <Modal visible={showReview} animationType="slide">
+        <View style={styles.reviewModalContainer}>
+          <View style={styles.reviewModalHeader}>
+            <Text style={styles.reviewModalTitle}>
+              Review — {lineCount} Item{lineCount !== 1 ? "s" : ""}
+            </Text>
+            <TouchableOpacity onPress={() => setShowReview(false)}>
+              <Text style={styles.reviewModalClose}>Close</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.reviewList}>
+            {groupedLines.map((section) => (
+              <View key={section.title}>
+                <View style={styles.reviewSectionHeader}>
+                  <Text style={styles.reviewSectionTitle}>{section.title}</Text>
+                </View>
+                {section.data.map((line: any) => {
+                  const isEditing = editingLineId === line.id;
+                  return (
+                    <View key={line.id} style={styles.reviewRow}>
+                      <View style={styles.reviewInfo}>
+                        <Text style={styles.reviewItemName}>
+                          {line.inventoryItem?.name ?? "Unknown"}
+                        </Text>
+                        <Text style={styles.reviewItemMeta}>
+                          {line.inventoryItem?.type?.replace("_", " ") ?? ""}
+                          {line.subArea ? ` | ${line.subArea.name}` : ""}
+                        </Text>
+                      </View>
+
+                      {isEditing ? (
+                        <View style={styles.reviewEditGroup}>
+                          <TextInput
+                            style={styles.reviewQtyInput}
+                            value={editingQty}
+                            onChangeText={setEditingQty}
+                            keyboardType="number-pad"
+                            autoFocus
+                            selectTextOnFocus
+                          />
+                          <TouchableOpacity
+                            style={styles.reviewSaveBtn}
+                            onPress={() => handleSaveEdit(line.id)}
+                          >
+                            <Text style={styles.reviewSaveBtnText}>Save</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={styles.reviewActions}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setEditingLineId(line.id);
+                              setEditingQty(String(line.countUnits ?? line.grossWeightGrams ?? 0));
+                            }}
+                          >
+                            <Text style={styles.reviewQty}>
+                              {formatLineValue(line)}
+                            </Text>
+                          </TouchableOpacity>
+                          {isOpen && (
+                            <TouchableOpacity
+                              onPress={() =>
+                                handleDeleteLine(line.id, line.inventoryItem?.name ?? "item")
+                              }
+                            >
+                              <Text style={styles.deleteIcon}>✕</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+            {lineCount === 0 && (
+              <Text style={styles.reviewEmpty}>No items counted yet.</Text>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
 
       {/* Verification Modal */}
       <Modal visible={showVerification} animationType="slide">
@@ -586,7 +681,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     color: "#EAF0FF",
-    textTransform: "capitalize",
   },
   meta: { fontSize: 12, color: "#8899AA", marginBottom: 12 },
   badgeOpen: {
@@ -607,6 +701,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     overflow: "hidden",
   },
+
+  mainScroll: { flex: 1 },
 
   // Area picker
   areaPicker: { marginBottom: 16 },
@@ -634,7 +730,6 @@ const styles = StyleSheet.create({
   },
   areaPillText: { color: "#8899AA", fontSize: 14, fontWeight: "500" },
   areaPillTextActive: { color: "#E9B44C" },
-
   subAreaPills: { flexDirection: "row", marginBottom: 8 },
   subAreaPill: {
     backgroundColor: "#0F1D2E",
@@ -648,7 +743,6 @@ const styles = StyleSheet.create({
   subAreaPillActive: { borderColor: "#2BA8A0", backgroundColor: "#12293E" },
   subAreaPillText: { color: "#5A6A7A", fontSize: 13, fontWeight: "500" },
   subAreaPillTextActive: { color: "#2BA8A0" },
-
   areaBanner: {
     backgroundColor: "#1E3550",
     borderRadius: 8,
@@ -657,7 +751,7 @@ const styles = StyleSheet.create({
   },
   areaBannerText: { color: "#EAF0FF", fontSize: 14, fontWeight: "600" },
 
-  // Actions
+  // Count actions
   actions: { flexDirection: "row", gap: 8, marginBottom: 12 },
   actionBtn: {
     flex: 1,
@@ -670,28 +764,6 @@ const styles = StyleSheet.create({
   },
   actionBtnDisabled: { opacity: 0.4 },
   actionText: { fontSize: 13, fontWeight: "500", color: "#EAF0FF" },
-
-  transferBtn: {
-    backgroundColor: "#16283F",
-    borderWidth: 1,
-    borderColor: "#2BA8A0",
-    borderRadius: 8,
-    padding: 12,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  transferBtnText: { color: "#2BA8A0", fontSize: 14, fontWeight: "600" },
-
-  // Footer
-  footer: {
-    borderTopWidth: 1,
-    borderTopColor: "#1E3550",
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-
-  // Item list
-  itemList: { flex: 1 },
 
   // Expected items checklist
   expectedSection: {
@@ -741,50 +813,152 @@ const styles = StyleSheet.create({
     color: "#5A6A7A",
   },
 
-  // Section list
-  sectionTitle: {
+  // Closed session summary
+  closedSummary: {
+    backgroundColor: "#16283F",
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  closedSummaryTitle: {
+    color: "#8899AA",
     fontSize: 14,
     fontWeight: "600",
-    color: "#5A6A7A",
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  sectionHeader: {
+  closedLineRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1E3550",
+  },
+  closedLineName: { color: "#EAF0FF", fontSize: 14, flex: 1 },
+  closedLineValue: { color: "#8899AA", fontSize: 14 },
+  closedShowAll: {
+    color: "#E9B44C",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 10,
+  },
+
+  // Footer
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: "#1E3550",
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  bottomRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  reviewBtn: {
+    flex: 1,
+    backgroundColor: "#16283F",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E9B44C",
+  },
+  reviewBtnText: { color: "#E9B44C", fontSize: 16, fontWeight: "600" },
+  doneBtn: {
+    flex: 1,
+    backgroundColor: "#16283F",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  doneBtnText: { color: "#8899AA", fontSize: 16, fontWeight: "600" },
+  btnDisabled: { opacity: 0.4 },
+
+  // Review modal
+  reviewModalContainer: { flex: 1, backgroundColor: "#0B1623", paddingTop: 60 },
+  reviewModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  reviewModalTitle: { fontSize: 22, fontWeight: "bold", color: "#EAF0FF" },
+  reviewModalClose: { color: "#E9B44C", fontSize: 16, fontWeight: "600" },
+  reviewList: { flex: 1, paddingHorizontal: 16 },
+  reviewEmpty: { color: "#5A6A7A", textAlign: "center", marginTop: 40, fontSize: 15 },
+  reviewSectionHeader: {
     backgroundColor: "#0F1D2E",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
-    marginTop: 4,
+    marginTop: 8,
+    marginBottom: 4,
   },
-  sectionHeaderText: { color: "#E9B44C", fontSize: 13, fontWeight: "600" },
-  lineRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  reviewSectionTitle: { color: "#E9B44C", fontSize: 13, fontWeight: "600" },
+  reviewRow: {
     backgroundColor: "#16283F",
+    borderRadius: 10,
     padding: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1E3550",
-  },
-  lineInfo: { flex: 1 },
-  lineName: { fontSize: 14, fontWeight: "500", color: "#EAF0FF" },
-  lineSubArea: { fontSize: 11, color: "#5A6A7A", marginTop: 2 },
-  lineCount: { fontSize: 14, color: "#8899AA" },
-  emptyText: {
-    textAlign: "center",
-    color: "#5A6A7A",
-    marginTop: 20,
-    fontSize: 14,
-  },
-
-  // Close button
-  closeBtn: {
-    backgroundColor: "#dc2626",
-    borderRadius: 8,
-    padding: 14,
+    marginBottom: 8,
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "#1E3550",
   },
-  closeBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  reviewInfo: { flex: 1, marginRight: 12 },
+  reviewItemName: { color: "#EAF0FF", fontSize: 15, fontWeight: "600" },
+  reviewItemMeta: {
+    color: "#5A6A7A",
+    fontSize: 12,
+    textTransform: "capitalize",
+    marginTop: 2,
+  },
+  reviewActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  reviewQty: {
+    color: "#E9B44C",
+    fontSize: 16,
+    fontWeight: "700",
+    minWidth: 50,
+    textAlign: "right",
+  },
+  deleteIcon: {
+    color: "#dc2626",
+    fontSize: 18,
+    fontWeight: "700",
+    paddingHorizontal: 4,
+  },
+  reviewEditGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  reviewQtyInput: {
+    backgroundColor: "#0F1D2E",
+    borderRadius: 8,
+    padding: 8,
+    color: "#EAF0FF",
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+    width: 60,
+    borderWidth: 1,
+    borderColor: "#E9B44C",
+  },
+  reviewSaveBtn: {
+    backgroundColor: "#E9B44C",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  reviewSaveBtnText: { color: "#0B1623", fontSize: 14, fontWeight: "700" },
 
   // Verification modal
   verificationContainer: {
