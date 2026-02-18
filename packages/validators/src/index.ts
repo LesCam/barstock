@@ -11,3 +11,4 @@ export * from "./artist.schema";
 export * from "./artwork.schema";
 export * from "./user.schema";
 export * from "./vendor.schema";
+export * from "./product-guide.schema";

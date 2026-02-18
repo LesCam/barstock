@@ -30,6 +30,10 @@ export default function TabsLayout() {
         options={{ title: "Inventory", tabBarLabel: "Inventory" }}
       />
       <Tabs.Screen
+        name="guide"
+        options={{ title: "Product Guide", tabBarLabel: "Guide" }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{ title: "Settings", tabBarLabel: "Settings" }}
       />

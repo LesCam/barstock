@@ -23,6 +23,7 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: "📈" },
   { href: "/audit", label: "Audit Log", icon: "🔍" },
   { href: "/art", label: "Art Gallery", icon: "🎨" },
+  { href: "/guide", label: "Product Guide", icon: "📖" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
