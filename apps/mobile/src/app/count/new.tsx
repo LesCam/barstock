@@ -46,7 +46,7 @@ export default function NewCountScreen() {
 
   const { data: openSessions } = trpc.sessions.list.useQuery(
     { locationId: selectedLocationId!, openOnly: true },
-    { enabled: !!selectedLocationId }
+    { enabled: !!selectedLocationId, refetchOnMount: "always" }
   );
 
   const handleSelect = async (method: CountMethod) => {
@@ -61,7 +61,7 @@ export default function NewCountScreen() {
       const route = method === "liquor"
         ? `/session/${session.id}/connect-scale`
         : `/session/${session.id}/${method}`;
-      router.replace(route);
+      router.push(route);
     } catch (e: any) {
       Alert.alert("Error", e.message ?? "Failed to create session");
     } finally {
