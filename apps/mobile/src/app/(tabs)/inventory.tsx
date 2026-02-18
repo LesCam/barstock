@@ -32,14 +32,14 @@ export default function InventoryTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f9fafb" },
+  container: { flex: 1, backgroundColor: "#0B1623" },
   row: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    backgroundColor: "#fff", padding: 16,
-    borderBottomWidth: 1, borderBottomColor: "#e5e7eb",
+    backgroundColor: "#16283F", padding: 16,
+    borderBottomWidth: 1, borderBottomColor: "#1E3550",
   },
-  name: { fontSize: 15, fontWeight: "500" },
-  type: { fontSize: 12, color: "#666", marginTop: 2, textTransform: "capitalize" },
-  uom: { fontSize: 13, color: "#999" },
-  empty: { textAlign: "center", color: "#999", marginTop: 40, fontSize: 14 },
+  name: { fontSize: 15, fontWeight: "500", color: "#EAF0FF" },
+  type: { fontSize: 12, color: "#5A6A7A", marginTop: 2, textTransform: "capitalize" },
+  uom: { fontSize: 13, color: "#8899AA" },
+  empty: { textAlign: "center", color: "#5A6A7A", marginTop: 40, fontSize: 14 },
 });

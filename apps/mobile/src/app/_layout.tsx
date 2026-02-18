@@ -33,7 +33,13 @@ function RootNavigator() {
   }
 
   return (
-    <Stack>
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: "#0B1623" },
+        headerTintColor: "#EAF0FF",
+        headerTitleStyle: { fontWeight: "600" },
+      }}
+    >
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="count" options={{ headerShown: false }} />

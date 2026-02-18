@@ -11,7 +11,16 @@ export default function TabsLayout() {
   }
 
   return (
-    <Tabs>
+    <Tabs
+      screenOptions={{
+        headerStyle: { backgroundColor: "#0B1623" },
+        headerTintColor: "#EAF0FF",
+        headerTitleStyle: { fontWeight: "600" },
+        tabBarStyle: { backgroundColor: "#0B1623", borderTopColor: "#1E3550" },
+        tabBarActiveTintColor: "#E9B44C",
+        tabBarInactiveTintColor: "#5A6A7A",
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{ title: "Sessions", tabBarLabel: "Sessions" }}

@@ -75,15 +75,15 @@ export default function SettingsTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f9fafb", padding: 16 },
+  container: { flex: 1, backgroundColor: "#0B1623", padding: 16 },
   section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 12, fontWeight: "600", color: "#999", marginBottom: 8, textTransform: "uppercase" },
+  sectionTitle: { fontSize: 12, fontWeight: "600", color: "#5A6A7A", marginBottom: 8, textTransform: "uppercase" },
   card: {
-    backgroundColor: "#fff", padding: 16, borderRadius: 8,
-    borderWidth: 1, borderColor: "#e5e7eb",
+    backgroundColor: "#16283F", padding: 16, borderRadius: 8,
+    borderWidth: 1, borderColor: "#1E3550",
   },
-  email: { fontSize: 15, color: "#333", fontWeight: "500" },
-  rowText: { fontSize: 15, color: "#333" },
-  switchText: { fontSize: 15, color: "#2563eb", fontWeight: "500" },
+  email: { fontSize: 15, color: "#EAF0FF", fontWeight: "500" },
+  rowText: { fontSize: 15, color: "#EAF0FF" },
+  switchText: { fontSize: 15, color: "#E9B44C", fontWeight: "500" },
   logoutText: { fontSize: 15, color: "#dc2626", fontWeight: "500" },
 });
