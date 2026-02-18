@@ -7,11 +7,17 @@ import { z } from "zod";
 export const sessionsRouter = router({
   create: protectedProcedure
     .input(sessionCreateSchema)
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.inventorySession.create({
+    .mutation(async ({ ctx, input }) => {
+      // Auto-close any open sessions for this location
+      await ctx.prisma.inventorySession.updateMany({
+        where: { locationId: input.locationId, endedTs: null },
+        data: { endedTs: new Date(), closedBy: ctx.user.userId },
+      });
+
+      return ctx.prisma.inventorySession.create({
         data: { ...input, createdBy: ctx.user.userId },
-      })
-    ),
+      });
+    }),
 
   list: protectedProcedure
     .input(z.object({

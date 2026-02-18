@@ -122,7 +122,10 @@ export default function NewCountScreen() {
       {openSessions && openSessions.length > 0 && (
         <>
           <Text style={[styles.sectionTitle, { marginTop: 32 }]}>
-            Inventory Tasks
+            Open Session
+          </Text>
+          <Text style={styles.openWarning}>
+            Starting a new count will close the open session below.
           </Text>
           {openSessions.map((s) => (
             <TouchableOpacity
@@ -235,5 +238,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#42A5F5",
+  },
+  openWarning: {
+    fontSize: 13,
+    color: "#E9B44C",
+    marginBottom: 12,
   },
 });
