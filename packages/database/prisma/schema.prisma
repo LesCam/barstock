@@ -149,6 +149,16 @@ enum PayoutMethodT {
   @@map("payout_method_t")
 }
 
+enum PaymentMethodT {
+  cash
+  debit
+  credit
+  etransfer
+  other
+
+  @@map("payment_method_t")
+}
+
 // ─── Multi-tenant ────────────────────────────────────────────
 
 model Business {
@@ -172,6 +182,7 @@ model Business {
   notifications    Notification[]
   artists          Artist[]
   artworks         Artwork[]
+  artSales         ArtSale[]
   vendors          Vendor[]
 
   @@map("businesses")
@@ -234,6 +245,7 @@ model User {
   createdSessions       InventorySession[]    @relation("SessionCreatedBy")
   closedSessions        InventorySession[]    @relation("SessionClosedBy")
   bottleMeasurements    BottleMeasurement[]
+  artSalesRecorded      ArtSale[]
   auditLogs             AuditLog[]
   notifications         Notification[]
   passwordResetTokens   PasswordResetToken[]
@@ -745,6 +757,7 @@ model Artist {
 
   business Business  @relation(fields: [businessId], references: [id])
   artworks Artwork[]
+  sales    ArtSale[]
 
   @@index([businessId], map: "ix_artists_business")
   @@map("artists")
@@ -771,6 +784,7 @@ model Artwork {
   business Business       @relation(fields: [businessId], references: [id])
   artist   Artist          @relation(fields: [artistId], references: [id])
   photos   ArtworkPhoto[]
+  sales    ArtSale[]
 
   @@index([businessId, status], map: "ix_artworks_business_status")
   @@index([artistId], map: "ix_artworks_artist")
@@ -791,6 +805,34 @@ model ArtworkPhoto {
 
   @@index([artworkId], map: "ix_artwork_photos_artwork")
   @@map("artwork_photos")
+}
+
+model ArtSale {
+  id                   String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId           String         @map("business_id") @db.Uuid
+  artworkId            String         @map("artwork_id") @db.Uuid
+  artistId             String         @map("artist_id") @db.Uuid
+  salePriceCents       Int            @map("sale_price_cents")
+  commissionPubPercent Decimal        @map("commission_pub_percent")
+  pubCutCents          Int            @map("pub_cut_cents")
+  artistCutCents       Int            @map("artist_cut_cents")
+  paymentMethod        PaymentMethodT @map("payment_method")
+  paymentStatus        String         @default("confirmed") @map("payment_status")
+  buyerName            String?        @map("buyer_name")
+  buyerContact         String?        @map("buyer_contact")
+  notes                String?
+  recordedByUserId     String         @map("recorded_by_user_id") @db.Uuid
+  soldAt               DateTime       @default(now()) @map("sold_at") @db.Timestamptz()
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+
+  business     Business @relation(fields: [businessId], references: [id])
+  artwork      Artwork  @relation(fields: [artworkId], references: [id])
+  artist       Artist   @relation(fields: [artistId], references: [id])
+  recordedBy   User     @relation(fields: [recordedByUserId], references: [id])
+
+  @@index([businessId, soldAt], map: "ix_art_sales_business_sold")
+  @@index([artistId], map: "ix_art_sales_artist")
+  @@map("art_sales")
 }
 
 // ─── Password Reset ─────────────────────────────────────────

@@ -9,6 +9,7 @@ export {
   ConfidenceLevel,
   VarianceReason,
   SessionType,
+  PaymentMethod,
   ROLE_HIERARCHY,
 } from "./enums";
 
@@ -23,4 +24,5 @@ export type {
   ConfidenceLevel as ConfidenceLevelType,
   VarianceReason as VarianceReasonType,
   SessionType as SessionTypeType,
+  PaymentMethod as PaymentMethodType,
 } from "./enums";

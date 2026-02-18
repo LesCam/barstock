@@ -16,6 +16,7 @@ import { settingsRouter } from "./routers/settings";
 import { notificationsRouter } from "./routers/notifications";
 import { artistsRouter } from "./routers/artists";
 import { artworksRouter } from "./routers/artworks";
+import { artSalesRouter } from "./routers/art-sales";
 import { usersRouter } from "./routers/users";
 import { vendorsRouter } from "./routers/vendors";
 import { productGuideRouter } from "./routers/product-guide";
@@ -40,6 +41,7 @@ export const appRouter = router({
   notifications: notificationsRouter,
   artists: artistsRouter,
   artworks: artworksRouter,
+  artSales: artSalesRouter,
   users: usersRouter,
   vendors: vendorsRouter,
   productGuide: productGuideRouter,

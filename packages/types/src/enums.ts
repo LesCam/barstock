@@ -139,6 +139,16 @@ export const PayoutMethod = {
 } as const;
 export type PayoutMethod = (typeof PayoutMethod)[keyof typeof PayoutMethod];
 
+/** Matches PostgreSQL payment_method_t */
+export const PaymentMethod = {
+  cash: "cash",
+  debit: "debit",
+  credit: "credit",
+  etransfer: "etransfer",
+  other: "other",
+} as const;
+export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
+
 /** Role hierarchy for RBAC */
 export const ROLE_HIERARCHY: Record<Role, number> = {
   platform_admin: 6,

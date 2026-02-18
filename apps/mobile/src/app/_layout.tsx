@@ -75,6 +75,14 @@ function RootNavigator() {
         name="guide/[id]"
         options={{ title: "Product Info", headerBackTitle: "Back" }}
       />
+      <Stack.Screen
+        name="art/[id]"
+        options={{ title: "Artwork", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
+        name="art/sell"
+        options={{ title: "Record Sale", headerBackTitle: "Back" }}
+      />
     </Stack>
   );
 }

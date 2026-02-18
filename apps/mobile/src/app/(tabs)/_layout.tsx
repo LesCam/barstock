@@ -26,6 +26,10 @@ export default function TabsLayout() {
         options={{ title: "Sessions", tabBarLabel: "Sessions" }}
       />
       <Tabs.Screen
+        name="art"
+        options={{ title: "Art", tabBarLabel: "Art" }}
+      />
+      <Tabs.Screen
         name="inventory"
         options={{ title: "Inventory", tabBarLabel: "Inventory" }}
       />
