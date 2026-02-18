@@ -48,6 +48,16 @@ export default function SettingsTab() {
         </View>
       )}
 
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Inventory</Text>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push("/manage-items")}
+        >
+          <Text style={styles.rowText}>Manage Items</Text>
+        </TouchableOpacity>
+      </View>
+
       {canAccessScale && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Scale</Text>
