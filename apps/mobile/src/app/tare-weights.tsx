@@ -49,6 +49,7 @@ export default function TareWeightsScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [showAddSearch, setShowAddSearch] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TemplateRow | null>(null);
+  const [viewingTemplate, setViewingTemplate] = useState<TemplateRow | null>(null);
   const [addingItem, setAddingItem] = useState<SelectedItem | null>(null);
   const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
 
@@ -276,14 +277,14 @@ export default function TareWeightsScreen() {
         }
         renderItem={({ item }) => (
           <View style={styles.row}>
-            <View style={{ flex: 1 }}>
+            <TouchableOpacity style={{ flex: 1 }} onPress={() => setViewingTemplate(item)}>
               <Text style={styles.itemName}>{item.inventoryItem.name}</Text>
               {item.inventoryItem.barcode && (
                 <Text style={styles.itemBarcode}>
                   #{item.inventoryItem.barcode}
                 </Text>
               )}
-            </View>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.weightCell}
               onPress={() => setEditingTemplate(item)}
@@ -353,6 +354,58 @@ export default function TareWeightsScreen() {
           }}
           onCancel={() => setCreatingFromScan(null)}
         />
+      )}
+
+      {/* Read-only bottle info overlay */}
+      {viewingTemplate && (
+        <View style={styles.fullScreenOverlay}>
+          <View style={styles.addBackdrop}>
+            <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setViewingTemplate(null)} />
+            <View style={styles.infoSheet}>
+              <Text style={styles.infoTitle}>{viewingTemplate.inventoryItem.name}</Text>
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Barcode</Text>
+                <Text style={styles.infoValue}>
+                  {viewingTemplate.inventoryItem.barcode || "—"}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Container Size</Text>
+                <Text style={styles.infoValue}>
+                  {Number(viewingTemplate.containerSizeMl)} ml
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Tare Weight</Text>
+                <Text style={styles.infoValue}>
+                  {Math.round(Number(viewingTemplate.emptyBottleWeightG))} g
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Full Weight</Text>
+                <Text style={styles.infoValue}>
+                  {Math.round(Number(viewingTemplate.fullBottleWeightG))} g
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Density</Text>
+                <Text style={styles.infoValue}>
+                  {viewingTemplate.densityGPerMl != null
+                    ? `${Number(viewingTemplate.densityGPerMl).toFixed(2)} g/ml`
+                    : "—"}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.infoCloseBtn}
+                onPress={() => setViewingTemplate(null)}
+              >
+                <Text style={styles.infoCloseBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       )}
 
       {/* Add search — full-screen overlay instead of Modal */}
@@ -544,5 +597,45 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#999",
     padding: 4,
+  },
+  infoSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 24,
+  },
+  infoTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#1a1a1a",
+    marginBottom: 20,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  infoLabel: {
+    fontSize: 15,
+    color: "#666",
+  },
+  infoValue: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#1a1a1a",
+  },
+  infoCloseBtn: {
+    backgroundColor: "#e5e7eb",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 24,
+  },
+  infoCloseBtnText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1a1a1a",
   },
 });
