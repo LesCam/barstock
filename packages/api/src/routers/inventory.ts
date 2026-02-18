@@ -53,4 +53,29 @@ export const inventoryRouter = router({
       const svc = new InventoryService(ctx.prisma);
       return svc.calculateOnHand(input.locationId, input.asOf);
     }),
+
+  listWithStock: protectedProcedure
+    .input(z.object({ locationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [items, stockRows] = await Promise.all([
+        ctx.prisma.inventoryItem.findMany({
+          where: { locationId: input.locationId, active: true },
+          orderBy: { name: "asc" },
+        }),
+        ctx.prisma.consumptionEvent.groupBy({
+          by: ["inventoryItemId"],
+          where: { locationId: input.locationId },
+          _sum: { quantityDelta: true },
+        }),
+      ]);
+
+      const stockMap = new Map(
+        stockRows.map((r) => [r.inventoryItemId, Number(r._sum.quantityDelta ?? 0)])
+      );
+
+      return items.map((item) => ({
+        ...item,
+        onHandQty: stockMap.get(item.id) ?? null,
+      }));
+    }),
 });
