@@ -76,6 +76,12 @@ export const scaleRouter = router({
       if (active && !force) {
         throw new TRPCError({ code: "CONFLICT", message: "A template already exists for this item. Override with new values?" });
       }
+      // Sync container size to inventory item
+      await ctx.prisma.inventoryItem.update({
+        where: { id: input.inventoryItemId },
+        data: { containerSize: input.containerSizeMl, containerUom: "ml" },
+      });
+
       if (active) {
         // Force: update the existing active template
         return ctx.prisma.bottleTemplate.update({

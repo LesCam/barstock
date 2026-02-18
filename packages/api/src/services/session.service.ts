@@ -28,7 +28,7 @@ export class SessionService {
   ): Promise<SessionCloseResult> {
     const session = await this.prisma.inventorySession.findUnique({
       where: { id: sessionId },
-      include: { lines: true },
+      include: { lines: { include: { inventoryItem: true } } },
     });
 
     if (!session) throw new Error("Session not found");
@@ -52,9 +52,10 @@ export class SessionService {
       totalVariance += Math.abs(variance);
 
       // Check threshold (configurable, default 5 units)
+      // Skip variance check on first count (no prior ledger data)
       const threshold = 5.0;
 
-      if (Math.abs(variance) > threshold) {
+      if (theoretical !== 0 && Math.abs(variance) > threshold) {
         if (!(line.inventoryItemId in varianceReasons)) {
           requiresReasons.push(line.inventoryItemId);
           continue;
@@ -71,7 +72,7 @@ export class SessionService {
             eventTs: new Date(),
             inventoryItemId: line.inventoryItemId,
             quantityDelta: new Prisma.Decimal(variance),
-            uom: "units",
+            uom: line.inventoryItem.baseUom,
             confidenceLevel: "measured",
             varianceReason: varianceReasons[line.inventoryItemId] ?? null,
             notes: `Session ${sessionId} adjustment`,

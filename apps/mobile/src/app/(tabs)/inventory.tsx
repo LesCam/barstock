@@ -17,10 +17,8 @@ function formatStock(
   const size = containerSize ? Number(containerSize) : null;
 
   if (size && size > 0) {
-    const totalInContainerUnits =
-      baseUom === "units" ? qty : qty / size;
-    const full = Math.floor(totalInContainerUnits);
-    const partial = totalInContainerUnits - full;
+    const full = Math.floor(qty);
+    const partial = qty - full;
     const pct = Math.round(partial * 100);
 
     if (full > 0 && pct > 0) return `${full} full + ${pct}%`;
