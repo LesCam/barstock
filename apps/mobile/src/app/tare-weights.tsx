@@ -256,8 +256,11 @@ export default function TareWeightsScreen() {
       {/* Column headers */}
       <View style={styles.headerRow}>
         <Text style={[styles.headerText, { flex: 1 }]}>Bottle</Text>
-        <Text style={[styles.headerText, { width: 100, textAlign: "center" }]}>
-          Tare Weight
+        <Text style={[styles.headerText, { width: 60, textAlign: "center" }]}>
+          Tare
+        </Text>
+        <Text style={[styles.headerText, { width: 60, textAlign: "center" }]}>
+          Full
         </Text>
         <Text style={[styles.headerText, { width: 56, textAlign: "center" }]}>
           Remove
@@ -301,7 +304,15 @@ export default function TareWeightsScreen() {
               onPress={() => setEditingTemplate(item)}
             >
               <Text style={styles.weightText}>
-                {Math.round(Number(item.emptyBottleWeightG))} g
+                {Math.round(Number(item.emptyBottleWeightG))}g
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.weightCell}
+              onPress={() => setEditingTemplate(item)}
+            >
+              <Text style={styles.weightText}>
+                {Math.round(Number(item.fullBottleWeightG))}g
               </Text>
               <Text style={styles.editIcon}>&#x270E;</Text>
             </TouchableOpacity>
@@ -533,11 +544,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   weightCell: {
-    width: 100,
+    width: 60,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
   },
   weightText: {
     fontSize: 14,
