@@ -240,7 +240,7 @@ export default function TareWeightsScreen() {
           value={search}
           onChangeText={setSearch}
           placeholder="Search bottles..."
-          placeholderTextColor="#999"
+          placeholderTextColor="#5A6A7A"
           returnKeyType="search"
         />
         <TouchableOpacity
@@ -272,9 +272,18 @@ export default function TareWeightsScreen() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>
-              {isLoading ? "Loading..." : "No tare weight templates found."}
-            </Text>
+            {isLoading ? (
+              <Text style={styles.emptyText}>Loading...</Text>
+            ) : search.trim() ? (
+              <Text style={styles.emptyText}>No bottles matching "{search}"</Text>
+            ) : (
+              <>
+                <Text style={styles.emptyTitle}>No bottles yet</Text>
+                <Text style={styles.emptyText}>
+                  Tap "+ Add New Bottle" below or scan a barcode to set up your first tare weight.
+                </Text>
+              </>
+            )}
           </View>
         }
         renderItem={({ item }) => (
@@ -448,7 +457,7 @@ export default function TareWeightsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#0B1623",
     padding: 16,
   },
   searchRow: {
@@ -459,31 +468,31 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: 44,
-    backgroundColor: "#fff",
+    backgroundColor: "#16283F",
     borderRadius: 8,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    color: "#1a1a1a",
+    borderColor: "#1E3550",
+    color: "#EAF0FF",
     fontSize: 15,
   },
   scanBtn: {
     width: 44,
     height: 44,
-    backgroundColor: "#2563eb",
+    backgroundColor: "#E9B44C",
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
   scanIcon: {
     fontSize: 20,
-    color: "#fff",
+    color: "#0B1623",
     fontWeight: "bold",
   },
   heading: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#1a1a1a",
+    color: "#EAF0FF",
     marginBottom: 12,
   },
   headerRow: {
@@ -491,12 +500,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#1E3550",
   },
   headerText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#999",
+    color: "#5A6A7A",
     textTransform: "uppercase",
   },
   listContent: {
@@ -505,22 +514,22 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: "#16283F",
     borderRadius: 8,
     marginTop: 8,
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#1E3550",
   },
   itemName: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#1a1a1a",
+    color: "#EAF0FF",
   },
   itemBarcode: {
     fontSize: 12,
-    color: "#999",
+    color: "#5A6A7A",
     marginTop: 2,
   },
   weightCell: {
@@ -532,12 +541,12 @@ const styles = StyleSheet.create({
   },
   weightText: {
     fontSize: 14,
-    color: "#1a1a1a",
+    color: "#EAF0FF",
     fontWeight: "500",
   },
   editIcon: {
     fontSize: 14,
-    color: "#2563eb",
+    color: "#E9B44C",
   },
   deleteCell: {
     width: 56,
@@ -551,20 +560,28 @@ const styles = StyleSheet.create({
   emptyBox: {
     paddingVertical: 40,
     alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#8899AA",
+    marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: "#999",
+    color: "#5A6A7A",
+    textAlign: "center",
   },
   addBtn: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#E9B44C",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
     marginTop: 12,
   },
   addBtnText: {
-    color: "#fff",
+    color: "#0B1623",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -578,7 +595,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   addSheet: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#0B1623",
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 20,
@@ -593,15 +610,15 @@ const styles = StyleSheet.create({
   addSheetTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#1a1a1a",
+    color: "#EAF0FF",
   },
   addSheetClose: {
     fontSize: 18,
-    color: "#999",
+    color: "#8899AA",
     padding: 4,
   },
   infoSheet: {
-    backgroundColor: "#fff",
+    backgroundColor: "#16283F",
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 24,
@@ -609,7 +626,7 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#1a1a1a",
+    color: "#EAF0FF",
     marginBottom: 20,
   },
   infoRow: {
@@ -617,19 +634,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: "#1E3550",
   },
   infoLabel: {
     fontSize: 15,
-    color: "#666",
+    color: "#8899AA",
   },
   infoValue: {
     fontSize: 15,
     fontWeight: "500",
-    color: "#1a1a1a",
+    color: "#EAF0FF",
   },
   infoCloseBtn: {
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#1E3550",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
@@ -638,6 +655,6 @@ const styles = StyleSheet.create({
   infoCloseBtnText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1a1a1a",
+    color: "#EAF0FF",
   },
 });

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { trpcVanilla, setAuthToken } from "./trpc";
+import { trpcVanilla, setAuthToken, setRefreshToken, setOnSignOut } from "./trpc";
 import { scaleManager } from "./scale/scale-manager";
 
 const KEYS = {
@@ -86,6 +86,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading: true,
   });
 
+  // Wire up auto-signout callback for when refresh token expires
+  useEffect(() => {
+    setOnSignOut(() => {
+      setAuthToken(null);
+      setRefreshToken(null);
+      clearStorage();
+      dispatch({ type: "SIGN_OUT" });
+    });
+    return () => setOnSignOut(null);
+  }, []);
+
   // Bootstrap: restore token from storage on mount
   useEffect(() => {
     (async () => {
@@ -103,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setAuthToken(token);
+        if (refreshToken) setRefreshToken(refreshToken);
 
         // Try to validate with auth.me
         let user: UserPayload;
@@ -118,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const refreshResult = await trpcVanilla.auth.refresh.mutate({ refreshToken });
             setAuthToken(refreshResult.accessToken);
+            setRefreshToken(refreshToken);
             await AsyncStorage.setItem(KEYS.token, refreshResult.accessToken);
             user = await trpcVanilla.auth.me.query();
           } catch {
@@ -145,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (accessToken: string, refreshToken: string) => {
     setAuthToken(accessToken);
+    setRefreshToken(refreshToken);
     const user: UserPayload = await trpcVanilla.auth.me.query();
 
     const locationId = user.locationIds.length === 1 ? user.locationIds[0] : null;
@@ -166,6 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await scaleManager.disconnect();
     }
     setAuthToken(null);
+    setRefreshToken(null);
     await clearStorage();
     dispatch({ type: "SIGN_OUT" });
   };

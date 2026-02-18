@@ -1,4 +1,5 @@
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
+import { TouchableOpacity, Text } from "react-native";
 
 export default function CountLayout() {
   return (
@@ -9,7 +10,17 @@ export default function CountLayout() {
         headerTitleStyle: { fontWeight: "600" },
       }}
     >
-      <Stack.Screen name="new" options={{ title: "Start Inventory Count" }} />
+      <Stack.Screen
+        name="new"
+        options={{
+          title: "Start Inventory Count",
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={{ color: "#EAF0FF", fontSize: 16 }}>‹ Back</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
     </Stack>
   );
 }
