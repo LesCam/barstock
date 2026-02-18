@@ -778,6 +778,8 @@ model Artwork {
   commissionPubPercent Decimal         @map("commission_pub_percent")
   dateHung             DateTime?       @map("date_hung") @db.Date
   notes                String?
+  reservedForName      String?         @map("reserved_for_name")
+  reservedForContact   String?         @map("reserved_for_contact")
   createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
 

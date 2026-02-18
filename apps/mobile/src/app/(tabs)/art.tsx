@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { API_URL } from "@/lib/trpc";
@@ -26,6 +26,24 @@ const STATUS_FILTERS = [
   { label: "Reserved", value: "reserved" as const },
   { label: "Sold", value: "sold" as const },
 ];
+
+const SORT_OPTIONS = [
+  { label: "Newest", value: "newest" },
+  { label: "Artist", value: "artist" },
+  { label: "Status", value: "status" },
+  { label: "Title", value: "title" },
+  { label: "Price", value: "price" },
+] as const;
+
+const STATUS_SORT_ORDER: Record<string, number> = {
+  on_wall: 0,
+  reserved_pending_payment: 1,
+  reserved: 2,
+  pending_payment_issue: 3,
+  sold: 4,
+  removed: 5,
+  removed_not_sold: 6,
+};
 
 const STATUS_COLORS: Record<string, string> = {
   on_wall: "#22C55E",
@@ -50,6 +68,7 @@ function resolveImageUrl(url: string | null | undefined): string | null {
 export default function ArtTab() {
   const { user } = useAuth();
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string>("newest");
 
   const { data, isLoading, refetch } = trpc.artworks.list.useQuery(
     {
@@ -60,7 +79,26 @@ export default function ArtTab() {
     { enabled: !!user?.businessId }
   );
 
-  const items = data?.items ?? [];
+  const items = useMemo(() => {
+    const raw = [...(data?.items ?? [])];
+    switch (sortBy) {
+      case "artist":
+        return raw.sort((a: any, b: any) =>
+          (a.artist?.name ?? "").localeCompare(b.artist?.name ?? "")
+        );
+      case "status":
+        return raw.sort(
+          (a: any, b: any) =>
+            (STATUS_SORT_ORDER[a.status] ?? 99) - (STATUS_SORT_ORDER[b.status] ?? 99)
+        );
+      case "title":
+        return raw.sort((a: any, b: any) => a.title.localeCompare(b.title));
+      case "price":
+        return raw.sort((a: any, b: any) => b.listPriceCents - a.listPriceCents);
+      default:
+        return raw; // newest — already sorted by API
+    }
+  }, [data?.items, sortBy]);
 
   return (
     <View style={styles.container}>
@@ -87,6 +125,35 @@ export default function ArtTab() {
               ]}
             >
               {filter.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Sort options */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.sortBar}
+        contentContainerStyle={styles.sortContent}
+      >
+        <Text style={styles.sortLabel}>Sort:</Text>
+        {SORT_OPTIONS.map((opt) => (
+          <TouchableOpacity
+            key={opt.value}
+            onPress={() => setSortBy(opt.value)}
+            style={[
+              styles.sortPill,
+              sortBy === opt.value && styles.sortPillActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.sortPillText,
+                sortBy === opt.value && styles.sortPillTextActive,
+              ]}
+            >
+              {opt.label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -188,6 +255,35 @@ const styles = StyleSheet.create({
   pillActive: { backgroundColor: "#E9B44C" },
   pillText: { fontSize: 13, fontWeight: "500", color: "#EAF0FF" },
   pillTextActive: { color: "#0B1623" },
+  sortBar: {
+    maxHeight: 40,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1E3550",
+  },
+  sortContent: {
+    paddingHorizontal: COLUMN_GAP,
+    paddingVertical: 6,
+    gap: 6,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sortLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#5A6A7A",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginRight: 2,
+  },
+  sortPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  sortPillActive: { backgroundColor: "#1E3550" },
+  sortPillText: { fontSize: 12, fontWeight: "500", color: "#5A6A7A" },
+  sortPillTextActive: { color: "#EAF0FF" },
   row: { gap: COLUMN_GAP, paddingHorizontal: COLUMN_GAP },
   grid: { paddingTop: COLUMN_GAP, paddingBottom: 24 },
   card: {

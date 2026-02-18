@@ -43,6 +43,8 @@ export const artworkStatusUpdateSchema = z.object({
     "removed_not_sold",
     "pending_payment_issue",
   ]),
+  reservedForName: z.string().nullish(),
+  reservedForContact: z.string().nullish(),
 });
 
 export const artworkListSchema = z.object({

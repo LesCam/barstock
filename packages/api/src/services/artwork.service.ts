@@ -114,9 +114,22 @@ export class ArtworkService {
       });
     }
 
+    const isReserving = data.status.startsWith("reserved");
+    const isCancelling = data.status === "on_wall";
+
     const artwork = await this.prisma.artwork.update({
       where: { id: data.id },
-      data: { status: data.status as ArtworkStatusT },
+      data: {
+        status: data.status as ArtworkStatusT,
+        ...(isReserving && {
+          reservedForName: data.reservedForName ?? undefined,
+          reservedForContact: data.reservedForContact ?? undefined,
+        }),
+        ...(isCancelling && {
+          reservedForName: null,
+          reservedForContact: null,
+        }),
+      },
     });
 
     await this.audit.log({
