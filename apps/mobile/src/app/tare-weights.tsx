@@ -497,6 +497,10 @@ export default function TareWeightsScreen() {
               <ItemSearchBar
                 locationId={locationId}
                 onItemSelected={(item) => handleItemSelected(item as SelectedItem)}
+                onBarcodeNotFound={(barcode) => {
+                  setShowAddSearch(false);
+                  setCreatingFromScan({ barcode });
+                }}
                 itemTypeFilter={["liquor", "wine"]}
                 placeholder="Search liquor/wine items..."
               />
