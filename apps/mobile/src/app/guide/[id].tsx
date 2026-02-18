@@ -124,16 +124,7 @@ export default function GuideItemDetail() {
           </View>
         )}
 
-        {item.inventoryItem.barcode ? (
-          <View style={styles.detailsCard}>
-            <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
-              <Text style={styles.detailLabel}>Barcode</Text>
-              <Text style={styles.detailValue}>
-                {item.inventoryItem.barcode}
-              </Text>
-            </View>
-          </View>
-        ) : null}
+
       </View>
     </ScrollView>
   );
