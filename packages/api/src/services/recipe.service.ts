@@ -65,6 +65,7 @@ export class RecipeService {
             },
           },
         },
+        _count: { select: { posMappings: { where: { active: true } } } },
       },
       orderBy: { name: "asc" },
     });

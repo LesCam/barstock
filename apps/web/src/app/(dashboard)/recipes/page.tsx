@@ -389,6 +389,11 @@ export default function RecipesPage() {
                                 editIngredientSearch,
                                 setEditIngredientSearch
                               )}
+                              {(recipe as any)._count?.posMappings > 0 && (
+                                <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+                                  This recipe is mapped to {(recipe as any)._count.posMappings} active POS item{(recipe as any)._count.posMappings !== 1 ? "s" : ""} — changes will affect depletion.
+                                </div>
+                              )}
                               <div className="mt-3 flex gap-2">
                                 <button
                                   onClick={handleUpdate}
@@ -430,6 +435,11 @@ export default function RecipesPage() {
                                 >
                                   {recipe.active ? "Active" : "Inactive"}
                                 </span>
+                                {(recipe as any)._count?.posMappings > 0 && (
+                                  <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-400">
+                                    {(recipe as any)._count.posMappings} POS mapping{(recipe as any)._count.posMappings !== 1 ? "s" : ""}
+                                  </span>
+                                )}
                               </div>
                               <div className="mb-3 space-y-1">
                                 {recipe.ingredients.map((ing: any) => (
