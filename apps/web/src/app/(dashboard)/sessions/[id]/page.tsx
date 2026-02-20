@@ -107,6 +107,26 @@ export default function SessionDetailPage({
     { enabled: !!locationId }
   );
 
+  // Preview close data for variance summary
+  const { data: previewData } = trpc.sessions.previewClose.useQuery(
+    { sessionId: id },
+    { enabled: !!session && !session.endedTs }
+  );
+
+  // --- Count hints for session lines ---
+  const hintItemIds = useMemo(
+    () => [...new Set((session?.lines ?? []).map((l: any) => l.inventoryItemId))],
+    [session?.lines]
+  );
+  const { data: countHints } = trpc.sessions.itemCountHints.useQuery(
+    { locationId: locationId!, inventoryItemIds: hintItemIds },
+    { enabled: !!locationId && hintItemIds.length > 0 }
+  );
+  const hintMap = useMemo(
+    () => new Map((countHints ?? []).map((h: any) => [h.inventoryItemId, h])),
+    [countHints]
+  );
+
   // --- Add line state ---
   const [selectedItemId, setSelectedItemId] = useState("");
   const [countInput, setCountInput] = useState("");
@@ -124,6 +144,10 @@ export default function SessionDetailPage({
     adjustmentsCreated: number;
     totalVariance: number;
   } | null>(null);
+  const [showVerification, setShowVerification] = useState(false);
+  const [uncountedItems, setUncountedItems] = useState<
+    Array<{ inventoryItemId: string; name: string; subAreaName: string; categoryName: string | null }>
+  >([]);
 
   // --- Mutations ---
   const updateLineMut = trpc.sessions.updateLine.useMutation({
@@ -200,8 +224,37 @@ export default function SessionDetailPage({
     });
   }
 
-  function handleClose() {
-    closeMut.mutate({ sessionId: id });
+  async function handleClose() {
+    if (!locationId) {
+      closeMut.mutate({ sessionId: id });
+      return;
+    }
+    try {
+      const expected = await utils.sessions.expectedItemsForLocation.fetch({
+        locationId,
+      });
+      const countedItemIds = new Set(
+        session!.lines.map((l: any) => l.inventoryItemId)
+      );
+      const uncounted = expected
+        .filter((item: any) => !countedItemIds.has(item.inventoryItemId))
+        .map((item: any) => ({
+          inventoryItemId: item.inventoryItemId,
+          name: item.name,
+          subAreaName: item.subAreaName ?? "",
+          categoryName: item.categoryName ?? null,
+        }));
+
+      if (uncounted.length > 0) {
+        setUncountedItems(uncounted);
+        setShowVerification(true);
+      } else {
+        closeMut.mutate({ sessionId: id });
+      }
+    } catch {
+      // If fetch fails, proceed with close directly
+      closeMut.mutate({ sessionId: id });
+    }
   }
 
   function handleSubmitVarianceReasons() {
@@ -329,9 +382,33 @@ export default function SessionDetailPage({
                 </td>
               </tr>
             ) : (
-              session.lines.map((line) => (
+              session.lines.map((line) => {
+                const hint = hintMap.get(line.inventoryItemId) as any;
+                const hintParts: string[] = [];
+                if (hint?.lastCountValue != null) {
+                  const daysAgo = Math.round((Date.now() - new Date(hint.lastCountDate).getTime()) / 86400000);
+                  const unit = hint.isWeight ? "g" : " units";
+                  hintParts.push(`Last: ${Math.round(hint.lastCountValue * 10) / 10}${unit}${daysAgo > 0 ? ` (${daysAgo}d ago)` : ""}`);
+                }
+                if (hint?.avgDailyUsage != null && hint.avgDailyUsage > 0) {
+                  hintParts.push(`~${Math.round(hint.avgDailyUsage * 10) / 10}/day`);
+                }
+                if (hint?.lastCountValue != null && hint?.avgDailyUsage != null && hint.avgDailyUsage > 0) {
+                  const daysAgo = (Date.now() - new Date(hint.lastCountDate).getTime()) / 86400000;
+                  const predicted = Math.max(0, hint.lastCountValue - hint.avgDailyUsage * daysAgo);
+                  const unit = hint.isWeight ? "g" : "";
+                  hintParts.push(`Est: ~${Math.round(predicted * 10) / 10}${unit}`);
+                }
+                return (
                 <tr key={line.id} className="hover:bg-white/5">
-                  <td className="px-4 py-3">{line.inventoryItem.name}</td>
+                  <td className="px-4 py-3">
+                    <div>{line.inventoryItem.name}</div>
+                    {hintParts.length > 0 && (
+                      <div className="mt-0.5 text-xs text-[#EAF0FF]/30">
+                        {hintParts.join(" · ")}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 capitalize text-xs">
                     {line.inventoryItem.category?.name ?? ""}
                   </td>
@@ -398,7 +475,8 @@ export default function SessionDetailPage({
                     </td>
                   )}
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -507,8 +585,26 @@ export default function SessionDetailPage({
         </div>
       )}
 
+      {/* Variance preview summary */}
+      {isOpen && previewData && session.lines.length > 0 && (
+        <div className="mt-4 rounded-lg border border-white/10 bg-[#16283F] p-4">
+          <h2 className="mb-2 text-sm font-semibold text-[#EAF0FF]">Variance Summary</h2>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <span className="text-[#EAF0FF]/60">
+              Items counted: <span className="text-[#EAF0FF]">{previewData.totalItems}</span>
+            </span>
+            <span className="text-[#EAF0FF]/60">
+              With variance:{" "}
+              <span className={previewData.itemsWithVariance > 0 ? "text-[#E9B44C]" : "text-[#2BA8A0]"}>
+                {previewData.itemsWithVariance}
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Close session button */}
-      {isOpen && (
+      {isOpen && !showVerification && (
         <div className="mt-4">
           <button
             onClick={handleClose}
@@ -520,6 +616,54 @@ export default function SessionDetailPage({
           {closeMut.error && !showVarianceDialog && (
             <p className="mt-2 text-sm text-red-400">{closeMut.error.message}</p>
           )}
+        </div>
+      )}
+
+      {/* Uncounted items verification panel */}
+      {showVerification && (
+        <div className="mt-4 rounded-lg border border-[#E9B44C]/30 bg-[#16283F] p-4">
+          <h2 className="mb-1 text-lg font-semibold text-[#EAF0FF]">
+            Uncounted Items ({uncountedItems.length})
+          </h2>
+          <p className="mb-3 text-sm text-[#EAF0FF]/60">
+            The following expected items were not counted in this session.
+          </p>
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {uncountedItems.map((item) => (
+              <div
+                key={item.inventoryItemId}
+                className="flex items-center justify-between rounded-md border border-white/5 bg-[#0B1623] px-3 py-2"
+              >
+                <div>
+                  <span className="text-sm text-[#EAF0FF]">{item.name}</span>
+                  {item.subAreaName && (
+                    <span className="ml-2 text-xs text-[#EAF0FF]/40">{item.subAreaName}</span>
+                  )}
+                </div>
+                {item.categoryName && (
+                  <span className="text-xs capitalize text-[#EAF0FF]/30">{item.categoryName}</span>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex gap-3">
+            <button
+              onClick={() => setShowVerification(false)}
+              className="rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF] hover:bg-white/5"
+            >
+              Back
+            </button>
+            <button
+              onClick={() => {
+                setShowVerification(false);
+                closeMut.mutate({ sessionId: id });
+              }}
+              disabled={closeMut.isPending}
+              className="rounded-md bg-[#E9B44C] px-6 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+            >
+              {closeMut.isPending ? "Closing..." : "Close Anyway"}
+            </button>
+          </div>
         </div>
       )}
 

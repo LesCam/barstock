@@ -58,3 +58,14 @@ export async function clearMappingForDevice(bleDeviceId: string): Promise<void> 
 export async function getAllMappings(): Promise<MappingsMap> {
   return loadMappings();
 }
+
+// --- Last connected device persistence (for auto-reconnect) ---
+const LAST_CONNECTED_KEY = "lastConnectedScaleDeviceId";
+
+export async function setLastConnectedDevice(id: string): Promise<void> {
+  await AsyncStorage.setItem(LAST_CONNECTED_KEY, id);
+}
+
+export async function getLastConnectedDevice(): Promise<string | null> {
+  return AsyncStorage.getItem(LAST_CONNECTED_KEY);
+}

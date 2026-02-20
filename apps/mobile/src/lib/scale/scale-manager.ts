@@ -9,6 +9,7 @@
 import { Buffer } from "buffer";
 import { Platform, PermissionsAndroid } from "react-native";
 import { BleManager, type Device, type Subscription, State } from "react-native-ble-plx";
+import { getLastConnectedDevice, setLastConnectedDevice } from "./scale-mappings";
 
 export interface ScaleReading {
   weightGrams: number;
@@ -108,6 +109,8 @@ export class ScaleManager {
   private disconnectSubscription: Subscription | null = null;
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   private _batteryLevel: number | null = null;
+  private _intentionalDisconnect = false;
+  private _reconnecting = false;
 
   /**
    * Scan for nearby BLE scale devices (5 s).
@@ -176,6 +179,10 @@ export class ScaleManager {
     this.connectedDeviceId = deviceId;
     this.connectedDevice = device;
     this.scaleType = await this.detectScaleType(device);
+    this._intentionalDisconnect = false;
+
+    // Persist for auto-reconnect
+    setLastConnectedDevice(deviceId).catch(() => {});
 
     // Listen for unexpected disconnection
     this.disconnectSubscription = device.onDisconnected(() => {
@@ -194,7 +201,7 @@ export class ScaleManager {
     this.monitorBattery(device).catch(() => {});
   }
 
-  /** Handle unexpected BLE disconnection — clean up state and notify listeners. */
+  /** Handle unexpected BLE disconnection — clean up state and attempt auto-reconnect. */
   private handleUnexpectedDisconnect(): void {
     this.stopKeepalive();
     this.monitorSubscription?.remove();
@@ -207,7 +214,36 @@ export class ScaleManager {
     this.connectedDevice = null;
     this.scaleType = null;
     this._batteryLevel = null;
+
+    if (this._intentionalDisconnect) {
+      this._intentionalDisconnect = false;
+      this.disconnectListeners.forEach((listener) => listener());
+      return;
+    }
+
+    // Attempt auto-reconnect with exponential backoff (1s, 3s, 9s)
+    this._reconnecting = true;
     this.disconnectListeners.forEach((listener) => listener());
+
+    const delays = [1000, 3000, 9000];
+    const tryReconnect = async (attempt: number): Promise<void> => {
+      if (attempt >= delays.length || this._intentionalDisconnect) {
+        this._reconnecting = false;
+        return;
+      }
+      await new Promise((r) => setTimeout(r, delays[attempt]));
+      if (this._intentionalDisconnect || this.connectedDeviceId) {
+        this._reconnecting = false;
+        return;
+      }
+      const success = await this.reconnectLast();
+      if (!success) {
+        await tryReconnect(attempt + 1);
+      } else {
+        this._reconnecting = false;
+      }
+    };
+    tryReconnect(0).catch(() => { this._reconnecting = false; });
   }
 
   private async monitorSkale2(device: Device, deviceId: string): Promise<void> {
@@ -372,6 +408,7 @@ export class ScaleManager {
   async disconnect(): Promise<void> {
     if (!this.connectedDeviceId) return;
 
+    this._intentionalDisconnect = true;
     this.stopKeepalive();
     this.monitorSubscription?.remove();
     this.monitorSubscription = null;
@@ -398,8 +435,24 @@ export class ScaleManager {
     return () => this.disconnectListeners.delete(listener);
   }
 
+  /** Attempt to reconnect to the last successfully connected device. */
+  async reconnectLast(): Promise<boolean> {
+    try {
+      const lastId = await getLastConnectedDevice();
+      if (!lastId) return false;
+      await this.connect(lastId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   get isConnected() {
     return this.connectedDeviceId !== null;
+  }
+
+  get isReconnecting() {
+    return this._reconnecting;
   }
 
   get currentScaleType() {

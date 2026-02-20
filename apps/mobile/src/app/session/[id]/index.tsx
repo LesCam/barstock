@@ -53,11 +53,21 @@ export default function SessionDetailScreen() {
   const [submitMode, setSubmitMode] = useState(false);
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editingQty, setEditingQty] = useState("");
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
     { id: id! },
     { refetchOnMount: "always", refetchInterval: 30_000 }
   );
+
+  // --- Session timer ---
+  useEffect(() => {
+    if (!session || session.endedTs) return;
+    const start = new Date(session.startedTs).getTime();
+    setElapsedMs(Date.now() - start);
+    const timer = setInterval(() => setElapsedMs(Date.now() - start), 60_000);
+    return () => clearInterval(timer);
+  }, [session?.startedTs, session?.endedTs]);
 
   // --- Multi-user participant support ---
   const joinMutation = trpc.sessions.join.useMutation({
@@ -199,6 +209,12 @@ export default function SessionDetailScreen() {
     }
     if (hint.avgDailyUsage != null && hint.avgDailyUsage > 0) {
       parts.push(`~${(Math.round(hint.avgDailyUsage * 10) / 10)}/day`);
+    }
+    if (hint.lastCountValue != null && hint.avgDailyUsage != null && hint.avgDailyUsage > 0) {
+      const daysAgo = (Date.now() - new Date(hint.lastCountDate).getTime()) / 86400000;
+      const predicted = Math.max(0, hint.lastCountValue - hint.avgDailyUsage * daysAgo);
+      const unit = hint.isWeight ? "g" : "";
+      parts.push(`Est: ~${Math.round(predicted * 10) / 10}${unit}`);
     }
     return parts.join(" · ");
   }
@@ -510,6 +526,17 @@ export default function SessionDetailScreen() {
         Started: {new Date(session.startedTs).toLocaleString()}
         {lineCount > 0 ? ` — ${lineCount} item${lineCount !== 1 ? "s" : ""}` : ""}
       </Text>
+      {isOpen && elapsedMs > 0 && (
+        <Text style={styles.pacingText}>
+          Elapsed: {elapsedMs >= 3600000
+            ? `${Math.floor(elapsedMs / 3600000)}h ${Math.floor((elapsedMs % 3600000) / 60000)}m`
+            : `${Math.floor(elapsedMs / 60000)}m`}
+          {lineCount > 0 ? ` · ${lineCount} item${lineCount !== 1 ? "s" : ""}` : ""}
+          {lineCount > 0 && elapsedMs > 60000
+            ? ` · ${(lineCount / (elapsedMs / 3600000)).toFixed(1)}/hr`
+            : ""}
+        </Text>
+      )}
 
       {/* Participant Chips */}
       {isOpen && participants && participants.length > 0 && (
@@ -1110,7 +1137,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#EAF0FF",
   },
-  meta: { fontSize: 12, color: "#8899AA", marginBottom: 12 },
+  meta: { fontSize: 12, color: "#8899AA", marginBottom: 2 },
+  pacingText: { fontSize: 12, color: "#2BA8A0", marginBottom: 12 },
   badgeOpen: {
     backgroundColor: "#1E3550",
     color: "#E9B44C",

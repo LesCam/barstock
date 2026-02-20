@@ -140,6 +140,9 @@ export default function PackagedCountScreen() {
                     hint.avgDailyUsage != null && hint.avgDailyUsage > 0
                       ? `Avg: ${(Math.round(hint.avgDailyUsage * 10) / 10)}/day`
                       : null,
+                    hint.lastCountValue != null && hint.avgDailyUsage != null && hint.avgDailyUsage > 0
+                      ? `Est: ~${Math.round(Math.max(0, hint.lastCountValue - hint.avgDailyUsage * ((Date.now() - new Date(hint.lastCountDate!).getTime()) / 86400000)) * 10) / 10}`
+                      : null,
                   ].filter(Boolean).join(" · ")}
                 </Text>
               )}

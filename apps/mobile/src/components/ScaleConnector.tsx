@@ -11,6 +11,20 @@ export function ScaleConnector({ onWeightReading }: ScaleConnectorProps) {
   const [devices, setDevices] = useState<Array<{ id: string; name: string }>>([]);
   const [connected, setConnected] = useState(scaleManager.isConnected);
   const [lastReading, setLastReading] = useState<ScaleReading | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
+
+  // Attempt auto-reconnect on mount if not connected
+  useEffect(() => {
+    if (scaleManager.isConnected) return;
+    let cancelled = false;
+    setReconnecting(true);
+    scaleManager.reconnectLast().then((success) => {
+      if (cancelled) return;
+      setReconnecting(false);
+      if (success) setConnected(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = scaleManager.onReading((reading) => {
@@ -27,8 +41,15 @@ export function ScaleConnector({ onWeightReading }: ScaleConnectorProps) {
       setConnected(false);
       setLastReading(null);
     });
-    return unsubscribe;
-  }, []);
+    // If auto-reconnect succeeds, update state
+    const readingUnsub = scaleManager.onReading(() => {
+      if (scaleManager.isConnected && !connected) {
+        setConnected(true);
+        setReconnecting(false);
+      }
+    });
+    return () => { unsubscribe(); readingUnsub(); };
+  }, [connected]);
 
   async function handleScan() {
     setScanning(true);
@@ -46,6 +67,17 @@ export function ScaleConnector({ onWeightReading }: ScaleConnectorProps) {
     await scaleManager.disconnect();
     setConnected(false);
     setLastReading(null);
+  }
+
+  if (reconnecting) {
+    return (
+      <View style={styles.card}>
+        <ActivityIndicator color="#2563eb" />
+        <Text style={[styles.title, { textAlign: "center", marginTop: 8, marginBottom: 0 }]}>
+          Reconnecting...
+        </Text>
+      </View>
+    );
   }
 
   if (connected) {
