@@ -12,9 +12,21 @@ export const recipesRouter = router({
   create: protectedProcedure
     .use(requireRole("manager"))
     .input(recipeCreateSchema)
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const svc = new RecipeService(ctx.prisma);
-      return svc.create(input);
+      const result = await svc.create(input);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "recipe.created",
+        objectType: "recipe",
+        objectId: result.id,
+        metadata: { name: result.name, ingredientCount: input.ingredients?.length ?? 0 },
+      });
+
+      return result;
     }),
 
   update: protectedProcedure
@@ -62,8 +74,20 @@ export const recipesRouter = router({
   delete: protectedProcedure
     .use(requireRole("manager"))
     .input(z.object({ id: z.string().uuid() }))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const svc = new RecipeService(ctx.prisma);
-      return svc.update(input.id, { active: false });
+      const result = await svc.update(input.id, { active: false });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "recipe.deleted",
+        objectType: "recipe",
+        objectId: input.id,
+        metadata: { name: result.name },
+      });
+
+      return result;
     }),
 });
