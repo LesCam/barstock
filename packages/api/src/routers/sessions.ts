@@ -1,5 +1,5 @@
 import { router, protectedProcedure, checkLocationRole } from "../trpc";
-import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema } from "@barstock/validators";
+import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
 import { AuditService } from "../services/audit.service";
 import { AlertService } from "../services/alert.service";
@@ -301,5 +301,81 @@ export const sessionsRouter = router({
           ? `${item.bar_area_name} — ${item.sub_area_name}`
           : "Unassigned",
       }));
+    }),
+
+  itemCountHints: protectedProcedure
+    .input(itemCountHintsSchema)
+    .query(async ({ ctx, input }) => {
+      if (input.inventoryItemIds.length === 0) return [];
+
+      const [lastCounts, avgUsage] = await Promise.all([
+        ctx.prisma.$queryRaw<
+          Array<{
+            inventory_item_id: string;
+            count_units: unknown;
+            derived_oz: unknown;
+            gross_weight_grams: unknown;
+            created_at: Date;
+          }>
+        >(Prisma.sql`
+          SELECT DISTINCT ON (sl.inventory_item_id)
+            sl.inventory_item_id,
+            sl.count_units,
+            sl.derived_oz,
+            sl.gross_weight_grams,
+            sl.created_at
+          FROM inventory_session_lines sl
+          INNER JOIN inventory_sessions s ON s.id = sl.session_id
+          WHERE s.location_id = ${input.locationId}::uuid
+            AND sl.inventory_item_id = ANY(${input.inventoryItemIds}::uuid[])
+          ORDER BY sl.inventory_item_id, sl.created_at DESC
+        `),
+        ctx.prisma.$queryRaw<
+          Array<{
+            inventory_item_id: string;
+            avg_daily_usage: unknown;
+          }>
+        >(Prisma.sql`
+          SELECT
+            inventory_item_id,
+            ABS(SUM(quantity_delta)) / 30.0 AS avg_daily_usage
+          FROM consumption_events
+          WHERE location_id = ${input.locationId}::uuid
+            AND inventory_item_id = ANY(${input.inventoryItemIds}::uuid[])
+            AND event_type = 'pos_sale'
+            AND event_ts >= NOW() - INTERVAL '30 days'
+          GROUP BY inventory_item_id
+        `),
+      ]);
+
+      const usageMap = new Map(
+        avgUsage.map((u) => [u.inventory_item_id, Number(u.avg_daily_usage)])
+      );
+
+      return lastCounts.map((lc) => {
+        const countValue = lc.count_units != null
+          ? Number(lc.count_units)
+          : lc.gross_weight_grams != null
+            ? Number(lc.gross_weight_grams)
+            : lc.derived_oz != null
+              ? Number(lc.derived_oz)
+              : null;
+        const isWeight = lc.gross_weight_grams != null && lc.count_units == null;
+
+        return {
+          inventoryItemId: lc.inventory_item_id,
+          lastCountValue: countValue,
+          lastCountDate: lc.created_at,
+          avgDailyUsage: usageMap.get(lc.inventory_item_id) ?? null,
+          isWeight,
+        };
+      });
+    }),
+
+  previewClose: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const svc = new SessionService(ctx.prisma);
+      return svc.previewClose(input.sessionId);
     }),
 });

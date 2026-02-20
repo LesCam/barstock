@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -13,6 +13,124 @@ const UOM_LABELS: Record<string, string> = {
   grams: "Grams",
   L: "L",
 };
+
+function BottleWeightsCard({
+  template: t,
+  containerMl,
+  containerOz,
+  effectiveDensity,
+  densitySource,
+  onDensityUpdated,
+}: {
+  template: any;
+  containerMl: number;
+  containerOz: number;
+  effectiveDensity: number;
+  densitySource: string;
+  onDensityUpdated: () => void;
+}) {
+  const [editingDensity, setEditingDensity] = useState(false);
+  const [densityValue, setDensityValue] = useState("");
+
+  const updateDensity = trpc.scale.updateTemplateDensity.useMutation({
+    onSuccess: () => {
+      setEditingDensity(false);
+      onDensityUpdated();
+    },
+  });
+
+  function startEditDensity() {
+    setDensityValue(String(effectiveDensity));
+    setEditingDensity(true);
+  }
+
+  function handleSaveDensity() {
+    const val = parseFloat(densityValue);
+    if (isNaN(val) || val < 0.5 || val > 2.0) return;
+    updateDensity.mutate({ templateId: t.id, densityGPerMl: val });
+  }
+
+  return (
+    <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F] p-4">
+      <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]">Bottle Weights</h2>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+        <div>
+          <dt className="text-[#EAF0FF]/60">Tare (Empty)</dt>
+          <dd className="text-[#EAF0FF]">
+            {t.emptyBottleWeightG != null
+              ? `${Math.round(Number(t.emptyBottleWeightG))} g`
+              : (() => {
+                  const derived = Number(t.fullBottleWeightG) - containerMl * effectiveDensity;
+                  return `~${Math.round(derived)} g (est.)`;
+                })()}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[#EAF0FF]/60">Full</dt>
+          <dd className="text-[#EAF0FF]">
+            {t.fullBottleWeightG != null
+              ? `${Math.round(Number(t.fullBottleWeightG))} g`
+              : (() => {
+                  const derived = Number(t.emptyBottleWeightG) + containerMl * effectiveDensity;
+                  return `~${Math.round(derived)} g (est.)`;
+                })()}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[#EAF0FF]/60">Container</dt>
+          <dd className="text-[#EAF0FF]">
+            {containerMl} mL
+            <span className="ml-1 text-xs text-[#EAF0FF]/40">= {containerOz} oz</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[#EAF0FF]/60">Density</dt>
+          <dd className="text-[#EAF0FF]">
+            {editingDensity ? (
+              <span className="inline-flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.5"
+                  max="2.0"
+                  value={densityValue}
+                  onChange={(e) => setDensityValue(e.target.value)}
+                  className="w-20 rounded border border-white/20 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveDensity}
+                  disabled={updateDensity.isPending}
+                  className="rounded bg-[#E9B44C] px-2 py-1 text-xs font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+                >
+                  {updateDensity.isPending ? "..." : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditingDensity(false)}
+                  className="text-xs text-[#EAF0FF]/60 hover:text-[#EAF0FF]"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <span
+                className="cursor-pointer hover:text-[#E9B44C]"
+                onClick={startEditDensity}
+                title="Click to edit"
+              >
+                {effectiveDensity.toFixed(2)} g/mL
+                <span className="ml-2 text-xs text-[#EAF0FF]/40">({densitySource})</span>
+              </span>
+            )}
+            {updateDensity.error && (
+              <span className="ml-2 text-xs text-red-400">{updateDensity.error.message}</span>
+            )}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
 
 export default function InventoryDetailPage({
   params,
@@ -344,51 +462,47 @@ export default function InventoryDetailPage({
         )}
       </div>
 
-      {/* Bottle Weights (read-only, only when a template exists) */}
+      {/* Bottle Weights (with editable density when template exists) */}
       {item.bottleTemplates?.[0] && (() => {
         const t = item.bottleTemplates[0];
+        const containerMl = Number(t.containerSizeMl);
+        const containerOz = Math.round((containerMl / 29.5735) * 10) / 10;
+        const templateDensity = t.densityGPerMl != null ? Number(t.densityGPerMl) : null;
+        const categoryDensity = item.category?.defaultDensity != null ? Number(item.category.defaultDensity) : null;
+        const effectiveDensity = templateDensity ?? categoryDensity ?? 0.95;
+        const densitySource = templateDensity != null ? "from template" : categoryDensity != null ? "category default" : "system default";
+
         return (
-          <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F] p-4">
-            <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]">Bottle Weights</h2>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-              <div>
-                <dt className="text-[#EAF0FF]/60">Tare (Empty)</dt>
-                <dd className="text-[#EAF0FF]">
-                  {t.emptyBottleWeightG != null
-                    ? `${Math.round(Number(t.emptyBottleWeightG))} g`
-                    : (() => {
-                        const d = Number(t.densityGPerMl) || 0.95;
-                        const derived = Number(t.fullBottleWeightG) - Number(t.containerSizeMl) * d;
-                        return `~${Math.round(derived)} g (est.)`;
-                      })()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[#EAF0FF]/60">Full</dt>
-                <dd className="text-[#EAF0FF]">
-                  {t.fullBottleWeightG != null
-                    ? `${Math.round(Number(t.fullBottleWeightG))} g`
-                    : (() => {
-                        const d = Number(t.densityGPerMl) || 0.95;
-                        const derived = Number(t.emptyBottleWeightG) + Number(t.containerSizeMl) * d;
-                        return `~${Math.round(derived)} g (est.)`;
-                      })()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[#EAF0FF]/60">Container</dt>
-                <dd className="text-[#EAF0FF]">{Number(t.containerSizeMl)} mL</dd>
-              </div>
-              <div>
-                <dt className="text-[#EAF0FF]/60">Density</dt>
-                <dd className="text-[#EAF0FF]">
-                  {t.densityGPerMl != null ? `${Number(t.densityGPerMl).toFixed(2)} g/mL` : "—"}
-                </dd>
-              </div>
-            </dl>
-          </div>
+          <BottleWeightsCard
+            template={t}
+            containerMl={containerMl}
+            containerOz={containerOz}
+            effectiveDensity={effectiveDensity}
+            densitySource={densitySource}
+            onDensityUpdated={() => utils.inventory.getById.invalidate({ id })}
+          />
         );
       })()}
+
+      {/* Density info for weighable items without template */}
+      {item.category?.countingMethod === "weighable" && !item.bottleTemplates?.[0] && (
+        <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F] p-4">
+          <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]">Density</h2>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div>
+              <dt className="text-[#EAF0FF]/60">Density</dt>
+              <dd className="text-[#EAF0FF]">
+                {item.category?.defaultDensity != null
+                  ? `${Number(item.category.defaultDensity).toFixed(2)} g/mL`
+                  : "0.95 g/mL"}
+                <span className="ml-2 text-xs text-[#EAF0FF]/40">
+                  ({item.category?.defaultDensity != null ? "category default" : "system default"})
+                </span>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
 
       {/* On-Hand Section */}
       <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F] p-4">

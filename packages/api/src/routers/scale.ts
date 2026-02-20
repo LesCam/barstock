@@ -292,6 +292,18 @@ export const scaleRouter = router({
       });
     }),
 
+  updateTemplateDensity: protectedProcedure
+    .input(z.object({
+      templateId: z.string().uuid(),
+      densityGPerMl: z.number().min(0.5).max(2.0),
+    }))
+    .mutation(({ ctx, input }) =>
+      ctx.prisma.bottleTemplate.update({
+        where: { id: input.templateId },
+        data: { densityGPerMl: input.densityGPerMl },
+      })
+    ),
+
   /** Record a bottle measurement */
   recordMeasurement: protectedProcedure
     .input(z.object({

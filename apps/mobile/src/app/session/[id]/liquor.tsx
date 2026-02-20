@@ -52,6 +52,13 @@ export default function LiquorWeighScreen() {
     }
   }, [preselectedItem]);
 
+  // Fetch count hint for selected item
+  const { data: countHints } = trpc.sessions.itemCountHints.useQuery(
+    { locationId: selectedLocationId!, inventoryItemIds: selectedItem ? [selectedItem.id] : [] },
+    { enabled: !!selectedLocationId && !!selectedItem }
+  );
+  const hint = countHints?.[0] ?? null;
+
   const { data: templates } = trpc.scale.listTemplates.useQuery(
     { locationId: selectedLocationId! },
     { enabled: !!selectedLocationId }
@@ -217,6 +224,18 @@ export default function LiquorWeighScreen() {
                   </Text>
                 )}
               </View>
+              {hint && (
+                <Text style={styles.hintText}>
+                  {[
+                    hint.lastCountValue != null
+                      ? `Last: ${Math.round(hint.lastCountValue * 10) / 10}${hint.isWeight ? "g" : " units"} (${Math.round((Date.now() - new Date(hint.lastCountDate!).getTime()) / 86400000)}d ago)`
+                      : null,
+                    hint.avgDailyUsage != null && hint.avgDailyUsage > 0
+                      ? `Avg: ${(Math.round(hint.avgDailyUsage * 10) / 10)}/day`
+                      : null,
+                  ].filter(Boolean).join(" · ")}
+                </Text>
+              )}
             </View>
 
             {!matchedTemplate && (
@@ -484,6 +503,12 @@ const styles = StyleSheet.create({
   itemMetaDetail: {
     color: "#5A6A7A",
     fontSize: 13,
+  },
+  hintText: {
+    color: "#5A6A7A",
+    fontSize: 12,
+    marginTop: 6,
+    fontStyle: "italic",
   },
   warningBox: {
     backgroundColor: "#3B2A1A",

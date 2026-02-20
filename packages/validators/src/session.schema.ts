@@ -38,7 +38,13 @@ export const expectedItemsForAreaSchema = z.object({
   subAreaId: z.string().uuid().optional(),
 });
 
+export const itemCountHintsSchema = z.object({
+  locationId: z.string().uuid(),
+  inventoryItemIds: z.array(z.string().uuid()).max(200),
+});
+
 export type SessionCreateInput = z.infer<typeof sessionCreateSchema>;
 export type SessionLineCreateInput = z.infer<typeof sessionLineCreateSchema>;
 export type SessionCloseInput = z.infer<typeof sessionCloseSchema>;
 export type ExpectedItemsForAreaInput = z.infer<typeof expectedItemsForAreaSchema>;
+export type ItemCountHintsInput = z.infer<typeof itemCountHintsSchema>;

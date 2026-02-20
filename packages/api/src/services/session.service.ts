@@ -152,7 +152,7 @@ export class SessionService {
     };
   }
 
-  private async calculateTheoreticalOnHand(
+  async calculateTheoreticalOnHand(
     itemId: string,
     asOf: Date
   ): Promise<number> {
@@ -164,6 +164,60 @@ export class SessionService {
       _sum: { quantityDelta: true },
     });
     return Number(result._sum.quantityDelta ?? 0);
+  }
+
+  /**
+   * Preview session close — read-only variance calculation without creating events
+   */
+  async previewClose(sessionId: string) {
+    const session = await this.prisma.inventorySession.findUnique({
+      where: { id: sessionId },
+      include: { lines: { include: { inventoryItem: true } } },
+    });
+
+    if (!session) throw new Error("Session not found");
+
+    const lines: Array<{
+      inventoryItemId: string;
+      itemName: string;
+      countedValue: number;
+      theoretical: number;
+      variance: number;
+      variancePercent: number;
+      uom: string;
+    }> = [];
+
+    let itemsWithVariance = 0;
+
+    for (const line of session.lines) {
+      const theoretical = await this.calculateTheoreticalOnHand(
+        line.inventoryItemId,
+        session.startedTs
+      );
+      const actual = this.getActualFromLine(line);
+      const variance = actual - theoretical;
+      const variancePercent = theoretical !== 0
+        ? (variance / theoretical) * 100
+        : 0;
+
+      if (variance !== 0) itemsWithVariance++;
+
+      lines.push({
+        inventoryItemId: line.inventoryItemId,
+        itemName: line.inventoryItem.name,
+        countedValue: actual,
+        theoretical,
+        variance,
+        variancePercent,
+        uom: line.inventoryItem.baseUom,
+      });
+    }
+
+    return {
+      lines,
+      totalItems: session.lines.length,
+      itemsWithVariance,
+    };
   }
 
   private getActualFromLine(line: {

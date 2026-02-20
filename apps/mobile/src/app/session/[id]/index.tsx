@@ -50,6 +50,7 @@ export default function SessionDetailScreen() {
     Array<{ itemId: string; reason: VarianceReason }>
   >([]);
   const [showReview, setShowReview] = useState(false);
+  const [submitMode, setSubmitMode] = useState(false);
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editingQty, setEditingQty] = useState("");
 
@@ -81,6 +82,12 @@ export default function SessionDetailScreen() {
 
   const expectedItems = fullLocationMode ? expectedItemsForLocation : expectedItemsForArea;
 
+  // Preview close data for submit mode
+  const { data: previewData, isLoading: previewLoading } = trpc.sessions.previewClose.useQuery(
+    { sessionId: id! },
+    { enabled: !!id && submitMode && showReview }
+  );
+
   // Compute which expected items have been counted in this session
   const expectedChecklist = useMemo(() => {
     if (!expectedItems || !session?.lines) return [];
@@ -105,8 +112,36 @@ export default function SessionDetailScreen() {
     }));
   }, [expectedItems, session?.lines, fullLocationMode]);
 
+  // Fetch count hints for expected items
+  const expectedItemIds = useMemo(
+    () => (expectedItems ?? []).map((i: any) => i.inventoryItemId),
+    [expectedItems]
+  );
+  const { data: countHints } = trpc.sessions.itemCountHints.useQuery(
+    { locationId: selectedLocationId!, inventoryItemIds: expectedItemIds },
+    { enabled: !!selectedLocationId && expectedItemIds.length > 0 }
+  );
+  const hintsMap = useMemo(() => {
+    if (!countHints) return new Map<string, (typeof countHints & object)[number]>();
+    return new Map(countHints.map((h) => [h.inventoryItemId, h]));
+  }, [countHints]);
+
   const expectedTotal = expectedChecklist.length;
   const expectedCounted = expectedChecklist.filter((i: any) => i.counted).length;
+
+  function formatHint(hint: { lastCountValue: number | null; lastCountDate: Date | string; avgDailyUsage: number | null; isWeight?: boolean }) {
+    const parts: string[] = [];
+    if (hint.lastCountValue != null) {
+      const daysAgo = Math.round((Date.now() - new Date(hint.lastCountDate).getTime()) / 86400000);
+      const unit = hint.isWeight ? "g" : " units";
+      parts.push(`Last: ${Math.round(hint.lastCountValue * 10) / 10}${unit}`);
+      if (daysAgo > 0) parts[0] += ` (${daysAgo}d ago)`;
+    }
+    if (hint.avgDailyUsage != null && hint.avgDailyUsage > 0) {
+      parts.push(`~${(Math.round(hint.avgDailyUsage * 10) / 10)}/day`);
+    }
+    return parts.join(" · ");
+  }
 
   function handleExpectedItemTap(item: { inventoryItemId: string; name: string; countingMethod: string; subAreaId?: string; subAreaName?: string }) {
     if (!areaSelected) return;
@@ -496,6 +531,7 @@ export default function SessionDetailScreen() {
                     <Text style={styles.expectedGroupHeader}>{area}</Text>
                     {items.map((item: any) => {
                       const key = `${item.inventoryItemId}|${item.subAreaId ?? ""}`;
+                      const hint = hintsMap.get(item.inventoryItemId);
                       return item.counted ? (
                         <View
                           key={key}
@@ -515,7 +551,12 @@ export default function SessionDetailScreen() {
                           onPress={() => handleExpectedItemTap(item)}
                         >
                           <View style={styles.expectedCheck} />
-                          <Text style={styles.expectedName}>{item.name}</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.expectedName}>{item.name}</Text>
+                            {hint && (
+                              <Text style={styles.hintText}>{formatHint(hint)}</Text>
+                            )}
+                          </View>
                           <Text style={styles.expectedType}>
                             {item.categoryName ?? "Uncategorized"}
                           </Text>
@@ -526,8 +567,9 @@ export default function SessionDetailScreen() {
                 ));
               })()
             ) : (
-              expectedChecklist.map((item: any) =>
-                item.counted ? (
+              expectedChecklist.map((item: any) => {
+                const hint = hintsMap.get(item.inventoryItemId);
+                return item.counted ? (
                   <View
                     key={item.inventoryItemId}
                     style={[styles.expectedRow, styles.expectedRowCounted]}
@@ -546,13 +588,18 @@ export default function SessionDetailScreen() {
                     onPress={() => handleExpectedItemTap(item)}
                   >
                     <View style={styles.expectedCheck} />
-                    <Text style={styles.expectedName}>{item.name}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.expectedName}>{item.name}</Text>
+                      {hint && (
+                        <Text style={styles.hintText}>{formatHint(hint)}</Text>
+                      )}
+                    </View>
                     <Text style={styles.expectedType}>
                       {item.categoryName ?? "Uncategorized"}
                     </Text>
                   </TouchableOpacity>
-                )
-              )
+                );
+              })
             )}
           </View>
         )}
@@ -584,16 +631,17 @@ export default function SessionDetailScreen() {
           <View style={styles.bottomRow}>
             <TouchableOpacity
               style={[styles.reviewBtn, lineCount === 0 && styles.btnDisabled]}
-              onPress={() => setShowReview(true)}
+              onPress={() => { setSubmitMode(false); setShowReview(true); }}
               disabled={lineCount === 0}
             >
               <Text style={styles.reviewBtnText}>Review ({lineCount})</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.doneBtn}
-              onPress={() => router.back()}
+              style={[styles.submitCountBtn, lineCount === 0 && styles.btnDisabled]}
+              onPress={() => { setSubmitMode(true); setShowReview(true); }}
+              disabled={lineCount === 0}
             >
-              <Text style={styles.doneBtnText}>Done</Text>
+              <Text style={styles.submitCountBtnText}>Submit Count</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -604,14 +652,17 @@ export default function SessionDetailScreen() {
         <View style={styles.reviewModalContainer}>
           <View style={styles.reviewModalHeader}>
             <Text style={styles.reviewModalTitle}>
-              Review — {lineCount} Item{lineCount !== 1 ? "s" : ""}
+              {submitMode ? "Submit Count" : `Review — ${lineCount} Item${lineCount !== 1 ? "s" : ""}`}
             </Text>
-            <TouchableOpacity onPress={() => setShowReview(false)}>
+            <TouchableOpacity onPress={() => { setShowReview(false); setSubmitMode(false); }}>
               <Text style={styles.reviewModalClose}>Close</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.reviewList}>
+            {submitMode && previewLoading && (
+              <Text style={styles.reviewEmpty}>Calculating variance...</Text>
+            )}
             {groupedLines.map((section) => (
               <View key={section.title}>
                 <View style={styles.reviewSectionHeader}>
@@ -619,6 +670,9 @@ export default function SessionDetailScreen() {
                 </View>
                 {section.data.map((line: any) => {
                   const isEditing = editingLineId === line.id;
+                  const variance = submitMode && previewData
+                    ? previewData.lines.find((v) => v.inventoryItemId === line.inventoryItemId)
+                    : null;
                   return (
                     <View key={line.id} style={styles.reviewRow}>
                       <View style={styles.reviewInfo}>
@@ -629,6 +683,16 @@ export default function SessionDetailScreen() {
                           {line.inventoryItem?.category?.name ?? ""}
                           {line.subArea ? ` | ${line.subArea.name}` : ""}
                         </Text>
+                        {submitMode && variance && variance.theoretical !== 0 && (
+                          <Text style={[
+                            styles.varianceText,
+                            Math.abs(variance.variancePercent) < 5 && styles.varianceGreen,
+                            Math.abs(variance.variancePercent) >= 5 && Math.abs(variance.variancePercent) < 15 && styles.varianceOrange,
+                            Math.abs(variance.variancePercent) >= 15 && styles.varianceRed,
+                          ]}>
+                            Expected: {Math.round(variance.theoretical * 10) / 10} → Counted: {Math.round(variance.countedValue * 10) / 10} ({variance.variance > 0 ? "+" : ""}{Math.round(variance.variance * 10) / 10})
+                          </Text>
+                        )}
                       </View>
 
                       {isEditing ? (
@@ -660,7 +724,7 @@ export default function SessionDetailScreen() {
                               {formatLineValue(line)}
                             </Text>
                           </TouchableOpacity>
-                          {isOpen && (
+                          {isOpen && !submitMode && (
                             <TouchableOpacity
                               onPress={() =>
                                 handleDeleteLine(line.id, line.inventoryItem?.name ?? "item")
@@ -680,6 +744,28 @@ export default function SessionDetailScreen() {
               <Text style={styles.reviewEmpty}>No items counted yet.</Text>
             )}
           </ScrollView>
+
+          {/* Submit mode footer */}
+          {submitMode && previewData && (
+            <View style={styles.submitFooter}>
+              <Text style={styles.submitSummary}>
+                {previewData.totalItems} item{previewData.totalItems !== 1 ? "s" : ""} counted · {previewData.itemsWithVariance} with variance
+              </Text>
+              <TouchableOpacity
+                style={[styles.submitCloseBtn, closeMutation.isPending && styles.submitCloseBtnDisabled]}
+                onPress={() => {
+                  setShowReview(false);
+                  setSubmitMode(false);
+                  handleCloseSession();
+                }}
+                disabled={closeMutation.isPending}
+              >
+                <Text style={styles.submitCloseBtnText}>
+                  {closeMutation.isPending ? "Closing..." : "Submit & Close Session"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -921,7 +1007,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  expectedName: { color: "#EAF0FF", fontSize: 14, flex: 1 },
+  expectedName: { color: "#EAF0FF", fontSize: 14 },
+  hintText: { color: "#5A6A7A", fontSize: 11, marginTop: 1 },
   expectedType: {
     color: "#5A6A7A",
     fontSize: 11,
@@ -985,16 +1072,14 @@ const styles = StyleSheet.create({
     borderColor: "#E9B44C",
   },
   reviewBtnText: { color: "#E9B44C", fontSize: 16, fontWeight: "600" },
-  doneBtn: {
+  submitCountBtn: {
     flex: 1,
-    backgroundColor: "#16283F",
+    backgroundColor: "#E9B44C",
     borderRadius: 12,
     padding: 14,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#1E3550",
   },
-  doneBtnText: { color: "#8899AA", fontSize: 16, fontWeight: "600" },
+  submitCountBtnText: { color: "#0B1623", fontSize: 16, fontWeight: "700" },
   btnDisabled: { opacity: 0.4 },
 
   // Review modal
@@ -1155,4 +1240,32 @@ const styles = StyleSheet.create({
   },
   verificationConfirmDisabled: { opacity: 0.5 },
   verificationConfirmText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+
+  // Variance text in submit review
+  varianceText: { fontSize: 11, marginTop: 3 },
+  varianceGreen: { color: "#2BA8A0" },
+  varianceOrange: { color: "#E9B44C" },
+  varianceRed: { color: "#dc2626" },
+
+  // Submit footer
+  submitFooter: {
+    borderTopWidth: 1,
+    borderTopColor: "#1E3550",
+    padding: 16,
+    paddingBottom: 32,
+  },
+  submitSummary: {
+    color: "#8899AA",
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  submitCloseBtn: {
+    backgroundColor: "#E9B44C",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+  },
+  submitCloseBtnDisabled: { opacity: 0.5 },
+  submitCloseBtnText: { color: "#0B1623", fontSize: 17, fontWeight: "700" },
 });

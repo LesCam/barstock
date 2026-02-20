@@ -44,6 +44,13 @@ export default function PackagedCountScreen() {
     }
   }, [preselectedItem]);
 
+  // Fetch count hint for selected item
+  const { data: countHints } = trpc.sessions.itemCountHints.useQuery(
+    { locationId: selectedLocationId!, inventoryItemIds: selectedItem ? [selectedItem.id] : [] },
+    { enabled: !!selectedLocationId && !!selectedItem }
+  );
+  const hint = countHints?.[0] ?? null;
+
   const addLineMutation = trpc.sessions.addLine.useMutation({
     onSuccess() {
       setSubmittedCount((c) => c + 1);
@@ -122,6 +129,18 @@ export default function PackagedCountScreen() {
               {selectedItem.barcode && (
                 <Text style={styles.itemMeta}>
                   Barcode: {selectedItem.barcode}
+                </Text>
+              )}
+              {hint && (
+                <Text style={styles.hintText}>
+                  {[
+                    hint.lastCountValue != null
+                      ? `Last: ${Math.round(hint.lastCountValue * 10) / 10} units (${Math.round((Date.now() - new Date(hint.lastCountDate!).getTime()) / 86400000)}d ago)`
+                      : null,
+                    hint.avgDailyUsage != null && hint.avgDailyUsage > 0
+                      ? `Avg: ${(Math.round(hint.avgDailyUsage * 10) / 10)}/day`
+                      : null,
+                  ].filter(Boolean).join(" · ")}
                 </Text>
               )}
             </View>
@@ -269,6 +288,12 @@ const styles = StyleSheet.create({
     color: "#5A6A7A",
     fontSize: 13,
     marginTop: 4,
+  },
+  hintText: {
+    color: "#5A6A7A",
+    fontSize: 12,
+    marginTop: 6,
+    fontStyle: "italic",
   },
   section: {
     marginTop: 20,
