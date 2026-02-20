@@ -118,6 +118,7 @@ export default function DashboardPage() {
   const isAdmin = canCreate;
 
   const [showForm, setShowForm] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState("America/Montreal");
   const [closeoutHour, setCloseoutHour] = useState(4);
@@ -125,9 +126,15 @@ export default function DashboardPage() {
   const utils = trpc.useUtils();
 
   const { data: locations } = trpc.locations.listByBusiness.useQuery(
-    { businessId: businessId! },
+    { businessId: businessId!, activeOnly: !showArchived },
     { enabled: !!businessId }
   );
+
+  const { data: allLocations } = trpc.locations.listByBusiness.useQuery(
+    { businessId: businessId!, activeOnly: false },
+    { enabled: !!businessId && isAdmin }
+  );
+  const archivedCount = allLocations ? allLocations.filter((l) => !l.active).length : 0;
 
   const createMutation = trpc.locations.create.useMutation({
     onSuccess: () => {
@@ -148,7 +155,17 @@ export default function DashboardPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Dashboard</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Dashboard</h1>
+          {isAdmin && archivedCount > 0 && (
+            <button
+              onClick={() => setShowArchived(!showArchived)}
+              className="rounded-md border border-white/10 px-3 py-1 text-xs text-[#EAF0FF]/60 hover:text-[#EAF0FF]/80"
+            >
+              {showArchived ? "Hide archived" : `Show archived (${archivedCount})`}
+            </button>
+          )}
+        </div>
         {canCreate && businessId && (
           <button
             onClick={() => setShowForm(!showForm)}
@@ -228,9 +245,20 @@ export default function DashboardPage() {
           <Link
             key={loc.id}
             href={`/locations/${loc.id}`}
-            className="rounded-lg border border-white/10 bg-[#16283F] p-5 shadow-sm transition-shadow hover:shadow-md"
+            className={`rounded-lg border p-5 shadow-sm transition-shadow hover:shadow-md ${
+              loc.active
+                ? "border-white/10 bg-[#16283F]"
+                : "border-amber-500/20 bg-amber-500/5 opacity-70"
+            }`}
           >
-            <h3 className="font-semibold text-[#EAF0FF]">{loc.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-[#EAF0FF]">{loc.name}</h3>
+              {!loc.active && (
+                <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-400">
+                  Archived
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-sm text-[#EAF0FF]/60">{loc.timezone}</p>
             <p className="mt-1 text-xs text-[#EAF0FF]/40">
               Closeout: {loc.closeoutHour}:00
