@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, Switch, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, Switch, StyleSheet, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useAuth, usePermission } from "@/lib/auth-context";
@@ -38,7 +38,7 @@ export default function SettingsTab() {
   const isMultiLocation = (user?.locationIds.length ?? 0) > 1;
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
         <View style={styles.card}>
@@ -172,12 +172,13 @@ export default function SettingsTab() {
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0B1623", padding: 16 },
+  container: { flex: 1, backgroundColor: "#0B1623" },
+  content: { padding: 16, paddingBottom: 32 },
   section: { marginBottom: 24 },
   sectionTitle: { fontSize: 12, fontWeight: "600", color: "#5A6A7A", marginBottom: 8, textTransform: "uppercase" },
   card: {
