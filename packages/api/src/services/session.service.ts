@@ -5,7 +5,7 @@
  * Ported from: backend/app/services/session_service.py
  */
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type UomT } from "@prisma/client";
 import type { ExtendedPrismaClient } from "@barstock/database";
 import type { VarianceReason } from "@barstock/types";
 import { AuditService } from "./audit.service";
@@ -241,10 +241,10 @@ export class SessionService {
       inventoryItemId: string;
       countUnits: Prisma.Decimal | null;
       derivedOz: Prisma.Decimal | null;
-      inventoryItem: { name: string; baseUom: string };
+      inventoryItem: { name: string; baseUom: UomT };
     }>
-  ): Map<string, { total: number; item: { name: string; baseUom: string } }> {
-    const map = new Map<string, { total: number; item: { name: string; baseUom: string } }>();
+  ): Map<string, { total: number; item: { name: string; baseUom: UomT } }> {
+    const map = new Map<string, { total: number; item: { name: string; baseUom: UomT } }>();
     for (const line of lines) {
       const existing = map.get(line.inventoryItemId);
       const lineValue = this.getActualFromLine(line);
