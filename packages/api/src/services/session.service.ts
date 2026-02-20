@@ -50,17 +50,17 @@ export class SessionService {
     const adjustments: AdjustmentDetail[] = [];
     const audit = new AuditService(this.prisma);
 
-    for (const line of session.lines) {
+    // Aggregate multiple lines for the same item (e.g. weighed + unit count)
+    const itemTotals = this.aggregateLinesByItem(session.lines);
+
+    for (const [itemId, { total, item }] of itemTotals) {
       // Calculate theoretical on-hand from ledger
       const theoretical = await this.calculateTheoreticalOnHand(
-        line.inventoryItemId,
+        itemId,
         session.startedTs
       );
 
-      // Get actual count from session line
-      const actual = this.getActualFromLine(line);
-
-      const variance = actual - theoretical;
+      const variance = total - theoretical;
       totalVariance += Math.abs(variance);
 
       // Check threshold (configurable, default 5 units)
@@ -68,8 +68,8 @@ export class SessionService {
       const threshold = 5.0;
 
       if (theoretical !== 0 && Math.abs(variance) > threshold) {
-        if (!(line.inventoryItemId in varianceReasons)) {
-          requiresReasons.push(line.inventoryItemId);
+        if (!(itemId in varianceReasons)) {
+          requiresReasons.push(itemId);
           continue;
         }
       }
@@ -82,11 +82,11 @@ export class SessionService {
             eventType: "inventory_count_adjustment",
             sourceSystem: "manual",
             eventTs: new Date(),
-            inventoryItemId: line.inventoryItemId,
+            inventoryItemId: itemId,
             quantityDelta: new Prisma.Decimal(variance),
-            uom: line.inventoryItem.baseUom,
+            uom: item.baseUom,
             confidenceLevel: "measured",
-            varianceReason: varianceReasons[line.inventoryItemId] ?? null,
+            varianceReason: varianceReasons[itemId] ?? null,
             notes: `Session ${sessionId} adjustment`,
           },
         });
@@ -94,11 +94,11 @@ export class SessionService {
         const variancePercent = theoretical !== 0
           ? (variance / theoretical) * 100
           : 0;
-        const reason = varianceReasons[line.inventoryItemId] ?? null;
+        const reason = varianceReasons[itemId] ?? null;
 
         adjustments.push({
-          itemId: line.inventoryItemId,
-          itemName: line.inventoryItem.name,
+          itemId,
+          itemName: item.name,
           variance,
           variancePercent,
           reason,
@@ -117,8 +117,8 @@ export class SessionService {
             objectType: "consumption_event",
             objectId: event.id,
             metadata: {
-              inventoryItemId: line.inventoryItemId,
-              itemName: line.inventoryItem.name,
+              inventoryItemId: itemId,
+              itemName: item.name,
               variance,
               variancePercent,
               varianceReason: reason,
@@ -177,7 +177,7 @@ export class SessionService {
 
     if (!session) throw new Error("Session not found");
 
-    const lines: Array<{
+    const previewLines: Array<{
       inventoryItemId: string;
       itemName: string;
       countedValue: number;
@@ -189,33 +189,35 @@ export class SessionService {
 
     let itemsWithVariance = 0;
 
-    for (const line of session.lines) {
+    // Aggregate multiple lines for the same item
+    const itemTotals = this.aggregateLinesByItem(session.lines);
+
+    for (const [itemId, { total, item }] of itemTotals) {
       const theoretical = await this.calculateTheoreticalOnHand(
-        line.inventoryItemId,
+        itemId,
         session.startedTs
       );
-      const actual = this.getActualFromLine(line);
-      const variance = actual - theoretical;
+      const variance = total - theoretical;
       const variancePercent = theoretical !== 0
         ? (variance / theoretical) * 100
         : 0;
 
       if (variance !== 0) itemsWithVariance++;
 
-      lines.push({
-        inventoryItemId: line.inventoryItemId,
-        itemName: line.inventoryItem.name,
-        countedValue: actual,
+      previewLines.push({
+        inventoryItemId: itemId,
+        itemName: item.name,
+        countedValue: total,
         theoretical,
         variance,
         variancePercent,
-        uom: line.inventoryItem.baseUom,
+        uom: item.baseUom,
       });
     }
 
     return {
-      lines,
-      totalItems: session.lines.length,
+      lines: previewLines,
+      totalItems: itemTotals.size,
       itemsWithVariance,
     };
   }
@@ -227,5 +229,34 @@ export class SessionService {
     if (line.countUnits !== null) return Number(line.countUnits);
     if (line.derivedOz !== null) return Number(line.derivedOz);
     return 0;
+  }
+
+  /**
+   * Aggregate multiple session lines for the same inventory item.
+   * Sums the actual values so that e.g. a weighed line + a unit count line
+   * for the same vodka produces one combined total.
+   */
+  private aggregateLinesByItem(
+    lines: Array<{
+      inventoryItemId: string;
+      countUnits: Prisma.Decimal | null;
+      derivedOz: Prisma.Decimal | null;
+      inventoryItem: { name: string; baseUom: string };
+    }>
+  ): Map<string, { total: number; item: { name: string; baseUom: string } }> {
+    const map = new Map<string, { total: number; item: { name: string; baseUom: string } }>();
+    for (const line of lines) {
+      const existing = map.get(line.inventoryItemId);
+      const lineValue = this.getActualFromLine(line);
+      if (existing) {
+        existing.total += lineValue;
+      } else {
+        map.set(line.inventoryItemId, {
+          total: lineValue,
+          item: line.inventoryItem,
+        });
+      }
+    }
+    return map;
   }
 }

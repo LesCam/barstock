@@ -303,11 +303,34 @@ export default function SessionDetailScreen() {
     }
   }
 
+  // Warn if another participant is already in this sub-area
+  function warnIfOccupied(subAreaId: string, onProceed: () => void) {
+    const othersHere = (participants ?? []).filter(
+      (p) => p.userId !== authUser?.userId && p.subArea?.id === subAreaId
+    );
+    if (othersHere.length > 0) {
+      const names = othersHere
+        .map((p) => p.user.firstName || p.user.email.split("@")[0])
+        .join(", ");
+      Alert.alert(
+        "Area In Use",
+        `${names} ${othersHere.length === 1 ? "is" : "are"} already counting here. Continue anyway?`,
+        [
+          { text: "Pick Another", style: "cancel" },
+          { text: "Continue", onPress: onProceed },
+        ]
+      );
+    } else {
+      onProceed();
+    }
+  }
+
   // When area changes, auto-select first sub-area
   function handleAreaSelect(area: BarArea) {
     setSelectedAreaId(area.id);
     if (area.subAreas.length > 0) {
-      setSelectedSubAreaId(area.subAreas[0].id);
+      const firstSa = area.subAreas[0].id;
+      warnIfOccupied(firstSa, () => setSelectedSubAreaId(firstSa));
     } else {
       setSelectedSubAreaId(null);
     }
@@ -582,7 +605,7 @@ export default function SessionDetailScreen() {
                         styles.subAreaPill,
                         selectedSubAreaId === sa.id && styles.subAreaPillActive,
                       ]}
-                      onPress={() => setSelectedSubAreaId(sa.id)}
+                      onPress={() => warnIfOccupied(sa.id, () => setSelectedSubAreaId(sa.id))}
                     >
                       <Text
                         style={[
