@@ -32,7 +32,13 @@ export const vendorUpdateSchema = z.object({
   active: z.boolean().optional(),
 });
 
+export const vendorOrdererSchema = z.object({
+  vendorId: z.string().uuid(),
+  userId: z.string().uuid(),
+});
+
 export type VendorCreateInput = z.infer<typeof vendorCreateSchema>;
 export type VendorListInput = z.infer<typeof vendorListSchema>;
 export type VendorGetByIdInput = z.infer<typeof vendorGetByIdSchema>;
 export type VendorUpdateInput = z.infer<typeof vendorUpdateSchema>;
+export type VendorOrdererInput = z.infer<typeof vendorOrdererSchema>;

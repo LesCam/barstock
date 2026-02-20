@@ -9,6 +9,24 @@ import {
 import { hashPassword } from "../services/auth.service";
 
 export const usersRouter = router({
+  listForBusiness: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ businessId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.prisma.user.findMany({
+        where: { businessId: input.businessId, isActive: true },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isActive: true,
+        },
+        orderBy: { email: "asc" },
+      });
+    }),
+
   listByBusiness: protectedProcedure
     .use(requireRole("platform_admin"))
     .input(platformUserListSchema)

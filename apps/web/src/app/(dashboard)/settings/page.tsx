@@ -830,7 +830,7 @@ const ALERT_RULE_LABELS: Record<string, { label: string; unit: string; descripti
   parReorderAlert: {
     label: "Par Reorder Alert",
     unit: "days",
-    description: "Alert when items are below min level or will stockout within this many days",
+    description: "Alert when items are below min level or will stockout within this many days. Sent to assigned orderers (or all users with ordering permission if none assigned).",
   },
 };
 
@@ -894,7 +894,7 @@ function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdi
       </div>
 
       <p className="mb-4 text-sm text-[#EAF0FF]/50">
-        Configure thresholds for daily inventory alerts. Notifications are evaluated each morning and sent to business admins.
+        Configure thresholds for daily inventory alerts. Notifications are sent to business admins. Par reorder alerts are also sent to assigned vendor orderers (configure in Vendor settings).
       </p>
 
       <div className="space-y-4">

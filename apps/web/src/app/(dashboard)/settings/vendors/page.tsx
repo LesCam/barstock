@@ -12,15 +12,26 @@ function formatPhone(value: string): string {
   return `(${digits.slice(0, 3)})${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
+function userName(u: { firstName?: string | null; lastName?: string | null; email: string }): string {
+  if (u.firstName || u.lastName) return [u.firstName, u.lastName].filter(Boolean).join(" ");
+  return u.email;
+}
+
 export default function VendorsSettingsPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const businessId = user?.businessId;
+  const isAdmin = ["platform_admin", "business_admin"].includes(user?.highestRole ?? "");
   const utils = trpc.useUtils();
 
   const { data: vendors, isLoading } = trpc.vendors.list.useQuery(
     { businessId: businessId!, activeOnly: false },
     { enabled: !!businessId }
+  );
+
+  const { data: businessUsers } = trpc.users.listForBusiness.useQuery(
+    { businessId: businessId! },
+    { enabled: !!businessId && isAdmin }
   );
 
   // Create form state
@@ -42,6 +53,9 @@ export default function VendorsSettingsPage() {
   const [editCity, setEditCity] = useState("");
   const [editProvince, setEditProvince] = useState("");
   const [editPostalCode, setEditPostalCode] = useState("");
+
+  // Orderer picker state
+  const [ordererVendorId, setOrdererVendorId] = useState<string | null>(null);
 
   const createMut = trpc.vendors.create.useMutation({
     onSuccess: () => {
@@ -65,6 +79,14 @@ export default function VendorsSettingsPage() {
   });
 
   const deleteMut = trpc.vendors.delete.useMutation({
+    onSuccess: () => utils.vendors.list.invalidate(),
+  });
+
+  const assignOrdererMut = trpc.vendors.assignOrderer.useMutation({
+    onSuccess: () => utils.vendors.list.invalidate(),
+  });
+
+  const removeOrdererMut = trpc.vendors.removeOrderer.useMutation({
     onSuccess: () => utils.vendors.list.invalidate(),
   });
 
@@ -112,6 +134,22 @@ export default function VendorsSettingsPage() {
       deleteMut.mutate({ id });
     } else {
       updateMut.mutate({ id, active: true });
+    }
+  }
+
+  function handleAssignOrderer(vendorId: string, userId: string) {
+    assignOrdererMut.mutate({ vendorId, userId });
+  }
+
+  function handleRemoveOrderer(vendorId: string, userId: string) {
+    removeOrdererMut.mutate({ vendorId, userId });
+  }
+
+  // Build a lookup from userId to user info
+  const userMap = new Map<string, { id: string; email: string; firstName?: string | null; lastName?: string | null; role: string }>();
+  if (businessUsers) {
+    for (const u of businessUsers) {
+      userMap.set(u.id, u);
     }
   }
 
@@ -237,150 +275,231 @@ export default function VendorsSettingsPage() {
       ) : !vendors?.length ? (
         <p className="text-[#EAF0FF]/40 text-sm">No vendors yet. Add one to start tracking suppliers.</p>
       ) : (
-        <div className="rounded-lg border border-white/10 bg-[#16283F]">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
-              <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3">Address</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {vendors.map((v) => (
-                <tr key={v.id} className={!v.active ? "opacity-50" : ""}>
-                  <td className="px-4 py-3 font-medium text-[#EAF0FF]">
+        <div className="space-y-3">
+          {vendors.map((v) => {
+            const ordererUserIds = v.vendorOrderers?.map((o: any) => o.userId) ?? [];
+            const isExpanded = ordererVendorId === v.id;
+
+            return (
+              <div
+                key={v.id}
+                className={`rounded-lg border border-white/10 bg-[#16283F] ${!v.active ? "opacity-50" : ""}`}
+              >
+                {/* Main vendor row */}
+                <div className="flex items-center gap-4 px-4 py-3">
+                  <div className="min-w-0 flex-1">
                     {editingId === v.id ? (
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleSaveEdit(v.id)}
-                        className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
-                        autoFocus
-                      />
-                    ) : (
-                      v.name
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-[#EAF0FF]/70">
-                    {editingId === v.id ? (
-                      <input
-                        type="email"
-                        value={editEmail}
-                        onChange={(e) => setEditEmail(e.target.value)}
-                        className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
-                      />
-                    ) : (
-                      v.contactEmail ?? "—"
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-[#EAF0FF]/70">
-                    {editingId === v.id ? (
-                      <input
-                        type="tel"
-                        value={editPhone}
-                        onChange={(e) => setEditPhone(formatPhone(e.target.value))}
-                        className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
-                      />
-                    ) : (
-                      v.contactPhone ? formatPhone(v.contactPhone) : "—"
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-[#EAF0FF]/70">
-                    {editingId === v.id ? (
-                      <div className="space-y-1">
-                        <input
-                          type="text"
-                          value={editAddress}
-                          onChange={(e) => setEditAddress(e.target.value)}
-                          placeholder="Street"
-                          className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
-                        />
-                        <div className="flex gap-1">
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                          <input
+                            type="text"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleSaveEdit(v.id)}
+                            className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                            autoFocus
+                            placeholder="Name"
+                          />
+                          <input
+                            type="email"
+                            value={editEmail}
+                            onChange={(e) => setEditEmail(e.target.value)}
+                            className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                            placeholder="Email"
+                          />
+                          <input
+                            type="tel"
+                            value={editPhone}
+                            onChange={(e) => setEditPhone(formatPhone(e.target.value))}
+                            className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                            placeholder="Phone"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                          <input
+                            type="text"
+                            value={editAddress}
+                            onChange={(e) => setEditAddress(e.target.value)}
+                            placeholder="Street"
+                            className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                          />
                           <input
                             type="text"
                             value={editCity}
                             onChange={(e) => setEditCity(e.target.value)}
                             placeholder="City"
-                            className="w-1/2 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                            className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
                           />
                           <input
                             type="text"
                             value={editProvince}
                             onChange={(e) => setEditProvince(e.target.value)}
                             placeholder="Prov"
-                            className="w-1/4 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                            className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
                           />
                           <input
                             type="text"
                             value={editPostalCode}
                             onChange={(e) => setEditPostalCode(e.target.value)}
                             placeholder="Postal"
-                            className="w-1/4 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                            className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
                           />
                         </div>
                       </div>
                     ) : (
-                      (() => {
-                        const parts = [v.address, v.city, v.province, v.postalCode].filter(Boolean);
-                        return parts.length > 0 ? parts.join(", ") : "—";
-                      })()
+                      <div>
+                        <div className="font-medium text-[#EAF0FF]">{v.name}</div>
+                        <div className="text-xs text-[#EAF0FF]/50">
+                          {[
+                            v.contactEmail,
+                            v.contactPhone ? formatPhone(v.contactPhone) : null,
+                            [v.address, v.city, v.province, v.postalCode].filter(Boolean).join(", ") || null,
+                          ]
+                            .filter(Boolean)
+                            .join(" | ") || "No contact info"}
+                        </div>
+                      </div>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        v.active ? "bg-green-500/10 text-green-400" : "bg-white/5 text-[#EAF0FF]/40"
-                      }`}
-                    >
-                      {v.active ? "Active" : "Inactive"}
+                  </div>
+
+                  {/* Status badge */}
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
+                      v.active ? "bg-green-500/10 text-green-400" : "bg-white/5 text-[#EAF0FF]/40"
+                    }`}
+                  >
+                    {v.active ? "Active" : "Inactive"}
+                  </span>
+
+                  {/* Orderer count badge */}
+                  {isAdmin && ordererUserIds.length > 0 && (
+                    <span className="shrink-0 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-400">
+                      {ordererUserIds.length} orderer{ordererUserIds.length !== 1 ? "s" : ""}
                     </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {editingId === v.id ? (
-                        <>
-                          <button
-                            onClick={() => handleSaveEdit(v.id)}
-                            disabled={updateMut.isPending}
-                            className="text-xs text-[#E9B44C] hover:text-[#C8922E]"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingId(null)}
-                            className="text-xs text-[#EAF0FF]/40 hover:text-[#EAF0FF]"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {editingId === v.id ? (
+                      <>
+                        <button
+                          onClick={() => handleSaveEdit(v.id)}
+                          disabled={updateMut.isPending}
+                          className="text-xs text-[#E9B44C] hover:text-[#C8922E]"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="text-xs text-[#EAF0FF]/40 hover:text-[#EAF0FF]"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
                         <button
                           onClick={() => startEdit(v)}
                           className="text-xs text-[#EAF0FF]/60 hover:text-[#EAF0FF]"
                         >
                           Edit
                         </button>
-                      )}
-                      <button
-                        onClick={() => handleToggleActive(v.id, v.active)}
-                        disabled={updateMut.isPending || deleteMut.isPending}
-                        className={`text-xs ${
-                          v.active ? "text-red-400/60 hover:text-red-400" : "text-green-400/60 hover:text-green-400"
-                        }`}
-                      >
-                        {v.active ? "Deactivate" : "Reactivate"}
-                      </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => setOrdererVendorId(isExpanded ? null : v.id)}
+                            className="text-xs text-[#EAF0FF]/60 hover:text-[#E9B44C]"
+                          >
+                            Orderers
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleToggleActive(v.id, v.active)}
+                          disabled={updateMut.isPending || deleteMut.isPending}
+                          className={`text-xs ${
+                            v.active ? "text-red-400/60 hover:text-red-400" : "text-green-400/60 hover:text-green-400"
+                          }`}
+                        >
+                          {v.active ? "Deactivate" : "Reactivate"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Orderer assignment panel */}
+                {isAdmin && isExpanded && (
+                  <div className="border-t border-white/5 px-4 py-3">
+                    <div className="mb-2 text-xs font-medium text-[#EAF0FF]/60">
+                      Assigned Orderers — receive reorder alerts for this vendor
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+                    {/* Current orderer chips */}
+                    <div className="mb-2 flex flex-wrap gap-1.5">
+                      {ordererUserIds.length === 0 && (
+                        <span className="text-xs text-[#EAF0FF]/30">
+                          No orderers assigned (alerts go to admins only)
+                        </span>
+                      )}
+                      {ordererUserIds.map((uid: string) => {
+                        const u = userMap.get(uid);
+                        if (!u) return null;
+                        return (
+                          <span
+                            key={uid}
+                            className="inline-flex items-center gap-1 rounded-full bg-[#E9B44C]/15 px-2.5 py-0.5 text-xs text-[#E9B44C]"
+                          >
+                            {userName(u)}
+                            <button
+                              onClick={() => handleRemoveOrderer(v.id, uid)}
+                              disabled={removeOrdererMut.isPending}
+                              className="ml-0.5 text-[#E9B44C]/60 hover:text-red-400"
+                            >
+                              x
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {/* Add orderer dropdown */}
+                    {businessUsers && (() => {
+                      const available = businessUsers.filter(
+                        (u) => !ordererUserIds.includes(u.id)
+                      );
+                      if (available.length === 0) return null;
+                      return (
+                        <select
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              handleAssignOrderer(v.id, e.target.value);
+                              e.target.value = "";
+                            }
+                          }}
+                          defaultValue=""
+                          className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-xs text-[#EAF0FF]"
+                        >
+                          <option value="" disabled>
+                            Add orderer...
+                          </option>
+                          {available.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {userName(u)} ({u.role})
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })()}
+
+                    {(assignOrdererMut.error || removeOrdererMut.error) && (
+                      <p className="mt-1 text-xs text-red-400">
+                        {(assignOrdererMut.error || removeOrdererMut.error)?.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

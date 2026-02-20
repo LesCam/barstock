@@ -1,6 +1,7 @@
 import { router, protectedProcedure, requireBusinessAccess, requireRole } from "../trpc";
-import { vendorCreateSchema, vendorListSchema, vendorGetByIdSchema, vendorUpdateSchema } from "@barstock/validators";
+import { vendorCreateSchema, vendorListSchema, vendorGetByIdSchema, vendorUpdateSchema, vendorOrdererSchema } from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
+import { z } from "zod";
 
 export const vendorsRouter = router({
   create: protectedProcedure
@@ -31,6 +32,9 @@ export const vendorsRouter = router({
           businessId: input.businessId,
           ...(input.activeOnly ? { active: true } : {}),
         },
+        include: {
+          vendorOrderers: { select: { userId: true } },
+        },
         orderBy: { name: "asc" },
       })
     ),
@@ -40,7 +44,10 @@ export const vendorsRouter = router({
     .query(({ ctx, input }) =>
       ctx.prisma.vendor.findUniqueOrThrow({
         where: { id: input.id },
-        include: { _count: { select: { itemVendors: true } } },
+        include: {
+          _count: { select: { itemVendors: true } },
+          vendorOrderers: { select: { userId: true } },
+        },
       })
     ),
 
@@ -81,4 +88,81 @@ export const vendorsRouter = router({
       });
       return vendor;
     }),
+
+  assignOrderer: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(vendorOrdererSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.prisma.vendorOrderer.upsert({
+        where: {
+          vendorId_userId: {
+            vendorId: input.vendorId,
+            userId: input.userId,
+          },
+        },
+        create: {
+          vendorId: input.vendorId,
+          userId: input.userId,
+        },
+        update: {},
+      });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "vendor.orderer_assigned",
+        objectType: "vendor",
+        objectId: input.vendorId,
+        metadata: { assignedUserId: input.userId },
+      });
+
+      return result;
+    }),
+
+  removeOrderer: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(vendorOrdererSchema)
+    .mutation(async ({ ctx, input }) => {
+      await ctx.prisma.vendorOrderer.delete({
+        where: {
+          vendorId_userId: {
+            vendorId: input.vendorId,
+            userId: input.userId,
+          },
+        },
+      });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "vendor.orderer_removed",
+        objectType: "vendor",
+        objectId: input.vendorId,
+        metadata: { removedUserId: input.userId },
+      });
+
+      return { success: true };
+    }),
+
+  listOrderers: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ vendorId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      ctx.prisma.vendorOrderer.findMany({
+        where: { vendorId: input.vendorId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              role: true,
+            },
+          },
+        },
+      })
+    ),
 });

@@ -271,6 +271,7 @@ model User {
   sessionParticipations   SessionParticipant[]
   countedSessionLines     InventorySessionLine[] @relation("LineCountedBy")
   createdPurchaseOrders   PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
+  vendorOrderers          VendorOrderer[]
 
   @@map("users")
 }
@@ -814,11 +815,12 @@ model Vendor {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
-  business       Business        @relation(fields: [businessId], references: [id])
-  inventoryItems InventoryItem[]
-  itemVendors    ItemVendor[]
-  parLevels      ParLevel[]
-  purchaseOrders PurchaseOrder[]
+  business        Business         @relation(fields: [businessId], references: [id])
+  inventoryItems  InventoryItem[]
+  itemVendors     ItemVendor[]
+  parLevels       ParLevel[]
+  purchaseOrders  PurchaseOrder[]
+  vendorOrderers  VendorOrderer[]
 
   @@index([businessId], map: "ix_vendors_business")
   @@map("vendors")
@@ -836,6 +838,18 @@ model ItemVendor {
 
   @@id([inventoryItemId, vendorId])
   @@map("item_vendors")
+}
+
+model VendorOrderer {
+  vendorId  String   @map("vendor_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([vendorId, userId])
+  @@map("vendor_orderers")
 }
 
 // ─── Par Levels ────────────────────────────────────────────

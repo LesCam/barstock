@@ -4,7 +4,9 @@ import { InventoryService } from "./inventory.service";
 import { NotificationService } from "./notification.service";
 import { SettingsService } from "./settings.service";
 import { ParLevelService } from "./par-level.service";
+import { deriveDefaultPermissions } from "./auth.service";
 import { Prisma } from "@prisma/client";
+import type { Role } from "@barstock/types";
 
 export interface AlertResult {
   title: string;
@@ -85,11 +87,22 @@ export class AlertService {
 
     let sent = 0;
     for (const alert of alerts) {
-      for (const admin of admins) {
+      // For par reorder alerts, also notify orderers
+      const recipientIds = new Set(admins.map((a) => a.id));
+
+      if (alert.metadata.rule === "parReorderAlert" && alert.metadata.locationId) {
+        const locationId = alert.metadata.locationId as string;
+        const ordererIds = await this.getOrdererRecipients(businessId, locationId);
+        for (const id of ordererIds) {
+          recipientIds.add(id);
+        }
+      }
+
+      for (const recipientId of recipientIds) {
         // Dedup: skip if identical notification sent in last 24h
         const recent = await this.prisma.notification.findFirst({
           where: {
-            recipientUserId: admin.id,
+            recipientUserId: recipientId,
             title: alert.title,
             createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
           },
@@ -98,7 +111,7 @@ export class AlertService {
 
         await notifSvc.send({
           businessId,
-          recipientUserId: admin.id,
+          recipientUserId: recipientId,
           title: alert.title,
           body: alert.body,
           linkUrl: alert.linkUrl,
@@ -109,6 +122,50 @@ export class AlertService {
     }
 
     return sent;
+  }
+
+  /**
+   * Find users who should receive par reorder alerts for a location:
+   * 1. Users assigned as vendor orderers for vendors at this location
+   * 2. If no vendor orderers exist, fall back to users with canOrder permission
+   */
+  private async getOrdererRecipients(businessId: string, locationId: string): Promise<string[]> {
+    // Find vendor orderers for vendors that have items at this location
+    const vendorOrderers = await this.prisma.vendorOrderer.findMany({
+      where: {
+        vendor: {
+          businessId,
+          active: true,
+        },
+        user: { isActive: true },
+      },
+      select: { userId: true },
+    });
+
+    if (vendorOrderers.length > 0) {
+      return vendorOrderers.map((vo) => vo.userId);
+    }
+
+    // Fallback: users with canOrder permission at this location
+    const usersAtLocation = await this.prisma.userLocation.findMany({
+      where: {
+        locationId,
+        user: { businessId, isActive: true },
+      },
+      include: { user: { select: { id: true, role: true } } },
+    });
+
+    const ordererIds: string[] = [];
+    for (const ul of usersAtLocation) {
+      const defaults = deriveDefaultPermissions(ul.role as Role);
+      const stored = (ul.permissions as Record<string, boolean>) ?? {};
+      const merged = { ...defaults, ...stored };
+      if (merged.canOrder) {
+        ordererIds.push(ul.user.id);
+      }
+    }
+
+    return ordererIds;
   }
 
   async notifyAdmins(

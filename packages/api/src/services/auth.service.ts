@@ -61,6 +61,7 @@ export function deriveDefaultPermissions(role: Role): Record<string, boolean> {
     canAccessInventory:   role !== "curator" && role !== "accounting",
     canAccessScale:       role !== "curator" && role !== "accounting",
     canManageTareWeights: level >= ROLE_HIERARCHY["manager"],
+    canOrder:             level >= ROLE_HIERARCHY["manager"],
     canAccessArt:         true,
     canAccessGuide:       true,
   };
