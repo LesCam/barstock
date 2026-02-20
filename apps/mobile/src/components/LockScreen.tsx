@@ -139,13 +139,19 @@ export default function LockScreen() {
         .then(() => {
           unlock();
         })
-        .catch(() => {
-          setError("Incorrect PIN");
-          shake();
-          setTimeout(() => {
-            setPin("");
+        .catch((err: any) => {
+          const msg = err?.message ?? "";
+          if (msg.includes("UNAUTHORIZED") || msg.includes("token") || msg.includes("jwt")) {
+            setError("Session expired — please restart the app");
             setSubmitting(false);
-          }, 600);
+          } else {
+            setError("Incorrect PIN");
+            shake();
+            setTimeout(() => {
+              setPin("");
+              setSubmitting(false);
+            }, 600);
+          }
         });
     }
   }, [pin]);

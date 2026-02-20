@@ -50,6 +50,18 @@ function RootNavigator() {
         options={{ title: "Session", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="session/[id]/packaged"
+        options={{ title: "Packaged Count", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
+        name="session/[id]/liquor"
+        options={{ title: "Liquor Weigh", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
+        name="session/[id]/draft"
+        options={{ title: "Draft Verify", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
         name="session/[id]/connect-scale"
         options={{ title: "Connect Scale", headerBackTitle: "Back" }}
       />

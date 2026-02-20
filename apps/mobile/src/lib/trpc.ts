@@ -36,8 +36,16 @@ async function doRefresh(): Promise<string> {
     body: JSON.stringify({ json: { refreshToken } }),
   });
   if (!res.ok) throw new Error("Refresh failed");
-  const data = await res.json();
-  const newToken = data?.result?.data?.json?.accessToken;
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("Refresh returned invalid JSON");
+  }
+  // Handle both batch ([{result:...}]) and single ({result:...}) response formats
+  const result = Array.isArray(data) ? data[0] : data;
+  const newToken = result?.result?.data?.json?.accessToken;
   if (!newToken) throw new Error("No access token in refresh response");
   return newToken;
 }
@@ -57,8 +65,8 @@ const refreshLink: TRPCLink<AppRouter> = () => {
             err instanceof TRPCClientError &&
             err.data?.code === "UNAUTHORIZED" &&
             refreshToken &&
-            // Don't retry refresh/login calls
-            !op.path.startsWith("auth.")
+            // Don't retry refresh/login calls (but DO retry auth.verifyPin for lock screen)
+            (!op.path.startsWith("auth.") || op.path === "auth.verifyPin")
           ) {
             // Deduplicate concurrent refreshes
             if (!refreshPromise) {

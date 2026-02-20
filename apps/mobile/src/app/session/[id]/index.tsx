@@ -683,14 +683,18 @@ export default function SessionDetailScreen() {
                           {line.inventoryItem?.category?.name ?? ""}
                           {line.subArea ? ` | ${line.subArea.name}` : ""}
                         </Text>
-                        {submitMode && variance && variance.theoretical !== 0 && (
+                        {submitMode && variance && (
                           <Text style={[
                             styles.varianceText,
-                            Math.abs(variance.variancePercent) < 5 && styles.varianceGreen,
-                            Math.abs(variance.variancePercent) >= 5 && Math.abs(variance.variancePercent) < 15 && styles.varianceOrange,
-                            Math.abs(variance.variancePercent) >= 15 && styles.varianceRed,
+                            variance.theoretical === 0
+                              ? styles.varianceGreen
+                              : Math.abs(variance.variancePercent) < 5 ? styles.varianceGreen
+                              : Math.abs(variance.variancePercent) < 15 ? styles.varianceOrange
+                              : styles.varianceRed,
                           ]}>
-                            Expected: {Math.round(variance.theoretical * 10) / 10} → Counted: {Math.round(variance.countedValue * 10) / 10} ({variance.variance > 0 ? "+" : ""}{Math.round(variance.variance * 10) / 10})
+                            {variance.theoretical === 0
+                              ? `Counted: ${Math.round(variance.countedValue * 10) / 10} (first count)`
+                              : `Expected: ${Math.round(variance.theoretical * 10) / 10} → Counted: ${Math.round(variance.countedValue * 10) / 10} (${variance.variance > 0 ? "+" : ""}${Math.round(variance.variance * 10) / 10})`}
                           </Text>
                         )}
                       </View>
@@ -746,19 +750,23 @@ export default function SessionDetailScreen() {
           </ScrollView>
 
           {/* Submit mode footer */}
-          {submitMode && previewData && (
+          {submitMode && (
             <View style={styles.submitFooter}>
-              <Text style={styles.submitSummary}>
-                {previewData.totalItems} item{previewData.totalItems !== 1 ? "s" : ""} counted · {previewData.itemsWithVariance} with variance
-              </Text>
+              {previewData ? (
+                <Text style={styles.submitSummary}>
+                  {previewData.totalItems} item{previewData.totalItems !== 1 ? "s" : ""} counted · {previewData.itemsWithVariance} with variance
+                </Text>
+              ) : (
+                <Text style={styles.submitSummary}>Loading variance summary...</Text>
+              )}
               <TouchableOpacity
-                style={[styles.submitCloseBtn, closeMutation.isPending && styles.submitCloseBtnDisabled]}
+                style={[styles.submitCloseBtn, (closeMutation.isPending || previewLoading) && styles.submitCloseBtnDisabled]}
                 onPress={() => {
                   setShowReview(false);
                   setSubmitMode(false);
                   handleCloseSession();
                 }}
-                disabled={closeMutation.isPending}
+                disabled={closeMutation.isPending || previewLoading}
               >
                 <Text style={styles.submitCloseBtnText}>
                   {closeMutation.isPending ? "Closing..." : "Submit & Close Session"}
