@@ -249,6 +249,8 @@ model User {
   notifications         Notification[]
   passwordResetTokens   PasswordResetToken[]
   scaleProfileConnections ScaleProfile[]
+  sessionParticipations   SessionParticipant[]
+  countedSessionLines     InventorySessionLine[] @relation("LineCountedBy")
 
   @@map("users")
 }
@@ -541,6 +543,7 @@ model InventorySession {
   createdByUser      User?                  @relation("SessionCreatedBy", fields: [createdBy], references: [id])
   closedByUser       User?                  @relation("SessionClosedBy", fields: [closedBy], references: [id])
   lines              InventorySessionLine[]
+  participants       SessionParticipant[]
   bottleMeasurements BottleMeasurement[]
 
   @@map("inventory_sessions")
@@ -562,6 +565,7 @@ model InventorySessionLine {
   bottleTemplateId String?  @map("bottle_template_id") @db.Uuid
   confidenceLevel  String?  @map("confidence_level")
   subAreaId        String?  @map("sub_area_id") @db.Uuid
+  countedBy        String?  @map("counted_by") @db.Uuid
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   session       InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -570,9 +574,25 @@ model InventorySessionLine {
   kegInstance   KegInstance?     @relation(fields: [kegInstanceId], references: [id])
   bottleTemplate BottleTemplate? @relation(fields: [bottleTemplateId], references: [id])
   subArea       SubArea?         @relation(fields: [subAreaId], references: [id])
+  countedByUser User?            @relation("LineCountedBy", fields: [countedBy], references: [id])
 
   @@index([sessionId], map: "ix_session_lines_session")
   @@map("inventory_session_lines")
+}
+
+model SessionParticipant {
+  sessionId        String   @map("session_id") @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  joinedAt         DateTime @default(now()) @map("joined_at") @db.Timestamptz()
+  lastActiveAt     DateTime @default(now()) @map("last_active_at") @db.Timestamptz()
+  currentSubAreaId String?  @map("current_sub_area_id") @db.Uuid
+
+  session  InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user     User             @relation(fields: [userId], references: [id])
+  subArea  SubArea?         @relation(fields: [currentSubAreaId], references: [id])
+
+  @@id([sessionId, userId])
+  @@map("session_participants")
 }
 
 // ─── Scale / Bottle ──────────────────────────────────────────
@@ -670,6 +690,7 @@ model SubArea {
   barArea            BarArea                @relation(fields: [barAreaId], references: [id], onDelete: Cascade)
   sessionLines       InventorySessionLine[]
   bottleMeasurements BottleMeasurement[]
+  activeParticipants SessionParticipant[]
 
   @@index([barAreaId], map: "ix_sub_areas_bar_area")
   @@map("sub_areas")

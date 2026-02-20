@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -33,7 +33,7 @@ interface UncountedItem {
 
 export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { selectedLocationId } = useAuth();
+  const { selectedLocationId, user: authUser } = useAuth();
   const utils = trpc.useUtils();
 
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -58,6 +58,61 @@ export default function SessionDetailScreen() {
     { id: id! },
     { refetchOnMount: "always" }
   );
+
+  // --- Multi-user participant support ---
+  const joinMutation = trpc.sessions.join.useMutation();
+  const heartbeatMutation = trpc.sessions.heartbeat.useMutation();
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auto-join when session loads and is open
+  useEffect(() => {
+    if (session && !session.endedTs) {
+      joinMutation.mutate({ sessionId: session.id });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, session?.endedTs]);
+
+  // Heartbeat: fires every 30s and immediately on sub-area change
+  const sendHeartbeat = useCallback(() => {
+    if (!session || session.endedTs) return;
+    heartbeatMutation.mutate({
+      sessionId: session.id,
+      currentSubAreaId: selectedSubAreaId ?? undefined,
+    });
+  }, [session?.id, session?.endedTs, selectedSubAreaId]);
+
+  useEffect(() => {
+    if (!session || session.endedTs) return;
+    // Fire immediately on sub-area change
+    sendHeartbeat();
+    // Set up 30s interval
+    heartbeatRef.current = setInterval(sendHeartbeat, 30_000);
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
+  }, [sendHeartbeat]);
+
+  // Poll participants every 15s
+  const { data: participants } = trpc.sessions.listParticipants.useQuery(
+    { sessionId: id! },
+    {
+      enabled: !!session && !session.endedTs,
+      refetchInterval: 15_000,
+    }
+  );
+
+  // Count participants per sub-area (excluding current user)
+  const subAreaParticipantCounts = useMemo(() => {
+    if (!participants || !authUser) return new Map<string, number>();
+    const counts = new Map<string, number>();
+    for (const p of participants) {
+      if (p.userId === authUser.userId) continue; // skip self
+      if (p.subArea?.id) {
+        counts.set(p.subArea.id, (counts.get(p.subArea.id) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [participants, authUser]);
 
   const { data: areas } = trpc.areas.listBarAreas.useQuery(
     { locationId: selectedLocationId! },
@@ -388,6 +443,44 @@ export default function SessionDetailScreen() {
         {lineCount > 0 ? ` — ${lineCount} item${lineCount !== 1 ? "s" : ""}` : ""}
       </Text>
 
+      {/* Participant Chips */}
+      {isOpen && participants && participants.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.participantRow}
+        >
+          {participants.map((p) => {
+            const isYou = p.userId === authUser?.userId;
+            const idleMs = Date.now() - new Date(p.lastActiveAt).getTime();
+            const isIdle = idleMs > 2 * 60 * 1000; // 2 minutes
+            const displayName = p.user.firstName
+              ? p.user.firstName
+              : p.user.email.split("@")[0];
+            return (
+              <View
+                key={p.userId}
+                style={[styles.participantChip, isIdle && styles.participantChipIdle]}
+              >
+                <View style={styles.participantAvatar}>
+                  <Text style={styles.participantAvatarText}>
+                    {displayName.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View>
+                  <Text style={styles.participantName}>
+                    {displayName}{isYou ? " (you)" : ""}
+                  </Text>
+                  <Text style={styles.participantArea}>
+                    {isIdle ? "idle" : p.subArea?.name ?? "—"}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
+
       <ScrollView style={styles.mainScroll} showsVerticalScrollIndicator={false}>
         {/* Area Picker */}
         {isOpen && areas && areas.length > 0 && (
@@ -435,25 +528,33 @@ export default function SessionDetailScreen() {
                 showsHorizontalScrollIndicator={false}
                 style={styles.subAreaPills}
               >
-                {selectedArea.subAreas.map((sa: { id: string; name: string }) => (
-                  <TouchableOpacity
-                    key={sa.id}
-                    style={[
-                      styles.subAreaPill,
-                      selectedSubAreaId === sa.id && styles.subAreaPillActive,
-                    ]}
-                    onPress={() => setSelectedSubAreaId(sa.id)}
-                  >
-                    <Text
+                {selectedArea.subAreas.map((sa: { id: string; name: string }) => {
+                  const othersHere = subAreaParticipantCounts.get(sa.id) ?? 0;
+                  return (
+                    <TouchableOpacity
+                      key={sa.id}
                       style={[
-                        styles.subAreaPillText,
-                        selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
+                        styles.subAreaPill,
+                        selectedSubAreaId === sa.id && styles.subAreaPillActive,
                       ]}
+                      onPress={() => setSelectedSubAreaId(sa.id)}
                     >
-                      {sa.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.subAreaPillText,
+                          selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
+                        ]}
+                      >
+                        {sa.name}
+                      </Text>
+                      {othersHere > 0 && (
+                        <View style={styles.subAreaBadge}>
+                          <Text style={styles.subAreaBadgeText}>{othersHere}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             )}
 
@@ -895,6 +996,50 @@ const styles = StyleSheet.create({
 
   mainScroll: { flex: 1 },
 
+  // Participants
+  participantRow: {
+    flexDirection: "row",
+    marginBottom: 10,
+    maxHeight: 48,
+  },
+  participantChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#16283F",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  participantChipIdle: {
+    opacity: 0.5,
+  },
+  participantAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#2BA8A0",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 6,
+  },
+  participantAvatarText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  participantName: {
+    color: "#EAF0FF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  participantArea: {
+    color: "#5A6A7A",
+    fontSize: 10,
+  },
+
   // Area picker
   areaPicker: { marginBottom: 16 },
   areaPickerHeader: {
@@ -947,6 +1092,21 @@ const styles = StyleSheet.create({
   subAreaPillActive: { borderColor: "#2BA8A0", backgroundColor: "#12293E" },
   subAreaPillText: { color: "#5A6A7A", fontSize: 13, fontWeight: "500" },
   subAreaPillTextActive: { color: "#2BA8A0" },
+  subAreaBadge: {
+    backgroundColor: "#2BA8A0",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 4,
+    paddingHorizontal: 4,
+  },
+  subAreaBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
   areaBanner: {
     backgroundColor: "#1E3550",
     borderRadius: 8,

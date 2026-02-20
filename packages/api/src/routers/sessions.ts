@@ -1,5 +1,5 @@
 import { router, protectedProcedure, checkLocationRole } from "../trpc";
-import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema } from "@barstock/validators";
+import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema, sessionJoinSchema, sessionHeartbeatSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
 import { AuditService } from "../services/audit.service";
 import { AlertService } from "../services/alert.service";
@@ -20,6 +20,11 @@ export const sessionsRouter = router({
 
       const session = await ctx.prisma.inventorySession.create({
         data: { ...input, createdBy: ctx.user.userId },
+      });
+
+      // Auto-join creator as first participant
+      await ctx.prisma.sessionParticipant.create({
+        data: { sessionId: session.id, userId: ctx.user.userId },
       });
 
       const audit = new AuditService(ctx.prisma);
@@ -50,7 +55,12 @@ export const sessionsRouter = router({
         where: {
           locationId: input.locationId,
           ...(input.openOnly && { endedTs: null }),
-          ...(!isManager && { createdBy: ctx.user.userId }),
+          ...(!isManager && {
+            OR: [
+              { createdBy: ctx.user.userId },
+              { participants: { some: { userId: ctx.user.userId } } },
+            ],
+          }),
         },
         ...(input.limit && { take: input.limit }),
         include: {
@@ -78,7 +88,15 @@ export const sessionsRouter = router({
               },
               tapLine: { select: { name: true } },
               subArea: { select: { id: true, name: true, barArea: { select: { id: true, name: true } } } },
+              countedByUser: { select: { email: true, firstName: true } },
             },
+          },
+          participants: {
+            include: {
+              user: { select: { id: true, email: true, firstName: true, lastName: true } },
+              subArea: { select: { id: true, name: true } },
+            },
+            orderBy: { joinedAt: "asc" },
           },
         },
       })
@@ -87,7 +105,9 @@ export const sessionsRouter = router({
   addLine: protectedProcedure
     .input(sessionLineCreateSchema)
     .mutation(({ ctx, input }) =>
-      ctx.prisma.inventorySessionLine.create({ data: input })
+      ctx.prisma.inventorySessionLine.create({
+        data: { ...input, countedBy: ctx.user.userId },
+      })
     ),
 
   updateLine: protectedProcedure
@@ -107,6 +127,68 @@ export const sessionsRouter = router({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       ctx.prisma.inventorySessionLine.delete({ where: { id: input.id } })
+    ),
+
+  join: protectedProcedure
+    .input(sessionJoinSchema)
+    .mutation(async ({ ctx, input }) => {
+      // Validate session is open
+      const session = await ctx.prisma.inventorySession.findUniqueOrThrow({
+        where: { id: input.sessionId },
+      });
+      if (session.endedTs) throw new Error("Cannot join a closed session");
+
+      return ctx.prisma.sessionParticipant.upsert({
+        where: {
+          sessionId_userId: {
+            sessionId: input.sessionId,
+            userId: ctx.user.userId,
+          },
+        },
+        update: { lastActiveAt: new Date() },
+        create: { sessionId: input.sessionId, userId: ctx.user.userId },
+      });
+    }),
+
+  heartbeat: protectedProcedure
+    .input(sessionHeartbeatSchema)
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await ctx.prisma.sessionParticipant.update({
+          where: {
+            sessionId_userId: {
+              sessionId: input.sessionId,
+              userId: ctx.user.userId,
+            },
+          },
+          data: {
+            lastActiveAt: new Date(),
+            currentSubAreaId: input.currentSubAreaId ?? null,
+          },
+        });
+      } catch {
+        // Re-join silently if participant row was removed
+        return ctx.prisma.sessionParticipant.create({
+          data: {
+            sessionId: input.sessionId,
+            userId: ctx.user.userId,
+            currentSubAreaId: input.currentSubAreaId ?? null,
+          },
+        });
+      }
+    }),
+
+  listParticipants: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      ctx.prisma.sessionParticipant.findMany({
+        where: { sessionId: input.sessionId },
+        include: {
+          user: { select: { id: true, email: true, firstName: true, lastName: true } },
+          subArea: { select: { id: true, name: true } },
+        },
+        orderBy: { joinedAt: "asc" },
+      })
     ),
 
   close: protectedProcedure

@@ -18,6 +18,16 @@ export const sessionLineCreateSchema = z.object({
   isManual: z.boolean().default(false),
   notes: z.string().optional(),
   subAreaId: z.string().uuid().optional(),
+  countedBy: z.string().uuid().optional(),
+});
+
+export const sessionJoinSchema = z.object({
+  sessionId: z.string().uuid(),
+});
+
+export const sessionHeartbeatSchema = z.object({
+  sessionId: z.string().uuid(),
+  currentSubAreaId: z.string().uuid().nullish(),
 });
 
 export const sessionCloseSchema = z.object({
@@ -48,3 +58,5 @@ export type SessionLineCreateInput = z.infer<typeof sessionLineCreateSchema>;
 export type SessionCloseInput = z.infer<typeof sessionCloseSchema>;
 export type ExpectedItemsForAreaInput = z.infer<typeof expectedItemsForAreaSchema>;
 export type ItemCountHintsInput = z.infer<typeof itemCountHintsSchema>;
+export type SessionJoinInput = z.infer<typeof sessionJoinSchema>;
+export type SessionHeartbeatInput = z.infer<typeof sessionHeartbeatSchema>;

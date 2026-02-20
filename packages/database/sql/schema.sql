@@ -599,3 +599,14 @@ CREATE TABLE IF NOT EXISTS vendors (
 CREATE INDEX IF NOT EXISTS ix_vendors_business ON vendors(business_id);
 
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS vendor_id UUID REFERENCES vendors(id);
+
+-- v1.14 PATCH: MULTI-USER SESSION PARTICIPANTS + COUNTED_BY
+CREATE TABLE IF NOT EXISTS session_participants (
+  session_id          UUID NOT NULL REFERENCES inventory_sessions(id) ON DELETE CASCADE,
+  user_id             UUID NOT NULL REFERENCES users(id),
+  joined_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_active_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  current_sub_area_id UUID REFERENCES sub_areas(id),
+  PRIMARY KEY (session_id, user_id)
+);
+ALTER TABLE inventory_session_lines ADD COLUMN IF NOT EXISTS counted_by UUID REFERENCES users(id);

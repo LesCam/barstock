@@ -88,6 +88,13 @@ export default function SessionDetailPage({
 
   // --- Data fetching ---
   const { data: session, isLoading } = trpc.sessions.getById.useQuery({ id });
+
+  // Poll participants every 15s for open sessions
+  const { data: participants } = trpc.sessions.listParticipants.useQuery(
+    { sessionId: id },
+    { refetchInterval: 15_000 }
+  );
+
   const { data: inventoryItems } = trpc.inventory.list.useQuery(
     { locationId: locationId! },
     { enabled: !!locationId }
@@ -228,6 +235,45 @@ export default function SessionDetailPage({
         </div>
       </div>
 
+      {/* Participants (open sessions) */}
+      {isOpen && participants && participants.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/40">
+            Active:
+          </span>
+          {participants.map((p) => {
+            const idleMs = Date.now() - new Date(p.lastActiveAt).getTime();
+            const isIdle = idleMs > 2 * 60 * 1000;
+            const displayName = p.user.firstName
+              ? `${p.user.firstName}${p.user.lastName ? ` ${p.user.lastName.charAt(0)}.` : ""}`
+              : p.user.email.split("@")[0];
+            return (
+              <span
+                key={p.userId}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
+                  isIdle
+                    ? "border-white/5 text-[#EAF0FF]/30"
+                    : "border-[#2BA8A0]/30 text-[#EAF0FF]"
+                }`}
+              >
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    isIdle ? "bg-[#5A6A7A]" : "bg-[#2BA8A0]"
+                  }`}
+                />
+                {displayName}
+                {p.subArea && !isIdle && (
+                  <span className="text-[#EAF0FF]/40">
+                    — {p.subArea.name}
+                  </span>
+                )}
+                {isIdle && <span className="text-[#EAF0FF]/20">idle</span>}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       {/* Close result banner */}
       {closeResult && (
         <div className="mb-4 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-300">
@@ -247,13 +293,14 @@ export default function SessionDetailPage({
               <th className="px-4 py-3">Weight (g)</th>
               <th className="px-4 py-3">% Remaining</th>
               <th className="px-4 py-3">Area</th>
+              <th className="px-4 py-3">Counted By</th>
               <th className="px-4 py-3">Notes</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5 text-[#EAF0FF]">
             {session.lines.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                <td colSpan={8} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                   No items counted yet.
                 </td>
               </tr>
@@ -302,6 +349,11 @@ export default function SessionDetailPage({
                   <td className="px-4 py-3 text-xs">
                     {line.subArea
                       ? `${line.subArea.barArea.name} / ${line.subArea.name}`
+                      : "\u2014"}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {line.countedByUser
+                      ? line.countedByUser.firstName ?? line.countedByUser.email.split("@")[0]
                       : "\u2014"}
                   </td>
                   <td className="px-4 py-3 text-xs">
