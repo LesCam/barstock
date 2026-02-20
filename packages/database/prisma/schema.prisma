@@ -67,6 +67,21 @@ enum KegStatusT {
   @@map("keg_status_t")
 }
 
+enum ParUomT {
+  unit
+  package
+
+  @@map("par_uom_t")
+}
+
+enum PurchaseOrderStatusT {
+  open
+  partially_fulfilled
+  closed
+
+  @@map("purchase_order_status_t")
+}
+
 enum EventTypeT {
   pos_sale
   tap_flow
@@ -222,6 +237,8 @@ model Location {
   guideItems       ProductGuideItem[]
   scaleProfiles    ScaleProfile[]
   recipes          Recipe[]
+  parLevels        ParLevel[]
+  purchaseOrders   PurchaseOrder[]
 
   @@map("locations")
 }
@@ -253,6 +270,7 @@ model User {
   scaleProfileConnections ScaleProfile[]
   sessionParticipations   SessionParticipant[]
   countedSessionLines     InventorySessionLine[] @relation("LineCountedBy")
+  createdPurchaseOrders   PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
 
   @@map("users")
 }
@@ -321,6 +339,8 @@ model InventoryItem {
   bottleMeasurements BottleMeasurement[]
   guideItems         ProductGuideItem[]
   recipeIngredients  RecipeIngredient[]
+  parLevels          ParLevel[]
+  purchaseOrderLines PurchaseOrderLine[]
 
   @@index([locationId], map: "ix_inventory_items_location")
   @@map("inventory_items")
@@ -792,9 +812,78 @@ model Vendor {
 
   business       Business        @relation(fields: [businessId], references: [id])
   inventoryItems InventoryItem[]
+  parLevels      ParLevel[]
+  purchaseOrders PurchaseOrder[]
 
   @@index([businessId], map: "ix_vendors_business")
   @@map("vendors")
+}
+
+// ─── Par Levels ────────────────────────────────────────────
+
+model ParLevel {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  vendorId        String   @map("vendor_id") @db.Uuid
+  locationId      String   @map("location_id") @db.Uuid
+  parLevel        Decimal  @map("par_level")
+  minLevel        Decimal  @map("min_level")
+  reorderQty      Decimal? @map("reorder_qty")
+  parUom          ParUomT  @default(unit) @map("par_uom")
+  leadTimeDays    Int      @default(1) @map("lead_time_days")
+  safetyStockDays Int      @default(0) @map("safety_stock_days")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  vendor        Vendor        @relation(fields: [vendorId], references: [id])
+  location      Location      @relation(fields: [locationId], references: [id])
+
+  @@unique([inventoryItemId, vendorId, locationId], map: "ux_par_level_item_vendor_location")
+  @@index([locationId], map: "ix_par_levels_location")
+  @@index([vendorId, locationId], map: "ix_par_levels_vendor_location")
+  @@map("par_levels")
+}
+
+// ─── Purchase Orders ──────────────────────────────────────
+
+model PurchaseOrder {
+  id         String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String                @map("location_id") @db.Uuid
+  vendorId   String                @map("vendor_id") @db.Uuid
+  status     PurchaseOrderStatusT  @default(open)
+  createdBy  String                @map("created_by") @db.Uuid
+  notes      String?
+  createdAt  DateTime              @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime              @updatedAt @map("updated_at") @db.Timestamptz()
+  closedAt   DateTime?             @map("closed_at") @db.Timestamptz()
+
+  location Location            @relation(fields: [locationId], references: [id])
+  vendor   Vendor              @relation(fields: [vendorId], references: [id])
+  creator  User                @relation("PurchaseOrderCreatedBy", fields: [createdBy], references: [id])
+  lines    PurchaseOrderLine[]
+
+  @@index([locationId, status], map: "ix_purchase_orders_location_status")
+  @@index([vendorId], map: "ix_purchase_orders_vendor")
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  orderedQty      Decimal  @map("ordered_qty")
+  pickedUpQty     Decimal  @default(0) @map("picked_up_qty")
+  orderedUom      ParUomT  @default(unit) @map("ordered_uom")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([purchaseOrderId, inventoryItemId], map: "ux_po_line_item")
+  @@map("purchase_order_lines")
 }
 
 // ─── Platform Infrastructure ────────────────────────────────

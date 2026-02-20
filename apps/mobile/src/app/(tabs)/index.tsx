@@ -168,6 +168,13 @@ export default function SessionsTab() {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity
+        style={styles.shoppingListButton}
+        onPress={() => router.push("/shopping-list")}
+      >
+        <Text style={styles.shoppingListButtonText}>Shopping List</Text>
+      </TouchableOpacity>
+
       {/* Open Sessions */}
       {openSessions.length > 0 && (
         <View style={styles.openSection}>
@@ -280,6 +287,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#42A5F5",
   },
   transferButtonText: { color: "#42A5F5", fontSize: 14, fontWeight: "700" },
+  shoppingListButton: {
+    backgroundColor: "#16283F", borderRadius: 8,
+    padding: 14, alignItems: "center",
+    borderWidth: 1, borderColor: "#E9B44C",
+    marginBottom: 16,
+  },
+  shoppingListButtonText: { color: "#E9B44C", fontSize: 14, fontWeight: "700" },
 
   // Open sessions
   openSection: { marginBottom: 16 },

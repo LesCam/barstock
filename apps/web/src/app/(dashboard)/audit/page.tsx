@@ -45,6 +45,13 @@ const ACTION_LABELS: Record<string, string> = {
   "artist.updated":                "Artist Updated",
   "artist.deactivated":            "Artist Deactivated",
   "art_sale.recorded":             "Art Sale Recorded",
+  "par_level.created":             "Par Level Created",
+  "par_level.updated":             "Par Level Updated",
+  "par_level.bulk_upserted":       "Par Levels Bulk Updated",
+  "par_level.deleted":             "Par Level Deleted",
+  "purchase_order.created":        "Purchase Order Created",
+  "purchase_order.pickup_recorded":"Pickup Recorded",
+  "purchase_order.closed":         "Purchase Order Closed",
 };
 
 const OBJECT_TYPE_LABELS: Record<string, string> = {
@@ -64,6 +71,8 @@ const OBJECT_TYPE_LABELS: Record<string, string> = {
   artist:                  "Artist",
   artwork:                 "Artwork",
   art_sale:                "Art Sale",
+  par_level:               "Par Level",
+  purchase_order:          "Purchase Order",
 };
 
 function getBadgeColor(actionType: string): string {
@@ -79,6 +88,7 @@ function getBadgeColor(actionType: string): string {
     actionType.startsWith("price.")
   )
     return "bg-blue-500/15 text-blue-400";
+  if (actionType.startsWith("par_level.") || actionType.startsWith("purchase_order.")) return "bg-teal-500/15 text-teal-400";
   if (actionType.startsWith("recipe."))   return "bg-[#E9B44C]/15 text-[#E9B44C]";
   if (actionType.startsWith("settings.")) return "bg-purple-500/15 text-purple-400";
   if (actionType.startsWith("user."))     return "bg-cyan-500/15 text-cyan-400";
@@ -148,6 +158,18 @@ function formatMetadataSummary(actionType: string, meta: any): string {
       return meta.salePrice != null
         ? `$${Number(meta.salePrice).toFixed(2)}${meta.commission != null ? ` (commission: $${Number(meta.commission).toFixed(2)})` : ""}`
         : "";
+    case "par_level.created":
+    case "par_level.updated":
+    case "par_level.deleted":
+      return meta.parLevel != null ? `Par: ${meta.parLevel}, Min: ${meta.minLevel}` : "";
+    case "par_level.bulk_upserted":
+      return meta.itemCount != null ? `${meta.itemCount} item(s) updated` : "";
+    case "purchase_order.created":
+      return meta.lineCount != null ? `${meta.lineCount} line(s)` : "";
+    case "purchase_order.pickup_recorded":
+      return meta.eventsCreated != null ? `${meta.eventsCreated} item(s) received` : "";
+    case "purchase_order.closed":
+      return "Order closed";
     default:
       return JSON.stringify(meta).slice(0, 80);
   }
