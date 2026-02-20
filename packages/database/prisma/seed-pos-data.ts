@@ -27,14 +27,34 @@ function isWeekend(d: Date): boolean {
   return day === 0 || day === 5 || day === 6;
 }
 
+const VARIANCE_REASONS = [
+  "waste_foam",
+  "comp",
+  "staff_drink",
+  "theft",
+  "breakage",
+  "line_cleaning",
+  "transfer",
+  "unknown",
+] as const;
+
+function randomVarianceReason() {
+  return VARIANCE_REASONS[randomInt(0, VARIANCE_REASONS.length - 1)];
+}
+
 async function main() {
   console.log("Seeding POS test data for T's Pub...\n");
 
   // ── Cleanup prior seed data ──────────────────────────────────
   // Delete in reverse dependency order
+  // Temporarily disable immutable-ledger triggers for cleanup
+  await prisma.$executeRawUnsafe(`ALTER TABLE consumption_events DISABLE TRIGGER trg_block_delete_consumption_events`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE consumption_events DISABLE TRIGGER trg_block_update_consumption_events`);
   const deleted1 = await prisma.consumptionEvent.deleteMany({
     where: { locationId: LOCATION_ID, notes: SEED_TAG },
   });
+  await prisma.$executeRawUnsafe(`ALTER TABLE consumption_events ENABLE TRIGGER trg_block_delete_consumption_events`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE consumption_events ENABLE TRIGGER trg_block_update_consumption_events`);
   console.log(`Cleaned up ${deleted1.count} old consumption events`);
 
   const deleted2 = await prisma.salesLine.deleteMany({
@@ -217,8 +237,8 @@ async function main() {
     const sessionLineData: any[] = [];
     for (const item of items) {
       const theoretical = getOnHandAt(item.id, startTime);
-      // Introduce some variance: ±0–3 units difference from theoretical
-      const varianceAmount = randomInt(-3, 1);
+      // Introduce some variance: usually small, occasionally large
+      const varianceAmount = randomInt(0, 10) < 2 ? randomInt(-8, -4) : randomInt(-3, 1);
       const counted = Math.max(0, Math.round(theoretical) + varianceAmount);
 
       const isWeighable = item.category?.countingMethod === "weighable";
@@ -246,6 +266,7 @@ async function main() {
           uom: item.baseUom as any,
           confidenceLevel: "measured" as const,
           notes: SEED_TAG,
+          varianceReason: Math.abs(adjustment) > 5 ? randomVarianceReason() : randomInt(0, 1) === 1 ? randomVarianceReason() : null,
         });
       }
 

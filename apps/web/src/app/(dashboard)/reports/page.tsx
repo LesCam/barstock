@@ -3,12 +3,82 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
+} from "recharts";
 
 type ActiveTab = "variance" | "cogs" | "usage" | "patterns";
 type VarianceSortKey = "itemName" | "categoryName" | "variance" | "variancePercent" | "valueImpact";
 type UsageSortKey = "name" | "categoryName" | "quantityUsed" | "unitCost" | "totalCost";
 type PatternSortKey = "itemName" | "categoryName" | "sessionsAppeared" | "avgVariance" | "totalEstimatedLoss" | "trend";
 type SortDir = "asc" | "desc";
+type HeatmapCell = { dayOfWeek: number; hour: number; totalVariance: number; eventCount: number };
+
+const PIE_COLORS = ["#E9B44C", "#4CAF50", "#2196F3", "#FF5722", "#9C27B0", "#00BCD4", "#FF9800", "#607D8B"];
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function VarianceHeatmapGrid({ data }: { data: HeatmapCell[] }) {
+  const maxVariance = Math.max(...data.map((d) => d.totalVariance), 1);
+  const lookup = new Map(data.map((d) => [`${d.dayOfWeek}-${d.hour}`, d]));
+
+  return (
+    <div className="overflow-x-auto">
+      {/* Hour labels */}
+      <div className="flex items-center gap-1">
+        <span className="w-9 shrink-0" />
+        <div className="flex flex-1">
+          {Array.from({ length: 24 }, (_, h) => (
+            <div key={h} className="flex-1 min-w-[20px] m-[1px] text-center text-xs text-[#EAF0FF]/70">
+              {h % 3 === 0 ? `${h}` : ""}
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Grid rows */}
+      {Array.from({ length: 7 }, (_, day) => (
+        <div key={day} className="flex items-center gap-1">
+          <span className="w-9 shrink-0 text-right text-xs font-medium text-[#EAF0FF]">{DAY_LABELS[day]}</span>
+          <div className="flex flex-1">
+            {Array.from({ length: 24 }, (_, hour) => {
+              const cell = lookup.get(`${day}-${hour}`);
+              const intensity = cell ? cell.totalVariance / maxVariance : 0;
+              return (
+                <div
+                  key={hour}
+                  className="group relative flex-1 min-w-[20px] h-5 rounded-[2px] m-[1px] cursor-default"
+                  style={{
+                    backgroundColor: intensity > 0
+                      ? intensity > 0.6
+                        ? `rgb(239, 68, 68)`
+                        : intensity > 0.3
+                          ? `rgb(251, 191, 36)`
+                          : `rgb(74, 222, 128)`
+                      : "rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded bg-[#0B1623] px-2 py-1 text-[11px] text-[#EAF0FF] shadow-lg border border-white/10 group-hover:block">
+                    {cell
+                      ? `${DAY_LABELS[day]} ${hour}:00 — ${cell.totalVariance.toFixed(1)} units (${cell.eventCount} events)`
+                      : `${DAY_LABELS[day]} ${hour}:00 — no data`}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {/* Legend */}
+      <div className="mt-3 flex items-center justify-end gap-3 text-[11px] text-[#EAF0FF]/60">
+        <span>Variance:</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} /> None</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-green-400" /> <span className="text-green-400">Low</span></span>
+        <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-amber-400" /> <span className="text-amber-400">Medium</span></span>
+        <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-red-500" /> <span className="text-red-500">High</span></span>
+      </div>
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   const { data: session } = useSession();
@@ -63,7 +133,33 @@ export default function ReportsPage() {
 
   const { data: patterns } = trpc.reports.variancePatterns.useQuery(
     { locationId: locationId!, sessionCount },
-    { enabled: !!locationId && activeTab === "patterns" }
+    { enabled: !!locationId && (activeTab === "patterns" || activeTab === "variance") }
+  );
+
+  // --- Variance analytics ---
+  const [weeksBack, setWeeksBack] = useState(4);
+
+  const { data: varianceTrend } = trpc.reports.varianceTrend.useQuery(
+    { locationId: locationId!, weeksBack },
+    { enabled: !!locationId && activeTab === "variance" }
+  );
+
+  const { data: varianceReasons } = trpc.reports.varianceReasonDistribution.useQuery(
+    {
+      locationId: locationId!,
+      fromDate: new Date(dateRange.from),
+      toDate: new Date(dateRange.to),
+    },
+    { enabled: !!locationId && activeTab === "variance" }
+  );
+
+  const { data: varianceHeatmap } = trpc.reports.varianceHeatmap.useQuery(
+    {
+      locationId: locationId!,
+      fromDate: new Date(dateRange.from),
+      toDate: new Date(dateRange.to),
+    },
+    { enabled: !!locationId && activeTab === "variance" }
   );
 
   // --- Variance sorting ---
@@ -279,6 +375,45 @@ export default function ReportsPage() {
       {/* ── Variance tab ── */}
       {activeTab === "variance" && (
         <section>
+          {/* Auto-Flags */}
+          {(() => {
+            const flagged = patterns?.filter(
+              (p) => p.isShrinkageSuspect || p.trend === "worsening"
+            );
+            if (!flagged || flagged.length === 0) return null;
+            return (
+              <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {flagged.slice(0, 6).map((item) => (
+                  <div
+                    key={item.inventoryItemId}
+                    className={`rounded-lg border p-4 ${
+                      item.isShrinkageSuspect
+                        ? "border-red-500/30 bg-red-500/10"
+                        : "border-yellow-500/30 bg-yellow-500/10"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-medium text-[#EAF0FF]">{item.itemName}</p>
+                        <p className="text-xs text-[#EAF0FF]/50">{item.categoryName ?? "Uncategorized"}</p>
+                      </div>
+                      <span className={`text-lg ${item.trend === "worsening" ? "text-red-400" : item.trend === "improving" ? "text-green-400" : "text-[#EAF0FF]/40"}`}>
+                        {item.trend === "worsening" ? "\u2193" : item.trend === "improving" ? "\u2191" : "\u2192"}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex gap-4 text-xs text-[#EAF0FF]/60">
+                      <span>Avg: <span className="text-red-400 font-medium">{item.avgVariance.toFixed(1)}</span></span>
+                      <span>Sessions: {item.sessionsWithVariance}/{item.sessionsAppeared}</span>
+                      {item.isShrinkageSuspect && (
+                        <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-red-400 font-medium">Shrinkage</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
           <h2 className="mb-3 text-lg font-semibold">
             Variance Report — ${(variance?.totalVarianceValue ?? 0).toFixed(2)} impact
           </h2>
@@ -334,6 +469,141 @@ export default function ReportsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* ── Variance Trend Chart ── */}
+          <div className="mt-8">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold">Variance Trend</h3>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-[#EAF0FF]/60">Weeks:</label>
+                <select
+                  value={weeksBack}
+                  onChange={(e) => setWeeksBack(Number(e.target.value))}
+                  className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-xs text-[#EAF0FF]"
+                >
+                  {[2, 4, 6, 8, 12].map((w) => (
+                    <option key={w} value={w}>{w} weeks</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              {varianceTrend && varianceTrend.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={varianceTrend.map((d) => ({
+                    ...d,
+                    label: new Date(d.weekStart).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                  }))}>
+                    <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                    <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                      formatter={(value, name) => {
+                        const v = typeof value === "number" ? value : 0;
+                        if (name === "totalVarianceUnits") return [v.toFixed(1), "Total Variance"];
+                        return [v, name];
+                      }}
+                      labelFormatter={(label) => `Week of ${label}`}
+                    />
+                    <Bar dataKey="totalVarianceUnits" fill="#E9B44C" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No trend data available.</p>
+              )}
+            </div>
+          </div>
+
+          {/* ── Reason Distribution + Heatmap row ── */}
+          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+            {/* Reason Distribution Pie */}
+            <div>
+              <h3 className="mb-3 text-base font-semibold">Reason Distribution</h3>
+              <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                {varianceReasons && varianceReasons.reasons.length > 0 ? (
+                  <>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <PieChart>
+                        <Pie
+                          data={varianceReasons.reasons.map((r) => ({ name: r.label, value: r.count }))}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={90}
+                          paddingAngle={2}
+                          dataKey="value"
+                          label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                        >
+                          {varianceReasons.reasons.map((_, i) => (
+                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }} itemStyle={{ color: "#EAF0FF" }} labelStyle={{ color: "#EAF0FF" }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="mt-3 flex items-center gap-2 text-xs text-[#EAF0FF]/60">
+                      <div className="flex-1 rounded-full bg-[#0B1623] h-2 overflow-hidden">
+                        <div
+                          className="h-full bg-green-500 rounded-full"
+                          style={{ width: `${varianceReasons.totalAdjustments > 0 ? (varianceReasons.withReason / varianceReasons.totalAdjustments) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span>{varianceReasons.withReason}/{varianceReasons.totalAdjustments} with reason</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No reason data for this period.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Day/Time Heatmap */}
+            <div>
+              <h3 className="mb-3 text-base font-semibold">Variance by Day / Hour</h3>
+              <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                {varianceHeatmap && varianceHeatmap.dayTimeGrid.length > 0 ? (
+                  <VarianceHeatmapGrid data={varianceHeatmap.dayTimeGrid} />
+                ) : (
+                  <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No heatmap data for this period.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Staff Breakdown ── */}
+          {varianceHeatmap && varianceHeatmap.staffBreakdown.length > 0 && (
+            <div className="mt-8">
+              <h3 className="mb-3 text-base font-semibold">Staff Variance Breakdown</h3>
+              <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                    <tr>
+                      <th className="px-4 py-3">Staff</th>
+                      <th className="px-4 py-3">Sessions</th>
+                      <th className="px-4 py-3">Lines Counted</th>
+                      <th className="px-4 py-3">Lines w/ Variance</th>
+                      <th className="px-4 py-3">Variance Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {varianceHeatmap.staffBreakdown.map((s) => (
+                      <tr key={s.userId} className="hover:bg-[#0B1623]/60">
+                        <td className="px-4 py-3 font-medium">{s.email}</td>
+                        <td className="px-4 py-3">{s.sessionsCounted}</td>
+                        <td className="px-4 py-3">{s.linesCounted}</td>
+                        <td className="px-4 py-3">{s.linesWithAdjustment}</td>
+                        <td className="px-4 py-3">
+                          {s.linesCounted > 0
+                            ? `${((s.linesWithAdjustment / s.linesCounted) * 100).toFixed(1)}%`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
       )}
 

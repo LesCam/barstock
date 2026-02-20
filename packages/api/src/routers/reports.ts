@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 
@@ -51,5 +51,26 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new VarianceService(ctx.prisma);
       return svc.analyzeVariancePatterns(input.locationId, input.sessionCount);
+    }),
+
+  varianceTrend: protectedProcedure
+    .input(varianceTrendQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new VarianceService(ctx.prisma);
+      return svc.getVarianceTrend(input.locationId, input.weeksBack);
+    }),
+
+  varianceHeatmap: protectedProcedure
+    .input(varianceHeatmapQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new VarianceService(ctx.prisma);
+      return svc.getVarianceHeatmap(input.locationId, input.fromDate, input.toDate);
+    }),
+
+  varianceReasonDistribution: protectedProcedure
+    .input(varianceReasonDistributionQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new VarianceService(ctx.prisma);
+      return svc.getVarianceReasonDistribution(input.locationId, input.fromDate, input.toDate);
     }),
 });

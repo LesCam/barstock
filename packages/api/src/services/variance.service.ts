@@ -7,6 +7,41 @@
 
 import type { ExtendedPrismaClient } from "@barstock/database";
 
+export interface VarianceTrendPoint {
+  weekStart: string;
+  sessionCount: number;
+  totalVarianceUnits: number;
+  adjustmentCount: number;
+}
+
+export interface VarianceHeatmapResult {
+  dayTimeGrid: Array<{
+    dayOfWeek: number;
+    hour: number;
+    totalVariance: number;
+    eventCount: number;
+  }>;
+  staffBreakdown: Array<{
+    userId: string;
+    email: string;
+    sessionsCounted: number;
+    linesCounted: number;
+    linesWithAdjustment: number;
+  }>;
+}
+
+export interface VarianceReasonDistributionResult {
+  reasons: Array<{
+    reason: string | null;
+    label: string;
+    count: number;
+    totalUnits: number;
+  }>;
+  totalAdjustments: number;
+  withReason: number;
+  withoutReason: number;
+}
+
 export interface VariancePatternItem {
   inventoryItemId: string;
   itemName: string;
@@ -302,5 +337,178 @@ export class VarianceService {
     results.sort((a, b) => a.avgVariance - b.avgVariance);
 
     return results;
+  }
+
+  async getVarianceTrend(
+    locationId: string,
+    weeksBack = 4
+  ): Promise<VarianceTrendPoint[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        week_start: Date;
+        session_count: bigint;
+        total_variance_units: number | null;
+        adjustment_count: bigint;
+      }>
+    >`
+      SELECT
+        date_trunc('week', s.ended_ts) AS week_start,
+        COUNT(DISTINCT s.id) AS session_count,
+        SUM(ABS(ce.quantity_delta)) AS total_variance_units,
+        COUNT(ce.id) AS adjustment_count
+      FROM inventory_sessions s
+      JOIN consumption_events ce ON ce.location_id = s.location_id
+        AND ce.event_type = 'inventory_count_adjustment'
+        AND ce.event_ts BETWEEN s.started_ts AND s.ended_ts
+      WHERE s.location_id = ${locationId}::uuid
+        AND s.ended_ts IS NOT NULL
+        AND s.ended_ts >= NOW() - (${weeksBack} || ' weeks')::INTERVAL
+      GROUP BY week_start
+      ORDER BY week_start
+    `;
+
+    return rows.map((r) => ({
+      weekStart: r.week_start.toISOString(),
+      sessionCount: Number(r.session_count),
+      totalVarianceUnits: Number(r.total_variance_units ?? 0),
+      adjustmentCount: Number(r.adjustment_count),
+    }));
+  }
+
+  async getVarianceHeatmap(
+    locationId: string,
+    fromDate?: Date,
+    toDate?: Date
+  ): Promise<VarianceHeatmapResult> {
+    // Day/time grid
+    const dayTimeRows = await this.prisma.$queryRaw<
+      Array<{
+        day_of_week: number;
+        hour: number;
+        total_variance: number | null;
+        event_count: bigint;
+      }>
+    >`
+      SELECT
+        EXTRACT(DOW FROM ce.event_ts)::int AS day_of_week,
+        EXTRACT(HOUR FROM ce.event_ts)::int AS hour,
+        SUM(ABS(ce.quantity_delta)) AS total_variance,
+        COUNT(*) AS event_count
+      FROM consumption_events ce
+      WHERE ce.location_id = ${locationId}::uuid
+        AND ce.event_type = 'inventory_count_adjustment'
+        AND (${fromDate}::timestamptz IS NULL OR ce.event_ts >= ${fromDate}::timestamptz)
+        AND (${toDate}::timestamptz IS NULL OR ce.event_ts < ${toDate}::timestamptz)
+      GROUP BY day_of_week, hour
+    `;
+
+    // Staff breakdown
+    const staffRows = await this.prisma.$queryRaw<
+      Array<{
+        user_id: string;
+        email: string;
+        sessions_counted: bigint;
+        lines_counted: bigint;
+        lines_with_adjustment: bigint;
+      }>
+    >`
+      SELECT
+        u.id AS user_id,
+        u.email,
+        COUNT(DISTINCT sl.session_id) AS sessions_counted,
+        COUNT(sl.id) AS lines_counted,
+        COUNT(CASE WHEN adj.id IS NOT NULL THEN 1 END) AS lines_with_adjustment
+      FROM inventory_session_lines sl
+      JOIN users u ON u.id = sl.counted_by
+      JOIN inventory_sessions s ON s.id = sl.session_id
+      LEFT JOIN consumption_events adj
+        ON adj.inventory_item_id = sl.inventory_item_id
+        AND adj.event_type = 'inventory_count_adjustment'
+        AND adj.event_ts BETWEEN s.started_ts AND s.ended_ts
+      WHERE s.location_id = ${locationId}::uuid
+        AND s.ended_ts IS NOT NULL
+        AND sl.counted_by IS NOT NULL
+        AND (${fromDate}::timestamptz IS NULL OR s.ended_ts >= ${fromDate}::timestamptz)
+        AND (${toDate}::timestamptz IS NULL OR s.ended_ts < ${toDate}::timestamptz)
+      GROUP BY u.id, u.email
+      ORDER BY lines_with_adjustment DESC
+    `;
+
+    return {
+      dayTimeGrid: dayTimeRows.map((r) => ({
+        dayOfWeek: r.day_of_week,
+        hour: r.hour,
+        totalVariance: Number(r.total_variance ?? 0),
+        eventCount: Number(r.event_count),
+      })),
+      staffBreakdown: staffRows.map((r) => ({
+        userId: r.user_id,
+        email: r.email,
+        sessionsCounted: Number(r.sessions_counted),
+        linesCounted: Number(r.lines_counted),
+        linesWithAdjustment: Number(r.lines_with_adjustment),
+      })),
+    };
+  }
+
+  private static REASON_LABELS: Record<string, string> = {
+    waste_foam: "Waste/Foam",
+    comp: "Comp",
+    staff_drink: "Staff Drink",
+    theft: "Theft/Shrinkage",
+    breakage: "Breakage",
+    line_cleaning: "Line Cleaning",
+    transfer: "Transfer",
+    unknown: "Unknown",
+  };
+
+  async getVarianceReasonDistribution(
+    locationId: string,
+    fromDate: Date,
+    toDate: Date
+  ): Promise<VarianceReasonDistributionResult> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        variance_reason: string | null;
+        count: bigint;
+        total_units: number | null;
+      }>
+    >`
+      SELECT
+        variance_reason,
+        COUNT(*) AS count,
+        SUM(ABS(quantity_delta)) AS total_units
+      FROM consumption_events
+      WHERE location_id = ${locationId}::uuid
+        AND event_type = 'inventory_count_adjustment'
+        AND event_ts >= ${fromDate}::timestamptz
+        AND event_ts < ${toDate}::timestamptz
+      GROUP BY variance_reason
+      ORDER BY count DESC
+    `;
+
+    let totalAdjustments = 0;
+    let withReason = 0;
+    let withoutReason = 0;
+
+    const reasons = rows.map((r) => {
+      const count = Number(r.count);
+      totalAdjustments += count;
+      if (r.variance_reason) {
+        withReason += count;
+      } else {
+        withoutReason += count;
+      }
+      return {
+        reason: r.variance_reason,
+        label: r.variance_reason
+          ? VarianceService.REASON_LABELS[r.variance_reason] ?? r.variance_reason
+          : "No Reason",
+        count,
+        totalUnits: Number(r.total_units ?? 0),
+      };
+    });
+
+    return { reasons, totalAdjustments, withReason, withoutReason };
   }
 }

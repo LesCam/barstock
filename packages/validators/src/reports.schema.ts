@@ -48,3 +48,20 @@ export const variancePatternsQuerySchema = z.object({
 
 export type ExpectedOnHandQueryInput = z.infer<typeof expectedOnHandQuerySchema>;
 export type VariancePatternsQueryInput = z.infer<typeof variancePatternsQuerySchema>;
+
+export const varianceTrendQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  weeksBack: z.number().int().min(2).max(52).default(4),
+});
+
+export const varianceHeatmapQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+});
+
+export const varianceReasonDistributionQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+});
