@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     kegNearEmpty: { enabled: true, threshold: 10 },
     loginFailures: { enabled: true, threshold: 5 },
     largeAdjustment: { enabled: true, threshold: 20 },
+    shrinkagePattern: { enabled: true, threshold: 3 },
   },
 };
 

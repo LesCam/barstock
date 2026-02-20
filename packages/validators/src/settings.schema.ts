@@ -35,6 +35,7 @@ export const alertRulesSchema = z.object({
   kegNearEmpty: alertRuleSchema.default({ enabled: true, threshold: 10 }),
   loginFailures: alertRuleSchema.default({ enabled: true, threshold: 5 }),
   largeAdjustment: alertRuleSchema.default({ enabled: true, threshold: 20 }),
+  shrinkagePattern: alertRuleSchema.default({ enabled: true, threshold: 3 }),
 });
 
 export type AlertRules = z.infer<typeof alertRulesSchema>;

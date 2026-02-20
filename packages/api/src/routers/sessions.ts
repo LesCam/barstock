@@ -238,6 +238,12 @@ export const sessionsRouter = router({
             input.sessionId,
             session?.location.name ?? "Unknown"
           );
+          await alertSvc.checkHighVarianceSession(
+            ctx.user.businessId,
+            result.adjustments,
+            input.sessionId,
+            session?.location.name ?? "Unknown"
+          );
         } catch {
           // Don't fail session close if alert fails
         }

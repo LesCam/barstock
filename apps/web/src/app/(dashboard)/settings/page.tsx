@@ -802,6 +802,11 @@ const ALERT_RULE_LABELS: Record<string, { label: string; unit: string; descripti
     unit: "% variance",
     description: "Alert when a session adjustment exceeds this variance",
   },
+  shrinkagePattern: {
+    label: "Shrinkage Patterns",
+    unit: "sessions",
+    description: "Alert when items show consistent negative variance across this many sessions",
+  },
 };
 
 function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {

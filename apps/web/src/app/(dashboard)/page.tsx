@@ -22,12 +22,100 @@ const TIMEZONES = [
   "America/Anchorage",
 ];
 
+const ALERT_BORDER_COLORS: Record<string, string> = {
+  shrinkagePattern: "border-red-500/60",
+  largeAdjustment: "border-red-500/60",
+  variancePercent: "border-yellow-500/60",
+  lowStock: "border-yellow-500/60",
+  staleCountDays: "border-yellow-500/60",
+  kegNearEmpty: "border-blue-500/60",
+};
+
+function timeAgo(date: Date): string {
+  const secs = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (secs < 60) return "just now";
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return `${Math.floor(secs / 86400)}d ago`;
+}
+
+function AlertBanner() {
+  const { data, isLoading } = trpc.notifications.list.useQuery(
+    { limit: 5 },
+    { refetchInterval: 60_000 }
+  );
+  const markReadMutation = trpc.notifications.markRead.useMutation();
+  const utils = trpc.useUtils();
+
+  if (isLoading || !data) return null;
+
+  const alertNotifications = data.items.filter((n) => {
+    const meta = n.metadataJson as Record<string, unknown> | null;
+    return meta && typeof meta.rule === "string" && !n.isRead;
+  });
+
+  if (alertNotifications.length === 0) return null;
+
+  function handleDismiss(id: string) {
+    markReadMutation.mutate(
+      { id },
+      { onSuccess: () => utils.notifications.list.invalidate() }
+    );
+  }
+
+  return (
+    <div className="mb-6 space-y-2">
+      {alertNotifications.map((n) => {
+        const meta = n.metadataJson as Record<string, unknown>;
+        const rule = meta.rule as string;
+        const borderColor = ALERT_BORDER_COLORS[rule] ?? "border-white/20";
+
+        return (
+          <div
+            key={n.id}
+            className={`flex items-start gap-3 rounded-lg border-l-4 ${borderColor} bg-[#16283F] px-4 py-3`}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-[#EAF0FF]">{n.title}</p>
+              {n.body && (
+                <p className="mt-0.5 text-xs text-[#EAF0FF]/60 line-clamp-2">
+                  {n.body}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-[#EAF0FF]/40">
+                {timeAgo(n.createdAt)}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {n.linkUrl && (
+                <Link
+                  href={n.linkUrl}
+                  className="text-xs font-medium text-[#E9B44C] hover:text-[#C8922E]"
+                >
+                  View
+                </Link>
+              )}
+              <button
+                onClick={() => handleDismiss(n.id)}
+                className="text-xs text-[#EAF0FF]/40 hover:text-[#EAF0FF]/80"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const businessId = user?.businessId;
   const highestRole = user?.highestRole;
   const canCreate = highestRole === "platform_admin" || highestRole === "business_admin";
+  const isAdmin = canCreate;
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -70,6 +158,8 @@ export default function DashboardPage() {
           </button>
         )}
       </div>
+
+      {isAdmin && <AlertBanner />}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {showForm && (

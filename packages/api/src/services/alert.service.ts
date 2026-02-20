@@ -55,6 +55,11 @@ export class AlertService {
         const kegAlerts = await this.checkKegNearEmpty(loc.id, loc.name, rules.kegNearEmpty.threshold);
         alerts.push(...kegAlerts);
       }
+
+      if (rules.shrinkagePattern?.enabled) {
+        const patternAlerts = await this.checkShrinkagePatterns(loc.id, loc.name, rules.shrinkagePattern.threshold);
+        alerts.push(...patternAlerts);
+      }
     }
 
     return alerts;
@@ -272,5 +277,62 @@ export class AlertService {
       linkUrl: "/draft",
       metadata: { rule: "kegNearEmpty", locationId, kegCount: nearEmpty.length },
     }];
+  }
+
+  private async checkShrinkagePatterns(locationId: string, locationName: string, threshold: number): Promise<AlertResult[]> {
+    const svc = new VarianceService(this.prisma);
+
+    try {
+      const patterns = await svc.analyzeVariancePatterns(locationId, 10);
+      const flagged = patterns.filter(
+        (p) =>
+          p.sessionsAppeared >= threshold &&
+          (p.isShrinkageSuspect || p.trend === "worsening")
+      );
+
+      if (flagged.length === 0) return [];
+
+      const itemList = flagged
+        .slice(0, 5)
+        .map((p) => `${p.itemName} (avg ${p.avgVariance.toFixed(1)}, ${p.trend})`)
+        .join(", ");
+
+      return [{
+        title: `Shrinkage patterns at ${locationName}`,
+        body: `${flagged.length} item(s) showing persistent negative variance: ${itemList}`,
+        linkUrl: "/reports",
+        metadata: { rule: "shrinkagePattern", locationId, flaggedCount: flagged.length },
+      }];
+    } catch {
+      return [];
+    }
+  }
+
+  async checkHighVarianceSession(
+    businessId: string,
+    adjustments: AdjustmentItem[],
+    sessionId: string,
+    locationName: string
+  ): Promise<void> {
+    const settingsSvc = new SettingsService(this.prisma);
+    const settings = await settingsSvc.getSettings(businessId);
+    if (!settings.alertRules.largeAdjustment?.enabled) return;
+
+    if (adjustments.length === 0) return;
+
+    const withVariance = adjustments.filter(
+      (a) => Math.abs(a.variancePercent) > 0
+    );
+    const ratio = withVariance.length / adjustments.length;
+
+    if (ratio <= 0.6) return;
+
+    await this.notifyAdmins(
+      businessId,
+      "Unusually high session variance",
+      `${withVariance.length} of ${adjustments.length} items (${(ratio * 100).toFixed(0)}%) had variance at ${locationName}`,
+      `/sessions/${sessionId}`,
+      { rule: "largeAdjustment", sessionId, varianceRatio: ratio }
+    );
   }
 }
