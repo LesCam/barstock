@@ -30,6 +30,8 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     lowStock: { enabled: false, threshold: 5 },
     staleCountDays: { enabled: true, threshold: 7 },
     kegNearEmpty: { enabled: true, threshold: 10 },
+    loginFailures: { enabled: true, threshold: 5 },
+    largeAdjustment: { enabled: true, threshold: 20 },
   },
 };
 

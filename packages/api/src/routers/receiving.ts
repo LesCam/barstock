@@ -1,6 +1,7 @@
 import { router, protectedProcedure, requireLocationAccess } from "../trpc";
 import { z } from "zod";
 import { ReceivingService } from "../services/receiving.service";
+import { AuditService } from "../services/audit.service";
 
 const receiveStockSchema = z.object({
   locationId: z.string().uuid(),
@@ -16,6 +17,24 @@ export const receivingRouter = router({
     .input(receiveStockSchema)
     .mutation(async ({ ctx, input }) => {
       const svc = new ReceivingService(ctx.prisma);
-      return svc.receiveStock(input, ctx.user.userId);
+      const result = await svc.receiveStock(input, ctx.user.userId);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "stock.received",
+        objectType: "consumption_event",
+        objectId: result.eventId,
+        metadata: {
+          locationId: input.locationId,
+          inventoryItemId: input.inventoryItemId,
+          quantity: input.quantity,
+          vendorId: input.vendorId,
+          notes: input.notes,
+        },
+      });
+
+      return result;
     }),
 });

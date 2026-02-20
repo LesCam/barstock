@@ -8,12 +8,22 @@
 import { Prisma } from "@prisma/client";
 import type { ExtendedPrismaClient } from "@barstock/database";
 import type { VarianceReason } from "@barstock/types";
+import { AuditService } from "./audit.service";
+
+export interface AdjustmentDetail {
+  itemId: string;
+  itemName: string;
+  variance: number;
+  variancePercent: number;
+  reason: string | null;
+}
 
 export interface SessionCloseResult {
   sessionId: string;
   adjustmentsCreated: number;
   totalVariance: number;
   requiresReasons: string[];
+  adjustments: AdjustmentDetail[];
 }
 
 export class SessionService {
@@ -37,6 +47,8 @@ export class SessionService {
     let adjustmentsCreated = 0;
     let totalVariance = 0;
     const requiresReasons: string[] = [];
+    const adjustments: AdjustmentDetail[] = [];
+    const audit = new AuditService(this.prisma);
 
     for (const line of session.lines) {
       // Calculate theoretical on-hand from ledger
@@ -64,7 +76,7 @@ export class SessionService {
 
       // Create adjustment event if variance exists
       if (variance !== 0) {
-        await this.prisma.consumptionEvent.create({
+        const event = await this.prisma.consumptionEvent.create({
           data: {
             locationId: session.locationId,
             eventType: "inventory_count_adjustment",
@@ -78,6 +90,43 @@ export class SessionService {
             notes: `Session ${sessionId} adjustment`,
           },
         });
+
+        const variancePercent = theoretical !== 0
+          ? (variance / theoretical) * 100
+          : 0;
+        const reason = varianceReasons[line.inventoryItemId] ?? null;
+
+        adjustments.push({
+          itemId: line.inventoryItemId,
+          itemName: line.inventoryItem.name,
+          variance,
+          variancePercent,
+          reason,
+        });
+
+        // Look up the business for this session's location
+        const location = await this.prisma.location.findUnique({
+          where: { id: session.locationId },
+          select: { businessId: true },
+        });
+
+        if (location) {
+          await audit.log({
+            businessId: location.businessId,
+            actionType: "adjustment.created",
+            objectType: "consumption_event",
+            objectId: event.id,
+            metadata: {
+              inventoryItemId: line.inventoryItemId,
+              itemName: line.inventoryItem.name,
+              variance,
+              variancePercent,
+              varianceReason: reason,
+              sessionId,
+            },
+          });
+        }
+
         adjustmentsCreated++;
       }
     }
@@ -99,6 +148,7 @@ export class SessionService {
       adjustmentsCreated,
       totalVariance,
       requiresReasons: [],
+      adjustments,
     };
   }
 

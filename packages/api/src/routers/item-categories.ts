@@ -6,6 +6,7 @@ import {
 } from "@barstock/validators";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { AuditService } from "../services/audit.service";
 
 export const itemCategoriesRouter = router({
   list: protectedProcedure
@@ -23,16 +24,40 @@ export const itemCategoriesRouter = router({
   create: protectedProcedure
     .use(requireRole("manager"))
     .input(itemCategoryCreateSchema)
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.inventoryItemCategory.create({ data: input })
-    ),
+    .mutation(async ({ ctx, input }) => {
+      const category = await ctx.prisma.inventoryItemCategory.create({ data: input });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: input.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "category.created",
+        objectType: "inventory_item_category",
+        objectId: category.id,
+        metadata: { name: input.name, countingMethod: input.countingMethod },
+      });
+
+      return category;
+    }),
 
   update: protectedProcedure
     .use(requireRole("manager"))
     .input(z.object({ id: z.string().uuid() }).merge(itemCategoryUpdateSchema))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      return ctx.prisma.inventoryItemCategory.update({ where: { id }, data });
+      const category = await ctx.prisma.inventoryItemCategory.update({ where: { id }, data });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "category.updated",
+        objectType: "inventory_item_category",
+        objectId: id,
+        metadata: data,
+      });
+
+      return category;
     }),
 
   delete: protectedProcedure
@@ -48,6 +73,18 @@ export const itemCategoriesRouter = router({
           message: `Cannot delete category: ${count} inventory item(s) reference it. Reassign them first or deactivate the category.`,
         });
       }
-      return ctx.prisma.inventoryItemCategory.delete({ where: { id: input.id } });
+      const category = await ctx.prisma.inventoryItemCategory.delete({ where: { id: input.id } });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "category.deleted",
+        objectType: "inventory_item_category",
+        objectId: input.id,
+        metadata: { name: category.name },
+      });
+
+      return category;
     }),
 });

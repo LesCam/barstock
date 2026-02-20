@@ -14,6 +14,8 @@ import {
   deriveDefaultPermissions,
 } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
+import { AlertService } from "../services/alert.service";
+import { SettingsService } from "../services/settings.service";
 
 export const authRouter = router({
   login: publicProcedure.input(loginSchema).mutation(async ({ ctx, input }) => {
@@ -34,8 +36,38 @@ export const authRouter = router({
         actionType: "auth.login_failed",
         objectType: "user",
         objectId: user.id,
-        metadata: { reason: "invalid_password" },
+        metadata: { reason: "invalid_password", email: input.email },
       });
+
+      // Check if failed logins exceed threshold and alert admins
+      try {
+        const settingsSvc = new SettingsService(ctx.prisma);
+        const settings = await settingsSvc.getSettings(user.businessId);
+        const loginRule = (settings.alertRules as any).loginFailures;
+        if (loginRule?.enabled) {
+          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+          const failCount = await ctx.prisma.auditLog.count({
+            where: {
+              actionType: "auth.login_failed",
+              businessId: user.businessId,
+              createdAt: { gte: oneHourAgo },
+            },
+          });
+          if (failCount >= loginRule.threshold) {
+            const alertSvc = new AlertService(ctx.prisma);
+            await alertSvc.notifyAdmins(
+              user.businessId,
+              "Multiple failed login attempts",
+              `${failCount} failed login attempt(s) in the last hour. Most recent: ${input.email}`,
+              "/audit",
+              { rule: "loginFailures", email: input.email, failCount }
+            );
+          }
+        }
+      } catch {
+        // Don't fail the login flow if alert fails
+      }
+
       throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
     }
 
@@ -169,6 +201,19 @@ export const authRouter = router({
         metadata: { email: input.email, role: input.role },
       });
 
+      try {
+        const alertSvc = new AlertService(ctx.prisma);
+        await alertSvc.notifyAdmins(
+          input.businessId,
+          "New staff member added",
+          `${ctx.user.email} added ${input.email} as ${input.role}`,
+          "/staff",
+          { userId: user.id, email: input.email, role: input.role }
+        );
+      } catch {
+        // Don't fail user creation if alert fails
+      }
+
       return user;
     }),
 
@@ -290,6 +335,19 @@ export const authRouter = router({
         metadata: { locationId: input.locationId, role: input.role },
       });
 
+      try {
+        const alertSvc = new AlertService(ctx.prisma);
+        await alertSvc.notifyAdmins(
+          ctx.user.businessId,
+          "Location access granted",
+          `${ctx.user.email} granted ${input.role} access to a location for user ${input.userId}`,
+          "/staff",
+          { userId: input.userId, locationId: input.locationId, role: input.role }
+        );
+      } catch {
+        // Don't fail grant if alert fails
+      }
+
       return result;
     }),
 
@@ -310,6 +368,19 @@ export const authRouter = router({
         objectId: input.userId,
         metadata: { locationId: input.locationId },
       });
+
+      try {
+        const alertSvc = new AlertService(ctx.prisma);
+        await alertSvc.notifyAdmins(
+          ctx.user.businessId,
+          "Location access revoked",
+          `${ctx.user.email} revoked location access for user ${input.userId}`,
+          "/staff",
+          { userId: input.userId, locationId: input.locationId }
+        );
+      } catch {
+        // Don't fail revoke if alert fails
+      }
 
       return result;
     }),
@@ -472,6 +543,19 @@ export const authRouter = router({
         objectId: input.userId,
         metadata: { locationId: input.locationId, permissionKey: input.permissionKey, value: input.value },
       });
+
+      try {
+        const alertSvc = new AlertService(ctx.prisma);
+        await alertSvc.notifyAdmins(
+          ctx.user.businessId,
+          "User permission updated",
+          `${ctx.user.email} ${input.value ? "granted" : "revoked"} ${input.permissionKey} for user ${input.userId}`,
+          "/staff",
+          { userId: input.userId, permissionKey: input.permissionKey, value: input.value }
+        );
+      } catch {
+        // Don't fail permission update if alert fails
+      }
 
       return { success: true };
     }),

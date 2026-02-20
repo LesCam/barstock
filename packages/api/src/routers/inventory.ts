@@ -63,17 +63,36 @@ export const inventoryRouter = router({
 
   addPrice: protectedProcedure
     .input(priceHistoryCreateSchema)
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { entryMode, containerCost, containerSizeOz, ...rest } = input;
+      let price;
       if (entryMode === "per_container") {
         const unitCost = containerCost! / containerSizeOz!;
-        return ctx.prisma.priceHistory.create({
+        price = await ctx.prisma.priceHistory.create({
           data: { ...rest, unitCost, containerCost },
         });
+      } else {
+        price = await ctx.prisma.priceHistory.create({
+          data: { ...rest, unitCost: rest.unitCost! },
+        });
       }
-      return ctx.prisma.priceHistory.create({
-        data: { ...rest, unitCost: rest.unitCost! },
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "price.added",
+        objectType: "price_history",
+        objectId: price.id,
+        metadata: {
+          inventoryItemId: input.inventoryItemId,
+          unitCost: Number(price.unitCost),
+          containerCost: price.containerCost ? Number(price.containerCost) : undefined,
+          effectiveFromTs: input.effectiveFromTs,
+        },
       });
+
+      return price;
     }),
 
   kegSizesForItem: protectedProcedure

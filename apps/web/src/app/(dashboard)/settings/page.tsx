@@ -792,6 +792,16 @@ const ALERT_RULE_LABELS: Record<string, { label: string; unit: string; descripti
     unit: "% remaining",
     description: "Alert when a tapped keg drops below this percentage",
   },
+  loginFailures: {
+    label: "Failed Logins",
+    unit: "per hour",
+    description: "Alert after this many failed login attempts in one hour",
+  },
+  largeAdjustment: {
+    label: "Large Adjustment",
+    unit: "% variance",
+    description: "Alert when a session adjustment exceeds this variance",
+  },
 };
 
 function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {

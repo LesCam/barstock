@@ -33,6 +33,8 @@ export const alertRulesSchema = z.object({
   lowStock: alertRuleSchema.default({ enabled: false, threshold: 5 }),
   staleCountDays: alertRuleSchema.default({ enabled: true, threshold: 7 }),
   kegNearEmpty: alertRuleSchema.default({ enabled: true, threshold: 10 }),
+  loginFailures: alertRuleSchema.default({ enabled: true, threshold: 5 }),
+  largeAdjustment: alertRuleSchema.default({ enabled: true, threshold: 20 }),
 });
 
 export type AlertRules = z.infer<typeof alertRulesSchema>;

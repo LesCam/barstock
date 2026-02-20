@@ -1,5 +1,4 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
-import type { AlertRules } from "@barstock/validators";
 import { VarianceService } from "./variance.service";
 import { InventoryService } from "./inventory.service";
 import { NotificationService } from "./notification.service";
@@ -11,6 +10,14 @@ export interface AlertResult {
   body: string;
   linkUrl?: string;
   metadata: Record<string, unknown>;
+}
+
+export interface AdjustmentItem {
+  itemId: string;
+  itemName: string;
+  variance: number;
+  variancePercent: number;
+  reason: string | null;
 }
 
 export class AlertService {
@@ -93,6 +100,77 @@ export class AlertService {
     return sent;
   }
 
+  async notifyAdmins(
+    businessId: string,
+    title: string,
+    body: string,
+    linkUrl: string,
+    metadata?: Record<string, unknown>
+  ): Promise<number> {
+    const notifSvc = new NotificationService(this.prisma);
+
+    const admins = await this.prisma.user.findMany({
+      where: { businessId, role: "business_admin", isActive: true },
+      select: { id: true },
+    });
+
+    let sent = 0;
+    for (const admin of admins) {
+      // Dedup: skip if identical notification sent in last 24h
+      const recent = await this.prisma.notification.findFirst({
+        where: {
+          recipientUserId: admin.id,
+          title,
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      });
+      if (recent) continue;
+
+      await notifSvc.send({
+        businessId,
+        recipientUserId: admin.id,
+        title,
+        body,
+        linkUrl,
+        metadata,
+      });
+      sent++;
+    }
+
+    return sent;
+  }
+
+  async checkLargeAdjustment(
+    businessId: string,
+    adjustments: AdjustmentItem[],
+    sessionId: string,
+    locationName: string
+  ): Promise<void> {
+    const settingsSvc = new SettingsService(this.prisma);
+    const settings = await settingsSvc.getSettings(businessId);
+    const largeAdjRule = settings.alertRules.largeAdjustment;
+    if (!largeAdjRule?.enabled) return;
+
+    const threshold = largeAdjRule.threshold;
+    const flagged = adjustments.filter(
+      (a) => Math.abs(a.variancePercent) >= threshold
+    );
+    if (flagged.length === 0) return;
+
+    const itemList = flagged
+      .slice(0, 5)
+      .map((a) => `${a.itemName} (${a.variancePercent.toFixed(1)}%)`)
+      .join(", ");
+
+    await this.notifyAdmins(
+      businessId,
+      "Large inventory adjustment detected",
+      `${flagged.length} item(s) exceeded ${threshold}% variance at ${locationName}: ${itemList}`,
+      `/sessions/${sessionId}`,
+      { rule: "largeAdjustment", sessionId, flaggedCount: flagged.length }
+    );
+  }
+
   private async checkVariance(locationId: string, locationName: string, thresholdPercent: number): Promise<AlertResult[]> {
     const svc = new VarianceService(this.prisma);
     const now = new Date();
@@ -162,7 +240,7 @@ export class AlertService {
   private async checkKegNearEmpty(locationId: string, locationName: string, thresholdPercent: number): Promise<AlertResult[]> {
     // Find tapped kegs and calculate remaining % via consumption events
     const kegs = await this.prisma.kegInstance.findMany({
-      where: { locationId, status: "tapped" },
+      where: { locationId, status: "in_service" },
       select: {
         id: true,
         startingOz: true,

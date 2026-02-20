@@ -2,6 +2,7 @@ import { router, protectedProcedure, requireRole, requireBusinessAccess } from "
 import { settingsGetSchema, settingsUpdateSchema } from "@barstock/validators";
 import { SettingsService } from "../services/settings.service";
 import { AuditService } from "../services/audit.service";
+import { AlertService } from "../services/alert.service";
 
 export const settingsRouter = router({
   capabilities: protectedProcedure
@@ -62,6 +63,19 @@ export const settingsRouter = router({
         objectId: input.businessId,
         metadata: { capabilities: input.capabilities, autoLock: input.autoLock, alertRules: input.alertRules },
       });
+
+      try {
+        const alertSvc = new AlertService(ctx.prisma);
+        await alertSvc.notifyAdmins(
+          input.businessId,
+          "Settings updated",
+          `${ctx.user.email} updated business settings`,
+          "/settings",
+          { actorEmail: ctx.user.email }
+        );
+      } catch {
+        // Don't fail settings update if alert fails
+      }
 
       return result;
     }),

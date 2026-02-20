@@ -2,6 +2,7 @@ import { router, protectedProcedure, checkLocationRole } from "../trpc";
 import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
 import { AuditService } from "../services/audit.service";
+import { AlertService } from "../services/alert.service";
 import { Role } from "@barstock/types";
 import type { VarianceReason } from "@barstock/types";
 import { z } from "zod";
@@ -134,8 +135,36 @@ export const sessionsRouter = router({
         actionType: "session.closed",
         objectType: "inventory_session",
         objectId: input.sessionId,
-        metadata: { adjustmentsCreated: result.adjustmentsCreated },
+        metadata: {
+          adjustmentsCreated: result.adjustmentsCreated,
+          adjustments: result.adjustments.map((a) => ({
+            itemId: a.itemId,
+            itemName: a.itemName,
+            variance: a.variance,
+            variancePercent: a.variancePercent,
+            reason: a.reason,
+          })),
+        },
       });
+
+      // Check for large adjustments and alert admins
+      if (result.adjustments.length > 0) {
+        try {
+          const session = await ctx.prisma.inventorySession.findUnique({
+            where: { id: input.sessionId },
+            include: { location: { select: { name: true } } },
+          });
+          const alertSvc = new AlertService(ctx.prisma);
+          await alertSvc.checkLargeAdjustment(
+            ctx.user.businessId,
+            result.adjustments,
+            input.sessionId,
+            session?.location.name ?? "Unknown"
+          );
+        } catch {
+          // Don't fail session close if alert fails
+        }
+      }
 
       return result;
     }),
