@@ -2,6 +2,7 @@
 
 import { use, useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 
@@ -52,10 +53,18 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const canDelete = ["platform_admin", "business_admin"].includes(user?.highestRole ?? "");
 
   const { data: location } = trpc.locations.getById.useQuery({ locationId: id });
+  const isArchived = location?.active === false;
   const { data: stats } = trpc.locations.stats.useQuery({ locationId: id });
   const { data: barAreas = [] } = trpc.areas.listBarAreas.useQuery({ locationId: id });
   const { data: tapLines = [] } = trpc.draft.listTapLines.useQuery({ locationId: id });
   const { data: pourProfiles = [] } = trpc.draft.listPourProfiles.useQuery({ locationId: id });
+
+  // Archive state
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const { data: archiveSummary, isFetching: summaryLoading } = trpc.locations.archiveSummary.useQuery(
+    { locationId: id },
+    { enabled: showArchiveConfirm }
+  );
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
@@ -114,10 +123,23 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [editProfileOz, setEditProfileOz] = useState("");
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  const router = useRouter();
   const utils = trpc.useUtils();
   const invalidateAreas = () => utils.areas.listBarAreas.invalidate({ locationId: id });
   const invalidateTaps = () => utils.draft.listTapLines.invalidate({ locationId: id });
   const invalidateProfiles = () => utils.draft.listPourProfiles.invalidate({ locationId: id });
+
+  const archiveMutation = trpc.locations.archive.useMutation({
+    onSuccess: () => {
+      router.push("/");
+    },
+  });
+
+  const restoreMutation = trpc.locations.restore.useMutation({
+    onSuccess: () => {
+      utils.locations.getById.invalidate({ locationId: id });
+    },
+  });
 
   const updateMutation = trpc.locations.update.useMutation({
     onSuccess: () => {
@@ -208,6 +230,24 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       </Link>
 
       <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">{location.name}</h1>
+
+      {isArchived && (
+        <div className="mb-6 flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <div>
+            <p className="font-medium text-amber-400">This location is archived</p>
+            <p className="text-sm text-amber-400/70">It is hidden from active views. All data is preserved.</p>
+          </div>
+          {canDelete && (
+            <button
+              onClick={() => restoreMutation.mutate({ locationId: id })}
+              disabled={restoreMutation.isPending}
+              className="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+            >
+              {restoreMutation.isPending ? "Restoring..." : "Restore Location"}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Unmapped Items" value={stats?.unmappedCount ?? 0} alert={!!stats?.unmappedCount} />
@@ -985,6 +1025,78 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
           })}
         </div>
       </div>
+
+      {/* Archive Location */}
+      {canDelete && !isArchived && (
+        <div className="mt-8 rounded-lg border border-red-500/20 bg-red-500/5 p-5">
+          <h2 className="text-lg font-semibold text-red-400">Danger Zone</h2>
+          <p className="mt-1 text-sm text-[#EAF0FF]/60">
+            Archiving hides this location and all its data from active views. Data is preserved and can be restored.
+          </p>
+          {!showArchiveConfirm ? (
+            <button
+              onClick={() => setShowArchiveConfirm(true)}
+              className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-500/20"
+            >
+              Archive Location
+            </button>
+          ) : (
+            <div className="mt-3 rounded-md border border-red-500/30 bg-[#0B1623] p-4">
+              <h3 className="font-medium text-red-400">
+                Archive &ldquo;{location.name}&rdquo;?
+              </h3>
+              <p className="mt-1 text-sm text-[#EAF0FF]/60">
+                This will hide the location and all its data from active views. Data is preserved and can be restored.
+              </p>
+
+              {summaryLoading ? (
+                <p className="mt-3 text-sm text-[#EAF0FF]/40">Loading summary...</p>
+              ) : archiveSummary ? (
+                <ul className="mt-3 space-y-1 text-sm text-[#EAF0FF]/70">
+                  {archiveSummary.inventoryItems > 0 && <li>{archiveSummary.inventoryItems} inventory items</li>}
+                  {archiveSummary.inventorySessions > 0 && <li>{archiveSummary.inventorySessions} counting sessions</li>}
+                  {archiveSummary.consumptionEvents > 0 && <li>{archiveSummary.consumptionEvents} consumption events (ledger)</li>}
+                  {archiveSummary.salesLines > 0 && <li>{archiveSummary.salesLines} sales lines</li>}
+                  {archiveSummary.purchaseOrders > 0 && <li>{archiveSummary.purchaseOrders} purchase orders</li>}
+                  {archiveSummary.recipes > 0 && <li>{archiveSummary.recipes} recipes</li>}
+                  {archiveSummary.parLevels > 0 && <li>{archiveSummary.parLevels} par levels</li>}
+                  {archiveSummary.barAreas > 0 && <li>{archiveSummary.barAreas} bar areas</li>}
+                  {archiveSummary.tapLines > 0 && <li>{archiveSummary.tapLines} tap lines</li>}
+                  {archiveSummary.kegInstances > 0 && <li>{archiveSummary.kegInstances} keg instances</li>}
+                  {archiveSummary.scaleProfiles > 0 && <li>{archiveSummary.scaleProfiles} scale profiles</li>}
+                  {archiveSummary.posConnections > 0 && <li>{archiveSummary.posConnections} POS connections</li>}
+                  {archiveSummary.guideCategories > 0 && <li>{archiveSummary.guideCategories} menu categories</li>}
+                  {archiveSummary.guideItems > 0 && <li>{archiveSummary.guideItems} menu items</li>}
+                  {archiveSummary.primaryUsers > 0 && (
+                    <li className="text-amber-400">
+                      {archiveSummary.primaryUsers} users with this as primary location (will need reassignment)
+                    </li>
+                  )}
+                </ul>
+              ) : null}
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => archiveMutation.mutate({ locationId: id })}
+                  disabled={archiveMutation.isPending}
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {archiveMutation.isPending ? "Archiving..." : "Confirm Archive"}
+                </button>
+                <button
+                  onClick={() => setShowArchiveConfirm(false)}
+                  className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
+                >
+                  Cancel
+                </button>
+              </div>
+              {archiveMutation.error && (
+                <p className="mt-2 text-sm text-red-400">{archiveMutation.error.message}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

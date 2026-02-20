@@ -214,6 +214,7 @@ model Location {
   province   String?
   postalCode String?  @map("postal_code")
   phone      String?
+  active     Boolean  @default(true)
   businessId  String   @map("business_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
