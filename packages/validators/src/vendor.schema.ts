@@ -6,6 +6,9 @@ export const vendorCreateSchema = z.object({
   contactEmail: z.string().email().optional(),
   contactPhone: z.string().optional(),
   address: z.string().optional(),
+  city: z.string().optional(),
+  province: z.string().optional(),
+  postalCode: z.string().optional(),
 });
 
 export const vendorListSchema = z.object({
@@ -23,6 +26,9 @@ export const vendorUpdateSchema = z.object({
   contactEmail: z.string().email().nullable().optional(),
   contactPhone: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  province: z.string().nullable().optional(),
+  postalCode: z.string().nullable().optional(),
   active: z.boolean().optional(),
 });
 

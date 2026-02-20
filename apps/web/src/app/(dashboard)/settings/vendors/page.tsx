@@ -28,7 +28,10 @@ export default function VendorsSettingsPage() {
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
-  const [newAddress, setNewAddress] = useState("");
+  const [newStreet, setNewStreet] = useState("");
+  const [newCity, setNewCity] = useState("");
+  const [newProvince, setNewProvince] = useState("");
+  const [newPostalCode, setNewPostalCode] = useState("");
 
   // Inline edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -36,6 +39,9 @@ export default function VendorsSettingsPage() {
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editAddress, setEditAddress] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editProvince, setEditProvince] = useState("");
+  const [editPostalCode, setEditPostalCode] = useState("");
 
   const createMut = trpc.vendors.create.useMutation({
     onSuccess: () => {
@@ -44,7 +50,10 @@ export default function VendorsSettingsPage() {
       setNewName("");
       setNewEmail("");
       setNewPhone("");
-      setNewAddress("");
+      setNewStreet("");
+      setNewCity("");
+      setNewProvince("");
+      setNewPostalCode("");
     },
   });
 
@@ -66,7 +75,10 @@ export default function VendorsSettingsPage() {
       name: newName.trim(),
       contactEmail: newEmail.trim() || undefined,
       contactPhone: newPhone.trim() || undefined,
-      address: newAddress.trim() || undefined,
+      address: newStreet.trim() || undefined,
+      city: newCity.trim() || undefined,
+      province: newProvince.trim() || undefined,
+      postalCode: newPostalCode.trim() || undefined,
     });
   }
 
@@ -76,6 +88,9 @@ export default function VendorsSettingsPage() {
     setEditEmail(v.contactEmail ?? "");
     setEditPhone(v.contactPhone ?? "");
     setEditAddress(v.address ?? "");
+    setEditCity(v.city ?? "");
+    setEditProvince(v.province ?? "");
+    setEditPostalCode(v.postalCode ?? "");
   }
 
   function handleSaveEdit(id: string) {
@@ -86,6 +101,9 @@ export default function VendorsSettingsPage() {
       contactEmail: editEmail.trim() || null,
       contactPhone: editPhone.trim() || null,
       address: editAddress.trim() || null,
+      city: editCity.trim() || null,
+      province: editProvince.trim() || null,
+      postalCode: editPostalCode.trim() || null,
     });
   }
 
@@ -155,14 +173,46 @@ export default function VendorsSettingsPage() {
                 placeholder="(555)555-5555"
               />
             </div>
+          </div>
+          <div className="mt-3">
+            <label className="mb-1 block text-xs text-[#EAF0FF]/60">Street Address</label>
+            <input
+              type="text"
+              value={newStreet}
+              onChange={(e) => setNewStreet(e.target.value)}
+              className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+              placeholder="123 Main St"
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Address</label>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">City</label>
               <input
                 type="text"
-                value={newAddress}
-                onChange={(e) => setNewAddress(e.target.value)}
+                value={newCity}
+                onChange={(e) => setNewCity(e.target.value)}
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
-                placeholder="123 Main St, City"
+                placeholder="City"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Province</label>
+              <input
+                type="text"
+                value={newProvince}
+                onChange={(e) => setNewProvince(e.target.value)}
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+                placeholder="ON"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Postal Code</label>
+              <input
+                type="text"
+                value={newPostalCode}
+                onChange={(e) => setNewPostalCode(e.target.value)}
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+                placeholder="A1B 2C3"
               />
             </div>
           </div>
@@ -194,6 +244,7 @@ export default function VendorsSettingsPage() {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Phone</th>
+                <th className="px-4 py-3">Address</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
@@ -237,6 +288,47 @@ export default function VendorsSettingsPage() {
                       />
                     ) : (
                       v.contactPhone ? formatPhone(v.contactPhone) : "—"
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-[#EAF0FF]/70">
+                    {editingId === v.id ? (
+                      <div className="space-y-1">
+                        <input
+                          type="text"
+                          value={editAddress}
+                          onChange={(e) => setEditAddress(e.target.value)}
+                          placeholder="Street"
+                          className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                        />
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            value={editCity}
+                            onChange={(e) => setEditCity(e.target.value)}
+                            placeholder="City"
+                            className="w-1/2 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                          />
+                          <input
+                            type="text"
+                            value={editProvince}
+                            onChange={(e) => setEditProvince(e.target.value)}
+                            placeholder="Prov"
+                            className="w-1/4 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                          />
+                          <input
+                            type="text"
+                            value={editPostalCode}
+                            onChange={(e) => setEditPostalCode(e.target.value)}
+                            placeholder="Postal"
+                            className="w-1/4 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF]"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      (() => {
+                        const parts = [v.address, v.city, v.province, v.postalCode].filter(Boolean);
+                        return parts.length > 0 ? parts.join(", ") : "—";
+                      })()
                     )}
                   </td>
                   <td className="px-4 py-3">

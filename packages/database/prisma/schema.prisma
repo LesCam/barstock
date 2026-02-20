@@ -808,6 +808,9 @@ model Vendor {
   contactEmail String?  @map("contact_email")
   contactPhone String?  @map("contact_phone")
   address      String?
+  city         String?
+  province     String?
+  postalCode   String?  @map("postal_code")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
