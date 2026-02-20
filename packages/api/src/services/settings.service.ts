@@ -1,9 +1,10 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
-import type { CapabilityToggles, AutoLockPolicy } from "@barstock/validators";
+import type { CapabilityToggles, AutoLockPolicy, AlertRules } from "@barstock/validators";
 
 export interface BusinessSettingsData {
   capabilities: CapabilityToggles;
   autoLock: AutoLockPolicy;
+  alertRules: AlertRules;
 }
 
 const DEFAULT_SETTINGS: BusinessSettingsData = {
@@ -23,6 +24,12 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     timeoutSeconds: 60,
     allowPin: true,
     allowBiometric: true,
+  },
+  alertRules: {
+    variancePercent: { enabled: true, threshold: 10 },
+    lowStock: { enabled: false, threshold: 5 },
+    staleCountDays: { enabled: true, threshold: 7 },
+    kegNearEmpty: { enabled: true, threshold: 10 },
   },
 };
 
@@ -46,6 +53,10 @@ export class SettingsService {
         ...DEFAULT_SETTINGS.autoLock,
         ...stored.autoLock,
       },
+      alertRules: {
+        ...DEFAULT_SETTINGS.alertRules,
+        ...stored.alertRules,
+      },
     };
   }
 
@@ -54,6 +65,7 @@ export class SettingsService {
     patch: {
       capabilities?: Partial<CapabilityToggles>;
       autoLock?: Partial<AutoLockPolicy>;
+      alertRules?: Partial<AlertRules>;
     }
   ): Promise<BusinessSettingsData> {
     const current = await this.getSettings(businessId);
@@ -65,6 +77,10 @@ export class SettingsService {
       autoLock: {
         ...current.autoLock,
         ...patch.autoLock,
+      },
+      alertRules: {
+        ...current.alertRules,
+        ...patch.alertRules,
       },
     };
 

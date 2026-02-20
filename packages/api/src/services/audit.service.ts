@@ -13,6 +13,10 @@ interface ListParams {
   businessId: string;
   objectType?: string;
   objectId?: string;
+  actionType?: string;
+  actorUserId?: string;
+  fromDate?: Date;
+  toDate?: Date;
   cursor?: string;
   limit: number;
 }
@@ -34,11 +38,19 @@ export class AuditService {
   }
 
   async list(params: ListParams) {
-    const { businessId, objectType, objectId, cursor, limit } = params;
+    const { businessId, objectType, objectId, actionType, actorUserId, fromDate, toDate, cursor, limit } = params;
 
     const where: Record<string, unknown> = { businessId };
     if (objectType) where.objectType = objectType;
     if (objectId) where.objectId = objectId;
+    if (actionType) where.actionType = actionType;
+    if (actorUserId) where.actorUserId = actorUserId;
+    if (fromDate || toDate) {
+      where.createdAt = {
+        ...(fromDate ? { gte: fromDate } : {}),
+        ...(toDate ? { lte: toDate } : {}),
+      };
+    }
 
     const items = await this.prisma.auditLog.findMany({
       where,
@@ -46,7 +58,7 @@ export class AuditService {
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       orderBy: { createdAt: "desc" },
       include: {
-        actorUser: { select: { id: true, email: true } },
+        actorUser: { select: { id: true, email: true, firstName: true, lastName: true } },
       },
     });
 

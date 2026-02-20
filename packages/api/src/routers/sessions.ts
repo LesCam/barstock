@@ -1,6 +1,7 @@
 import { router, protectedProcedure, checkLocationRole } from "../trpc";
 import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
+import { AuditService } from "../services/audit.service";
 import { Role } from "@barstock/types";
 import type { VarianceReason } from "@barstock/types";
 import { z } from "zod";
@@ -16,9 +17,21 @@ export const sessionsRouter = router({
         data: { endedTs: new Date(), closedBy: ctx.user.userId },
       });
 
-      return ctx.prisma.inventorySession.create({
+      const session = await ctx.prisma.inventorySession.create({
         data: { ...input, createdBy: ctx.user.userId },
       });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "session.created",
+        objectType: "inventory_session",
+        objectId: session.id,
+        metadata: { locationId: input.locationId },
+      });
+
+      return session;
     }),
 
   list: protectedProcedure
@@ -112,6 +125,16 @@ export const sessionsRouter = router({
       await ctx.prisma.inventorySession.update({
         where: { id: input.sessionId },
         data: { closedBy: ctx.user.userId },
+      });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "session.closed",
+        objectType: "inventory_session",
+        objectId: input.sessionId,
+        metadata: { adjustmentsCreated: result.adjustmentsCreated },
       });
 
       return result;

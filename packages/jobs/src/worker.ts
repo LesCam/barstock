@@ -2,6 +2,7 @@ import IORedis from "ioredis";
 import { importPOSWorker } from "./jobs/import-pos.job";
 import { depletionWorker } from "./jobs/depletion.job";
 import { snapshotWorker } from "./jobs/snapshot.job";
+import { alertsWorker } from "./jobs/alerts.job";
 import { scheduleRecurringJobs } from "./queue";
 
 const connection = new IORedis(process.env.REDIS_URL || "redis://localhost:6379", {
@@ -18,6 +19,7 @@ async function main() {
   importPOSWorker(connection);
   depletionWorker(connection);
   snapshotWorker(connection);
+  alertsWorker(connection);
 
   console.log("All workers running. Waiting for jobs...");
 }

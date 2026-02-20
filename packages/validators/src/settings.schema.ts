@@ -23,10 +23,25 @@ export const autoLockPolicySchema = z.object({
 
 export type AutoLockPolicy = z.infer<typeof autoLockPolicySchema>;
 
+export const alertRuleSchema = z.object({
+  enabled: z.boolean().default(false),
+  threshold: z.number().min(0),
+});
+
+export const alertRulesSchema = z.object({
+  variancePercent: alertRuleSchema.default({ enabled: true, threshold: 10 }),
+  lowStock: alertRuleSchema.default({ enabled: false, threshold: 5 }),
+  staleCountDays: alertRuleSchema.default({ enabled: true, threshold: 7 }),
+  kegNearEmpty: alertRuleSchema.default({ enabled: true, threshold: 10 }),
+});
+
+export type AlertRules = z.infer<typeof alertRulesSchema>;
+
 export const settingsUpdateSchema = z.object({
   businessId: z.string().uuid(),
   capabilities: capabilityTogglesSchema.partial().optional(),
   autoLock: autoLockPolicySchema.partial().optional(),
+  alertRules: alertRulesSchema.partial().optional(),
 });
 
 export const settingsGetSchema = z.object({

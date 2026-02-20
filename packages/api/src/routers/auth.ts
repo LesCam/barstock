@@ -13,6 +13,7 @@ import {
   buildUserPayload,
   deriveDefaultPermissions,
 } from "../services/auth.service";
+import { AuditService } from "../services/audit.service";
 
 export const authRouter = router({
   login: publicProcedure.input(loginSchema).mutation(async ({ ctx, input }) => {
@@ -26,12 +27,31 @@ export const authRouter = router({
 
     const valid = await verifyPassword(input.password, user.passwordHash);
     if (!valid) {
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: user.businessId,
+        actorUserId: user.id,
+        actionType: "auth.login_failed",
+        objectType: "user",
+        objectId: user.id,
+        metadata: { reason: "invalid_password" },
+      });
       throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
     }
 
     const payload = await buildUserPayload(ctx.prisma, user.id);
     const accessToken = createAccessToken(payload);
     const refreshToken = createRefreshToken(payload);
+
+    const audit = new AuditService(ctx.prisma);
+    await audit.log({
+      businessId: user.businessId,
+      actorUserId: user.id,
+      actionType: "auth.login",
+      objectType: "user",
+      objectId: user.id,
+      metadata: { method: "password" },
+    });
 
     return {
       accessToken,
@@ -49,12 +69,29 @@ export const authRouter = router({
       });
 
       if (!user) {
+        const audit = new AuditService(ctx.prisma);
+        await audit.log({
+          businessId: input.businessId,
+          actionType: "auth.login_pin_failed",
+          objectType: "user",
+          metadata: { reason: "invalid_pin" },
+        });
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid PIN" });
       }
 
       const payload = await buildUserPayload(ctx.prisma, user.id);
       const accessToken = createAccessToken(payload);
       const refreshToken = createRefreshToken(payload);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: user.businessId,
+        actorUserId: user.id,
+        actionType: "auth.login_pin",
+        objectType: "user",
+        objectId: user.id,
+        metadata: { method: "pin" },
+      });
 
       return {
         accessToken,
@@ -108,7 +145,7 @@ export const authRouter = router({
         }
       }
       const passwordHash = await hashPassword(input.password);
-      return ctx.prisma.user.create({
+      const user = await ctx.prisma.user.create({
         data: {
           email: input.email,
           passwordHash,
@@ -121,6 +158,18 @@ export const authRouter = router({
           pin: input.pin,
         },
       });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: input.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "user.created",
+        objectType: "user",
+        objectId: user.id,
+        metadata: { email: input.email, role: input.role },
+      });
+
+      return user;
     }),
 
   listUsers: protectedProcedure
@@ -185,7 +234,21 @@ export const authRouter = router({
         }
         updateData.pin = data.pin;
       }
-      return ctx.prisma.user.update({ where: { id: userId }, data: updateData });
+      const user = await ctx.prisma.user.update({ where: { id: userId }, data: updateData });
+
+      const audit = new AuditService(ctx.prisma);
+      // Exclude password from metadata
+      const { password: _, ...metaFields } = data;
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "user.updated",
+        objectType: "user",
+        objectId: userId,
+        metadata: metaFields,
+      });
+
+      return user;
     }),
 
   getUserDetail: protectedProcedure
@@ -214,18 +277,42 @@ export const authRouter = router({
   grantLocationAccess: protectedProcedure
     .use(requireRole("business_admin"))
     .input(userLocationCreateSchema)
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.userLocation.create({ data: input })
-    ),
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.prisma.userLocation.create({ data: input });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "user.location_access.granted",
+        objectType: "user_location",
+        objectId: input.userId,
+        metadata: { locationId: input.locationId, role: input.role },
+      });
+
+      return result;
+    }),
 
   revokeLocationAccess: protectedProcedure
     .use(requireRole("business_admin"))
     .input(z.object({ userId: z.string().uuid(), locationId: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.userLocation.delete({
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.prisma.userLocation.delete({
         where: { userId_locationId: input },
-      })
-    ),
+      });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "user.location_access.revoked",
+        objectType: "user_location",
+        objectId: input.userId,
+        metadata: { locationId: input.locationId },
+      });
+
+      return result;
+    }),
 
   switchPrimaryLocation: protectedProcedure
     .use(requireRole("business_admin"))
@@ -375,6 +462,16 @@ export const authRouter = router({
           },
         });
       }
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "user.permission.updated",
+        objectType: "user_location",
+        objectId: input.userId,
+        metadata: { locationId: input.locationId, permissionKey: input.permissionKey, value: input.value },
+      });
 
       return { success: true };
     }),

@@ -41,6 +41,7 @@ export default function SettingsPage() {
       <BusinessProfileSection businessId={businessId} canEdit={canEdit} />
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
       <AutoLockPolicySection businessId={businessId} canEdit={canEdit} />
+      <AlertRulesSection businessId={businessId} canEdit={canEdit} />
       {locationId && <ScaleProfilesSection locationId={locationId} canEdit={canEdit} />}
     </div>
   );
@@ -765,6 +766,144 @@ function ScaleProfilesSection({ locationId, canEdit }: { locationId: string; can
       )}
       {(updateMutation.error || deleteMutation.error) && (
         <p className="mt-3 text-sm text-red-600">{(updateMutation.error || deleteMutation.error)?.message}</p>
+      )}
+    </div>
+  );
+}
+
+const ALERT_RULE_LABELS: Record<string, { label: string; unit: string; description: string }> = {
+  variancePercent: {
+    label: "Variance Threshold",
+    unit: "%",
+    description: "Alert when item variance exceeds this percentage",
+  },
+  lowStock: {
+    label: "Low Stock",
+    unit: "units",
+    description: "Alert when on-hand quantity drops below this level",
+  },
+  staleCountDays: {
+    label: "Stale Count",
+    unit: "days",
+    description: "Alert when items haven't been counted in this many days",
+  },
+  kegNearEmpty: {
+    label: "Keg Near Empty",
+    unit: "% remaining",
+    description: "Alert when a tapped keg drops below this percentage",
+  },
+};
+
+function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {
+  const { data: settings } = trpc.settings.get.useQuery({ businessId });
+  const utils = trpc.useUtils();
+
+  const [local, setLocal] = useState<Record<string, { enabled: boolean; threshold: number }> | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (settings?.alertRules) {
+      setLocal(settings.alertRules as any);
+      setDirty(false);
+    }
+  }, [settings]);
+
+  const updateMutation = trpc.settings.update.useMutation({
+    onSuccess: () => {
+      utils.settings.get.invalidate({ businessId });
+      setDirty(false);
+    },
+  });
+
+  function handleToggle(key: string) {
+    setLocal((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [key]: { ...prev[key], enabled: !prev[key].enabled } };
+    });
+    setDirty(true);
+  }
+
+  function handleThresholdChange(key: string, value: number) {
+    setLocal((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [key]: { ...prev[key], threshold: value } };
+    });
+    setDirty(true);
+  }
+
+  function handleSave() {
+    if (!local) return;
+    updateMutation.mutate({ businessId, alertRules: local });
+  }
+
+  if (!local) return <div className="text-[#EAF0FF]/60">Loading alert settings...</div>;
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Alert Rules</h2>
+        {canEdit && dirty && (
+          <button
+            onClick={handleSave}
+            disabled={updateMutation.isPending}
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+          >
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
+          </button>
+        )}
+      </div>
+
+      <p className="mb-4 text-sm text-[#EAF0FF]/50">
+        Configure thresholds for daily inventory alerts. Notifications are evaluated each morning and sent to business admins.
+      </p>
+
+      <div className="space-y-4">
+        {Object.entries(ALERT_RULE_LABELS).map(([key, info]) => {
+          const rule = local[key];
+          if (!rule) return null;
+          return (
+            <div key={key} className="flex items-center gap-4">
+              {/* Toggle */}
+              <button
+                type="button"
+                disabled={!canEdit}
+                onClick={() => handleToggle(key)}
+                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                  rule.enabled ? "bg-[#E9B44C]" : "bg-white/10"
+                } ${!canEdit ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    rule.enabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+
+              {/* Label + description */}
+              <div className="flex-1">
+                <span className="text-sm text-[#EAF0FF]/80">{info.label}</span>
+                <p className="text-xs text-[#EAF0FF]/40">{info.description}</p>
+              </div>
+
+              {/* Threshold input */}
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={0}
+                  value={rule.threshold}
+                  onChange={(e) => handleThresholdChange(key, Number(e.target.value))}
+                  disabled={!canEdit || !rule.enabled}
+                  className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
+                />
+                <span className="text-xs text-[#EAF0FF]/40">{info.unit}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {updateMutation.error && (
+        <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
       )}
     </div>
   );

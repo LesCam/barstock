@@ -1,6 +1,7 @@
 import { router, protectedProcedure, requireLocationAccess } from "../trpc";
 import { transferCreateSchema, transferListSchema } from "@barstock/validators";
 import { TransferService } from "../services/transfer.service";
+import { AuditService } from "../services/audit.service";
 
 export const transfersRouter = router({
   create: protectedProcedure
@@ -8,7 +9,23 @@ export const transfersRouter = router({
     .input(transferCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const svc = new TransferService(ctx.prisma);
-      return svc.createTransfer(input);
+      const result = await svc.createTransfer(input);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "transfer.created",
+        objectType: "transfer",
+        metadata: {
+          inventoryItemId: input.inventoryItemId,
+          fromSubAreaId: input.fromSubAreaId,
+          toSubAreaId: input.toSubAreaId,
+          quantity: input.quantity,
+        },
+      });
+
+      return result;
     }),
 
   list: protectedProcedure

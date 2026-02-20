@@ -8,6 +8,7 @@ const connection = new IORedis(process.env.REDIS_URL || "redis://localhost:6379"
 export const importPOSQueue = new Queue("import-pos", { connection });
 export const depletionQueue = new Queue("depletion", { connection });
 export const snapshotQueue = new Queue("snapshot", { connection });
+export const alertsQueue = new Queue("alerts", { connection });
 
 /**
  * Schedule recurring jobs.
@@ -33,5 +34,12 @@ export async function scheduleRecurringJobs() {
     "nightly-snapshot",
     { pattern: "0 6 * * *" },
     { name: "nightly-snapshot", data: {} }
+  );
+
+  // Daily alert evaluation at 6:30 AM (after snapshot)
+  await alertsQueue.upsertJobScheduler(
+    "daily-alerts",
+    { pattern: "30 6 * * *" },
+    { name: "daily-alerts", data: {} }
   );
 }

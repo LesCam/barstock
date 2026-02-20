@@ -1,12 +1,25 @@
 import { router, protectedProcedure } from "../trpc";
 import { inventoryItemCreateSchema, inventoryItemUpdateSchema, priceHistoryCreateSchema, onHandQuerySchema } from "@barstock/validators";
 import { InventoryService } from "../services/inventory.service";
+import { AuditService } from "../services/audit.service";
 import { z } from "zod";
 
 export const inventoryRouter = router({
   create: protectedProcedure
     .input(inventoryItemCreateSchema)
-    .mutation(({ ctx, input }) => ctx.prisma.inventoryItem.create({ data: input })),
+    .mutation(async ({ ctx, input }) => {
+      const item = await ctx.prisma.inventoryItem.create({ data: input });
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "inventory_item.created",
+        objectType: "inventory_item",
+        objectId: item.id,
+        metadata: { name: input.name, categoryId: input.categoryId },
+      });
+      return item;
+    }),
 
   list: protectedProcedure
     .input(z.object({ locationId: z.string().uuid() }))
@@ -33,9 +46,19 @@ export const inventoryRouter = router({
 
   update: protectedProcedure
     .input(z.object({ id: z.string().uuid() }).merge(inventoryItemUpdateSchema))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      return ctx.prisma.inventoryItem.update({ where: { id }, data });
+      const item = await ctx.prisma.inventoryItem.update({ where: { id }, data });
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "inventory_item.updated",
+        objectType: "inventory_item",
+        objectId: id,
+        metadata: data,
+      });
+      return item;
     }),
 
   addPrice: protectedProcedure

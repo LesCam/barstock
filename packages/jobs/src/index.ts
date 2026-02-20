@@ -1,1 +1,1 @@
-export { importPOSQueue, depletionQueue, snapshotQueue, scheduleRecurringJobs } from "./queue";
+export { importPOSQueue, depletionQueue, snapshotQueue, alertsQueue, scheduleRecurringJobs } from "./queue";
