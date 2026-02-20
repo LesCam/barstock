@@ -504,6 +504,7 @@ model Recipe {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   locationId  String   @map("location_id") @db.Uuid
   name        String
+  category    String?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()

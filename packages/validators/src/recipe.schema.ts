@@ -10,11 +10,13 @@ const ingredientSchema = z.object({
 export const recipeCreateSchema = z.object({
   locationId: z.string().uuid(),
   name: z.string().min(1).max(200),
+  category: z.string().max(100).optional(),
   ingredients: z.array(ingredientSchema).min(1),
 });
 
 export const recipeUpdateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
+  category: z.string().max(100).nullish(),
   active: z.boolean().optional(),
   ingredients: z.array(ingredientSchema).min(1).optional(),
 });

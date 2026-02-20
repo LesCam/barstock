@@ -41,9 +41,18 @@ export default function RecipesPage() {
     { enabled: !!locationId }
   );
 
+  // Category filter
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
+
+  const { data: existingCategories } = trpc.recipes.listCategories.useQuery(
+    { locationId: locationId! },
+    { enabled: !!locationId }
+  );
+
   // Create form
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
   const [ingredients, setIngredients] = useState<IngredientRow[]>([
     emptyIngredient(),
   ]);
@@ -54,6 +63,7 @@ export default function RecipesPage() {
   // Edit form
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editCategory, setEditCategory] = useState("");
   const [editIngredients, setEditIngredients] = useState<IngredientRow[]>([]);
   const [editIngredientSearch, setEditIngredientSearch] = useState<
     Record<number, string>
@@ -65,6 +75,7 @@ export default function RecipesPage() {
   const createMut = trpc.recipes.create.useMutation({
     onSuccess: () => {
       utils.recipes.list.invalidate();
+      utils.recipes.listCategories.invalidate();
       resetCreateForm();
     },
   });
@@ -72,6 +83,7 @@ export default function RecipesPage() {
   const updateMut = trpc.recipes.update.useMutation({
     onSuccess: () => {
       utils.recipes.list.invalidate();
+      utils.recipes.listCategories.invalidate();
       setEditingId(null);
     },
   });
@@ -83,6 +95,7 @@ export default function RecipesPage() {
   function resetCreateForm() {
     setShowCreate(false);
     setName("");
+    setCategory("");
     setIngredients([emptyIngredient()]);
     setIngredientSearch({});
   }
@@ -96,6 +109,7 @@ export default function RecipesPage() {
     createMut.mutate({
       locationId,
       name: name.trim(),
+      ...(category.trim() && { category: category.trim() }),
       ingredients: validIngredients.map((i) => ({
         inventoryItemId: i.inventoryItemId,
         quantity: Number(i.quantity),
@@ -107,6 +121,7 @@ export default function RecipesPage() {
   function startEdit(recipe: any) {
     setEditingId(recipe.id);
     setEditName(recipe.name);
+    setEditCategory(recipe.category ?? "");
     setEditIngredients(
       recipe.ingredients.map((ing: any) => ({
         inventoryItemId: ing.inventoryItemId,
@@ -127,6 +142,7 @@ export default function RecipesPage() {
     updateMut.mutate({
       id: editingId,
       name: editName.trim(),
+      category: editCategory.trim() || null,
       ingredients: validIngredients.map((i) => ({
         inventoryItemId: i.inventoryItemId,
         quantity: Number(i.quantity),
@@ -171,12 +187,20 @@ export default function RecipesPage() {
   }
 
   const activeRecipes = useMemo(
-    () => recipes?.filter((r) => r.active) ?? [],
-    [recipes]
+    () => {
+      let list = recipes?.filter((r) => r.active) ?? [];
+      if (categoryFilter) list = list.filter((r) => r.category === categoryFilter);
+      return list;
+    },
+    [recipes, categoryFilter]
   );
   const inactiveRecipes = useMemo(
-    () => recipes?.filter((r) => !r.active) ?? [],
-    [recipes]
+    () => {
+      let list = recipes?.filter((r) => !r.active) ?? [];
+      if (categoryFilter) list = list.filter((r) => r.category === categoryFilter);
+      return list;
+    },
+    [recipes, categoryFilter]
   );
 
   function renderIngredientForm(
@@ -304,17 +328,37 @@ export default function RecipesPage() {
           <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]">
             New Recipe
           </h2>
-          <div className="mb-3">
-            <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">
-              Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Margarita"
-              className="w-full max-w-sm rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30 focus:border-[#E9B44C] focus:outline-none"
-            />
+          <div className="mb-3 flex gap-3">
+            <div className="flex-1 max-w-sm">
+              <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">
+                Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Margarita"
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30 focus:border-[#E9B44C] focus:outline-none"
+              />
+            </div>
+            <div className="w-48">
+              <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">
+                Category
+              </label>
+              <input
+                type="text"
+                list="recipe-categories"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="e.g. Cocktail"
+                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30 focus:border-[#E9B44C] focus:outline-none"
+              />
+              <datalist id="recipe-categories">
+                {(existingCategories ?? []).map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </div>
           </div>
           {renderIngredientForm(
             ingredients,
@@ -348,11 +392,42 @@ export default function RecipesPage() {
           No recipes yet. Create one to map cocktails to inventory depletion.
         </div>
       ) : (
+        <>
+        {existingCategories && existingCategories.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[#EAF0FF]/50">Filter:</span>
+            <button
+              onClick={() => setCategoryFilter("")}
+              className={`rounded-full px-3 py-1 text-xs ${
+                !categoryFilter
+                  ? "bg-[#E9B44C] text-[#0B1623]"
+                  : "border border-white/10 text-[#EAF0FF]/60 hover:border-[#E9B44C]/50"
+              }`}
+            >
+              All
+            </button>
+            {existingCategories.map((c) => (
+              <button
+                key={c}
+                onClick={() => setCategoryFilter(categoryFilter === c ? "" : c)}
+                className={`rounded-full px-3 py-1 text-xs ${
+                  categoryFilter === c
+                    ? "bg-[#E9B44C] text-[#0B1623]"
+                    : "border border-white/10 text-[#EAF0FF]/60 hover:border-[#E9B44C]/50"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
               <tr>
                 <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Ingredients</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Actions</th>
@@ -367,21 +442,41 @@ export default function RecipesPage() {
                     key={recipe.id}
                     className={!recipe.active ? "opacity-50" : ""}
                   >
-                    <td className="px-4 py-3" colSpan={isExpanded ? 4 : undefined}>
+                    <td className="px-4 py-3" colSpan={isExpanded ? 5 : undefined}>
                       {isExpanded ? (
                         <div>
                           {isEditing ? (
                             <div>
-                              <div className="mb-3">
-                                <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">
-                                  Name
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editName}
-                                  onChange={(e) => setEditName(e.target.value)}
-                                  className="w-full max-w-sm rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
-                                />
+                              <div className="mb-3 flex gap-3">
+                                <div className="flex-1 max-w-sm">
+                                  <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">
+                                    Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
+                                  />
+                                </div>
+                                <div className="w-48">
+                                  <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">
+                                    Category
+                                  </label>
+                                  <input
+                                    type="text"
+                                    list="recipe-categories-edit"
+                                    value={editCategory}
+                                    onChange={(e) => setEditCategory(e.target.value)}
+                                    placeholder="e.g. Cocktail"
+                                    className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30 focus:border-[#E9B44C] focus:outline-none"
+                                  />
+                                  <datalist id="recipe-categories-edit">
+                                    {(existingCategories ?? []).map((c) => (
+                                      <option key={c} value={c} />
+                                    ))}
+                                  </datalist>
+                                </div>
                               </div>
                               {renderIngredientForm(
                                 editIngredients,
@@ -426,6 +521,11 @@ export default function RecipesPage() {
                                 <span className="text-base font-medium text-[#EAF0FF]">
                                   {recipe.name}
                                 </span>
+                                {recipe.category && (
+                                  <span className="rounded-full bg-[#E9B44C]/10 px-2 py-0.5 text-xs text-[#E9B44C]">
+                                    {recipe.category}
+                                  </span>
+                                )}
                                 <span
                                   className={`rounded-full px-2 py-0.5 text-xs ${
                                     recipe.active
@@ -510,6 +610,15 @@ export default function RecipesPage() {
                     {!isExpanded && (
                       <>
                         <td className="px-4 py-3 text-[#EAF0FF]/60">
+                          {recipe.category ? (
+                            <span className="rounded-full bg-[#E9B44C]/10 px-2 py-0.5 text-xs text-[#E9B44C]">
+                              {recipe.category}
+                            </span>
+                          ) : (
+                            <span className="text-[#EAF0FF]/30">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-[#EAF0FF]/60">
                           {recipe.ingredients.length} ingredient
                           {recipe.ingredients.length !== 1 ? "s" : ""}
                         </td>
@@ -540,6 +649,7 @@ export default function RecipesPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

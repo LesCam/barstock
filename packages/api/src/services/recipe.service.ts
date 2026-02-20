@@ -9,6 +9,7 @@ export class RecipeService {
       data: {
         locationId: input.locationId,
         name: input.name,
+        category: input.category ?? null,
         ingredients: {
           create: input.ingredients.map((ing) => ({
             inventoryItemId: ing.inventoryItemId,
@@ -43,6 +44,7 @@ export class RecipeService {
         where: { id: recipeId },
         data: {
           ...(input.name !== undefined && { name: input.name }),
+          ...(input.category !== undefined && { category: input.category ?? null }),
           ...(input.active !== undefined && { active: input.active }),
         },
         include: {
@@ -52,6 +54,16 @@ export class RecipeService {
         },
       });
     });
+  }
+
+  async listCategories(locationId: string) {
+    const results = await this.prisma.recipe.findMany({
+      where: { locationId, category: { not: null } },
+      select: { category: true },
+      distinct: ["category"],
+      orderBy: { category: "asc" },
+    });
+    return results.map((r) => r.category!);
   }
 
   async list(locationId: string) {

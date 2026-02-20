@@ -45,6 +45,13 @@ export const recipesRouter = router({
     return svc.list(input.locationId);
   }),
 
+  listCategories: protectedProcedure
+    .input(recipeListSchema)
+    .query(({ ctx, input }) => {
+      const svc = new RecipeService(ctx.prisma);
+      return svc.listCategories(input.locationId);
+    }),
+
   getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(({ ctx, input }) => {
