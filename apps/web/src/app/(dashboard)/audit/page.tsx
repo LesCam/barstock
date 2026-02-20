@@ -38,8 +38,10 @@ function formatRelativeTime(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function exportCsv(items: any[]) {
-  const headers = ["Timestamp", "Actor", "Action", "Object Type", "Object ID", "Metadata"];
+function exportCsv(items: any[], isPlatform: boolean) {
+  const headers = isPlatform
+    ? ["Timestamp", "Business", "Actor", "Action", "Object Type", "Object ID", "Metadata"]
+    : ["Timestamp", "Actor", "Action", "Object Type", "Object ID", "Metadata"];
   const rows = items.map((entry) => {
     const actor = entry.actorUser
       ? entry.actorUser.firstName || entry.actorUser.lastName
@@ -47,7 +49,7 @@ function exportCsv(items: any[]) {
         : entry.actorUser.email
       : "System";
     const metadata = entry.metadataJson ? JSON.stringify(entry.metadataJson) : "";
-    return [
+    const base = [
       new Date(entry.createdAt).toISOString(),
       actor,
       entry.actionType,
@@ -55,6 +57,8 @@ function exportCsv(items: any[]) {
       entry.objectId ?? "",
       metadata,
     ];
+    if (isPlatform) base.splice(1, 0, entry.business?.name ?? "");
+    return base;
   });
 
   const csvContent = [headers, ...rows]
@@ -74,7 +78,9 @@ export default function AuditPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const businessId = user?.businessId as string | undefined;
+  const isPlatform = user?.highestRole === "platform_admin";
 
+  const [filterBusinessId, setFilterBusinessId] = useState("");
   const [actionType, setActionType] = useState("");
   const [actorUserId, setActorUserId] = useState("");
   const [objectType, setObjectType] = useState("");
@@ -84,24 +90,34 @@ export default function AuditPage() {
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // The businessId sent to API: platform admins use filter (empty = all), regular admins use their own
+  const queryBusinessId = isPlatform
+    ? filterBusinessId || undefined
+    : businessId;
+
+  const { data: businesses } = trpc.audit.businesses.useQuery(
+    undefined,
+    { enabled: isPlatform }
+  );
+
   const { data: actionTypes } = trpc.audit.actionTypes.useQuery(
-    { businessId: businessId! },
-    { enabled: !!businessId }
+    { businessId: queryBusinessId },
+    { enabled: isPlatform || !!businessId }
   );
 
   const { data: objectTypes } = trpc.audit.objectTypes.useQuery(
-    { businessId: businessId! },
-    { enabled: !!businessId }
+    { businessId: queryBusinessId },
+    { enabled: isPlatform || !!businessId }
   );
 
   const { data: actors } = trpc.audit.actors.useQuery(
-    { businessId: businessId! },
-    { enabled: !!businessId }
+    { businessId: queryBusinessId },
+    { enabled: isPlatform || !!businessId }
   );
 
   const { data, isLoading } = trpc.audit.list.useQuery(
     {
-      businessId: businessId!,
+      businessId: queryBusinessId,
       ...(actionType && { actionType }),
       ...(actorUserId && { actorUserId }),
       ...(objectType && { objectType }),
@@ -111,7 +127,7 @@ export default function AuditPage() {
       cursor,
       limit: 50,
     },
-    { enabled: !!businessId }
+    { enabled: isPlatform || !!businessId }
   );
 
   // Accumulate pages
@@ -136,18 +152,33 @@ export default function AuditPage() {
     return actor.email;
   }
 
-  const hasFilters = actionType || actorUserId || objectType || objectId || fromDate || toDate;
+  const hasFilters = filterBusinessId || actionType || actorUserId || objectType || objectId || fromDate || toDate;
 
-  if (!businessId) {
+  if (!isPlatform && !businessId) {
     return <div className="text-[#EAF0FF]/60">No business selected.</div>;
   }
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">Audit Log</h1>
+      <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">
+        {isPlatform ? "Platform Audit Log" : "Audit Log"}
+      </h1>
 
       {/* Filter bar */}
       <div className="mb-4 flex flex-wrap gap-3">
+        {isPlatform && (
+          <select
+            value={filterBusinessId}
+            onChange={(e) => { setFilterBusinessId(e.target.value); handleFilterChange(); }}
+            className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+          >
+            <option value="">All businesses</option>
+            {businesses?.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        )}
+
         <select
           value={actionType}
           onChange={(e) => { setActionType(e.target.value); handleFilterChange(); }}
@@ -214,6 +245,7 @@ export default function AuditPage() {
         {hasFilters && (
           <button
             onClick={() => {
+              setFilterBusinessId("");
               setActionType("");
               setActorUserId("");
               setObjectType("");
@@ -230,7 +262,7 @@ export default function AuditPage() {
 
         {items.length > 0 && (
           <button
-            onClick={() => exportCsv(items)}
+            onClick={() => exportCsv(items, isPlatform)}
             className="rounded-md border border-white/10 px-3 py-2 text-sm text-[#EAF0FF]/60 hover:bg-white/5"
           >
             Export CSV
@@ -249,6 +281,7 @@ export default function AuditPage() {
               <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
                 <tr>
                   <th className="px-4 py-3">Timestamp</th>
+                  {isPlatform && <th className="px-4 py-3">Business</th>}
                   <th className="px-4 py-3">Actor</th>
                   <th className="px-4 py-3">Action</th>
                   <th className="px-4 py-3">Object Type</th>
@@ -268,6 +301,11 @@ export default function AuditPage() {
                     >
                       {formatRelativeTime(new Date(entry.createdAt))}
                     </td>
+                    {isPlatform && (
+                      <td className="px-4 py-3 text-[#EAF0FF]/70">
+                        {entry.business?.name ?? "—"}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-[#EAF0FF]/80">
                       {actorName(entry.actorUser)}
                     </td>

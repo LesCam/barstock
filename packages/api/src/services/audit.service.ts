@@ -10,7 +10,7 @@ interface LogEntry {
 }
 
 interface ListParams {
-  businessId: string;
+  businessId?: string;
   objectType?: string;
   objectId?: string;
   actionType?: string;
@@ -40,7 +40,8 @@ export class AuditService {
   async list(params: ListParams) {
     const { businessId, objectType, objectId, actionType, actorUserId, fromDate, toDate, cursor, limit } = params;
 
-    const where: Record<string, unknown> = { businessId };
+    const where: Record<string, unknown> = {};
+    if (businessId) where.businessId = businessId;
     if (objectType) where.objectType = objectType;
     if (objectId) where.objectId = objectId;
     if (actionType) where.actionType = actionType;
@@ -59,6 +60,7 @@ export class AuditService {
       orderBy: { createdAt: "desc" },
       include: {
         actorUser: { select: { id: true, email: true, firstName: true, lastName: true } },
+        business: { select: { id: true, name: true } },
       },
     });
 
