@@ -80,6 +80,21 @@ export const authRouter = router({
 
   me: protectedProcedure.query(({ ctx }) => ctx.user),
 
+  verifyPin: protectedProcedure
+    .input(z.object({ pin: z.string().length(4) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: ctx.user.userId },
+        select: { pin: true },
+      });
+
+      if (!user?.pin || user.pin !== input.pin) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Incorrect PIN" });
+      }
+
+      return { valid: true };
+    }),
+
   createUser: protectedProcedure
     .use(requireRole("business_admin"))
     .input(userCreateSchema)

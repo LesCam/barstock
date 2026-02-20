@@ -6,6 +6,8 @@ import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { LockProvider, useLock } from "@/lib/lock-context";
+import LockScreen from "@/components/LockScreen";
 
 function RootNavigator() {
   const { token, isLoading } = useAuth();
@@ -99,6 +101,14 @@ function RootNavigator() {
   );
 }
 
+function LockOverlay() {
+  const { isLocked } = useLock();
+  const { token } = useAuth();
+
+  if (!isLocked || !token) return null;
+  return <LockScreen />;
+}
+
 export default function RootLayout() {
   const [queryClient] = useState(
     () =>
@@ -115,7 +125,10 @@ export default function RootLayout() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <RootNavigator />
+          <LockProvider>
+            <RootNavigator />
+            <LockOverlay />
+          </LockProvider>
         </AuthProvider>
       </QueryClientProvider>
     </trpc.Provider>

@@ -40,6 +40,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold text-[#EAF0FF]">Settings</h1>
       <BusinessProfileSection businessId={businessId} canEdit={canEdit} />
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
+      <AutoLockPolicySection businessId={businessId} canEdit={canEdit} />
       {locationId && <ScaleProfilesSection locationId={locationId} canEdit={canEdit} />}
     </div>
   );
@@ -402,6 +403,167 @@ function CapabilityTogglesSection({ businessId, canEdit }: { businessId: string;
             className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
+      </div>
+
+      {updateMutation.error && (
+        <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
+      )}
+    </div>
+  );
+}
+
+const TIMEOUT_OPTIONS = [
+  { value: 0, label: "Immediate" },
+  { value: 15, label: "15 seconds" },
+  { value: 30, label: "30 seconds" },
+  { value: 60, label: "1 minute" },
+  { value: 120, label: "2 minutes" },
+  { value: 300, label: "5 minutes" },
+];
+
+function AutoLockPolicySection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {
+  const { data: settings } = trpc.settings.get.useQuery({ businessId });
+  const utils = trpc.useUtils();
+
+  const [local, setLocal] = useState<{
+    enabled: boolean;
+    timeoutSeconds: number;
+    allowPin: boolean;
+    allowBiometric: boolean;
+  } | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (settings?.autoLock) {
+      setLocal(settings.autoLock);
+      setDirty(false);
+    }
+  }, [settings]);
+
+  const updateMutation = trpc.settings.update.useMutation({
+    onSuccess: () => {
+      utils.settings.get.invalidate({ businessId });
+      setDirty(false);
+    },
+  });
+
+  function update(patch: Partial<typeof local>) {
+    setLocal((prev) => (prev ? { ...prev, ...patch } : prev));
+    setDirty(true);
+  }
+
+  function handleSave() {
+    if (!local) return;
+    // Validation: at least one unlock method must be enabled when auto-lock is on
+    if (local.enabled && !local.allowPin && !local.allowBiometric) return;
+    updateMutation.mutate({ businessId, autoLock: local });
+  }
+
+  if (!local) return <div className="text-[#EAF0FF]/60">Loading auto-lock settings...</div>;
+
+  const noUnlockMethod = local.enabled && !local.allowPin && !local.allowBiometric;
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Auto-Lock (Mobile)</h2>
+        {canEdit && dirty && (
+          <button
+            onClick={handleSave}
+            disabled={updateMutation.isPending || noUnlockMethod}
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+          >
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
+          </button>
+        )}
+      </div>
+
+      <p className="mb-4 text-sm text-[#EAF0FF]/50">
+        When enabled, the mobile app locks after being backgrounded. Staff must re-authenticate with PIN or Face ID to resume.
+      </p>
+
+      <div className="space-y-4">
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-[#EAF0FF]/80">Enable Auto-Lock</span>
+          <button
+            type="button"
+            disabled={!canEdit}
+            onClick={() => update({ enabled: !local.enabled })}
+            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+              local.enabled ? "bg-[#E9B44C]" : "bg-white/10"
+            } ${!canEdit ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+          >
+            <span
+              className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                local.enabled ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+
+        {local.enabled && (
+          <>
+            {/* Timeout */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[#EAF0FF]/80">Lock Timeout</span>
+              <select
+                value={local.timeoutSeconds}
+                onChange={(e) => update({ timeoutSeconds: Number(e.target.value) })}
+                disabled={!canEdit}
+                className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {TIMEOUT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Allow PIN */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[#EAF0FF]/80">Allow PIN Unlock</span>
+              <button
+                type="button"
+                disabled={!canEdit}
+                onClick={() => update({ allowPin: !local.allowPin })}
+                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                  local.allowPin ? "bg-[#E9B44C]" : "bg-white/10"
+                } ${!canEdit ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    local.allowPin ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Allow Biometric */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[#EAF0FF]/80">Allow Biometric Unlock</span>
+              <button
+                type="button"
+                disabled={!canEdit}
+                onClick={() => update({ allowBiometric: !local.allowBiometric })}
+                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                  local.allowBiometric ? "bg-[#E9B44C]" : "bg-white/10"
+                } ${!canEdit ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    local.allowBiometric ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {noUnlockMethod && (
+              <p className="text-sm text-red-400">At least one unlock method must be enabled.</p>
+            )}
+          </>
+        )}
       </div>
 
       {updateMutation.error && (

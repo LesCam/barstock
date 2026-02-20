@@ -1,8 +1,9 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
-import type { CapabilityToggles } from "@barstock/validators";
+import type { CapabilityToggles, AutoLockPolicy } from "@barstock/validators";
 
 export interface BusinessSettingsData {
   capabilities: CapabilityToggles;
+  autoLock: AutoLockPolicy;
 }
 
 const DEFAULT_SETTINGS: BusinessSettingsData = {
@@ -16,6 +17,12 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     proofPhotoRequired: true,
     proofPhotoRetentionDays: 90,
     voiceCommandsEnabled: false,
+  },
+  autoLock: {
+    enabled: false,
+    timeoutSeconds: 60,
+    allowPin: true,
+    allowBiometric: true,
   },
 };
 
@@ -35,18 +42,29 @@ export class SettingsService {
         ...DEFAULT_SETTINGS.capabilities,
         ...stored.capabilities,
       },
+      autoLock: {
+        ...DEFAULT_SETTINGS.autoLock,
+        ...stored.autoLock,
+      },
     };
   }
 
   async updateSettings(
     businessId: string,
-    patch: { capabilities?: Partial<CapabilityToggles> }
+    patch: {
+      capabilities?: Partial<CapabilityToggles>;
+      autoLock?: Partial<AutoLockPolicy>;
+    }
   ): Promise<BusinessSettingsData> {
     const current = await this.getSettings(businessId);
     const merged: BusinessSettingsData = {
       capabilities: {
         ...current.capabilities,
         ...patch.capabilities,
+      },
+      autoLock: {
+        ...current.autoLock,
+        ...patch.autoLock,
       },
     };
 

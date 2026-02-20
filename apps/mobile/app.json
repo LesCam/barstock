@@ -15,6 +15,7 @@
         "NSBluetoothAlwaysUsageDescription": "BarStock connects to Bluetooth scales for bottle weighing.",
         "NSMicrophoneUsageDescription": "BarStock uses the microphone for voice commands.",
         "NSSpeechRecognitionUsageDescription": "BarStock uses speech recognition for voice commands.",
+        "NSFaceIDUsageDescription": "BarStock uses Face ID to unlock the app after auto-lock.",
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -51,7 +52,8 @@
       ["expo-speech-recognition", {
         "microphonePermission": "BarStock uses the microphone for voice commands.",
         "speechRecognitionPermission": "BarStock uses speech recognition for voice commands."
-      }]
+      }],
+      "expo-local-authentication"
     ],
     "extra": {
       "router": {},

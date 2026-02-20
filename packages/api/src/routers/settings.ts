@@ -13,6 +13,15 @@ export const settingsRouter = router({
       return settings.capabilities;
     }),
 
+  autoLockPolicy: protectedProcedure
+    .use(requireBusinessAccess())
+    .input(settingsGetSchema)
+    .query(async ({ ctx, input }) => {
+      const service = new SettingsService(ctx.prisma);
+      const settings = await service.getSettings(input.businessId);
+      return settings.autoLock;
+    }),
+
   get: protectedProcedure
     .use(requireRole("business_admin"))
     .use(requireBusinessAccess())
@@ -32,6 +41,7 @@ export const settingsRouter = router({
 
       const result = await settingsService.updateSettings(input.businessId, {
         capabilities: input.capabilities,
+        autoLock: input.autoLock,
       });
 
       await auditService.log({
@@ -40,7 +50,7 @@ export const settingsRouter = router({
         actionType: "settings.updated",
         objectType: "business_settings",
         objectId: input.businessId,
-        metadata: { capabilities: input.capabilities },
+        metadata: { capabilities: input.capabilities, autoLock: input.autoLock },
       });
 
       return result;

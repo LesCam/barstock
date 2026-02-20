@@ -14,9 +14,19 @@ export const capabilityTogglesSchema = z.object({
 
 export type CapabilityToggles = z.infer<typeof capabilityTogglesSchema>;
 
+export const autoLockPolicySchema = z.object({
+  enabled: z.boolean().default(false),
+  timeoutSeconds: z.number().int().min(0).max(600).default(60),
+  allowPin: z.boolean().default(true),
+  allowBiometric: z.boolean().default(true),
+});
+
+export type AutoLockPolicy = z.infer<typeof autoLockPolicySchema>;
+
 export const settingsUpdateSchema = z.object({
   businessId: z.string().uuid(),
   capabilities: capabilityTogglesSchema.partial().optional(),
+  autoLock: autoLockPolicySchema.partial().optional(),
 });
 
 export const settingsGetSchema = z.object({

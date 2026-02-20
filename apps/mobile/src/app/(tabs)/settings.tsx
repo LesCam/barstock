@@ -1,8 +1,11 @@
+import { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, Switch, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
+import * as LocalAuthentication from "expo-local-authentication";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { useVoicePreference } from "@/lib/voice-preference";
+import { useLock, type UnlockMethod } from "@/lib/lock-context";
 
 export default function SettingsTab() {
   const router = useRouter();
@@ -10,6 +13,16 @@ export default function SettingsTab() {
   const canManageTareWeights = usePermission("canManageTareWeights");
   const canAccessScale = usePermission("canAccessScale");
   const { voiceUserEnabled, setVoiceUserEnabled } = useVoicePreference();
+  const { lockPolicy, userUnlockMethod, setUserUnlockMethod } = useLock();
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      setBiometricAvailable(hasHardware && isEnrolled);
+    })();
+  }, []);
 
   const { data: capabilities } = trpc.settings.capabilities.useQuery(
     { businessId: user?.businessId ?? "" },
@@ -79,6 +92,56 @@ export default function SettingsTab() {
       )}
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Security</Text>
+        {lockPolicy?.enabled ? (
+          <>
+            {lockPolicy.allowPin && (
+              <TouchableOpacity
+                style={[
+                  styles.card,
+                  styles.toggleRow,
+                  userUnlockMethod === "pin" && styles.selectedCard,
+                ]}
+                onPress={() => setUserUnlockMethod("pin")}
+              >
+                <Text style={styles.rowText}>Unlock with PIN</Text>
+                {userUnlockMethod === "pin" && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </TouchableOpacity>
+            )}
+            {lockPolicy.allowBiometric && (
+              <TouchableOpacity
+                style={[
+                  styles.card,
+                  styles.toggleRow,
+                  { marginTop: lockPolicy.allowPin ? 8 : 0 },
+                  userUnlockMethod === "biometric" && styles.selectedCard,
+                  !biometricAvailable && styles.disabledCard,
+                ]}
+                onPress={() => biometricAvailable && setUserUnlockMethod("biometric")}
+                disabled={!biometricAvailable}
+              >
+                <Text style={[styles.rowText, !biometricAvailable && styles.disabledText]}>
+                  Unlock with Face ID
+                </Text>
+                {userUnlockMethod === "biometric" && biometricAvailable && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+                {!biometricAvailable && (
+                  <Text style={styles.disabledText}>Not available</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.disabledText}>Auto-lock is not enabled</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Voice Commands</Text>
         {capabilities?.voiceCommandsEnabled ? (
           <View style={[styles.card, styles.toggleRow]}>
@@ -127,4 +190,7 @@ const styles = StyleSheet.create({
   logoutText: { fontSize: 15, color: "#dc2626", fontWeight: "500" },
   toggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   disabledText: { fontSize: 15, color: "#5A6A7A" },
+  selectedCard: { borderColor: "#E9B44C" },
+  disabledCard: { opacity: 0.5 },
+  checkmark: { fontSize: 16, color: "#E9B44C", fontWeight: "700" },
 });
