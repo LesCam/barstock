@@ -1,19 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 
+const ACTION_LABELS: Record<string, string> = {
+  "auth.login":                    "Login",
+  "auth.login_failed":             "Login Failed",
+  "auth.login_pin":                "PIN Login",
+  "auth.login_pin_failed":         "PIN Login Failed",
+  "user.created":                  "User Created",
+  "user.updated":                  "User Updated",
+  "user.permission.updated":       "Permission Updated",
+  "user.location_access.granted":  "Access Granted",
+  "user.location_access.revoked":  "Access Revoked",
+  "settings.updated":              "Settings Updated",
+  "session.created":               "Session Started",
+  "session.closed":                "Session Closed",
+  "inventory_item.created":        "Item Created",
+  "inventory_item.updated":        "Item Updated",
+  "stock.received":                "Stock Received",
+  "category.created":              "Category Created",
+  "category.updated":              "Category Updated",
+  "category.deleted":              "Category Deleted",
+  "vendor.created":                "Vendor Created",
+  "price.added":                   "Price Added",
+  "adjustment.created":            "Adjustment Created",
+};
+
 function getBadgeColor(actionType: string): string {
-  if (actionType.startsWith("auth.")) return "bg-red-500/15 text-red-400";
+  if (actionType.startsWith("auth."))       return "bg-red-500/15 text-red-400";
+  if (actionType.startsWith("stock."))      return "bg-green-500/15 text-green-400";
+  if (actionType.startsWith("adjustment.")) return "bg-orange-500/15 text-orange-400";
   if (
     actionType.startsWith("inventory") ||
     actionType.startsWith("session.") ||
-    actionType.startsWith("transfer.")
+    actionType.startsWith("transfer.") ||
+    actionType.startsWith("category.") ||
+    actionType.startsWith("vendor.") ||
+    actionType.startsWith("price.")
   )
     return "bg-blue-500/15 text-blue-400";
   if (actionType.startsWith("settings.")) return "bg-purple-500/15 text-purple-400";
-  if (actionType.startsWith("user.")) return "bg-cyan-500/15 text-cyan-400";
+  if (actionType.startsWith("user."))     return "bg-cyan-500/15 text-cyan-400";
   if (
     actionType.startsWith("guide_") ||
     actionType.startsWith("artwork.") ||
@@ -22,6 +51,36 @@ function getBadgeColor(actionType: string): string {
   )
     return "bg-amber-500/15 text-amber-400";
   return "bg-white/5 text-[#E9B44C]";
+}
+
+function formatMetadataSummary(actionType: string, meta: any): string {
+  if (!meta) return "—";
+  switch (actionType) {
+    case "stock.received":
+      return `${meta.quantity} units of item received`;
+    case "price.added":
+      return `Unit cost: $${Number(meta.unitCost).toFixed(2)}`;
+    case "session.closed":
+      return `${meta.adjustmentsCreated} adjustment(s)`;
+    case "adjustment.created":
+      return `${meta.itemName}: ${meta.variance > 0 ? "+" : ""}${meta.variance} (${Number(meta.variancePercent).toFixed(1)}%)`;
+    case "category.created":
+    case "category.updated":
+    case "category.deleted":
+      return meta.name ?? "";
+    case "vendor.created":
+      return meta.name ?? "";
+    case "user.created":
+      return `${meta.email} (${meta.role})`;
+    case "user.permission.updated":
+      return `${meta.permissionKey}: ${meta.value ? "granted" : "revoked"}`;
+    case "auth.login_failed":
+      return `${meta.email ?? ""} — ${meta.reason}`;
+    case "settings.updated":
+      return Object.keys(meta).filter(k => meta[k] != null).join(", ");
+    default:
+      return JSON.stringify(meta).slice(0, 80);
+  }
 }
 
 function formatRelativeTime(date: Date): string {
@@ -290,63 +349,51 @@ export default function AuditPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {items.map((entry: any) => (
-                  <tr
-                    key={entry.id}
-                    className="cursor-pointer hover:bg-[#0B1623]/40"
-                    onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-                  >
-                    <td
-                      className="px-4 py-3 text-xs text-[#EAF0FF]/70"
-                      title={new Date(entry.createdAt).toLocaleString()}
+                  <Fragment key={entry.id}>
+                    <tr
+                      className="cursor-pointer hover:bg-[#0B1623]/40"
+                      onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
                     >
-                      {formatRelativeTime(new Date(entry.createdAt))}
-                    </td>
-                    {isPlatform && (
-                      <td className="px-4 py-3 text-[#EAF0FF]/70">
-                        {entry.business?.name ?? "—"}
+                      <td
+                        className="px-4 py-3 text-xs text-[#EAF0FF]/70"
+                        title={new Date(entry.createdAt).toLocaleString()}
+                      >
+                        {formatRelativeTime(new Date(entry.createdAt))}
                       </td>
+                      {isPlatform && (
+                        <td className="px-4 py-3 text-[#EAF0FF]/70">
+                          {entry.business?.name ?? "—"}
+                        </td>
+                      )}
+                      <td className="px-4 py-3 text-[#EAF0FF]/80">
+                        {actorName(entry.actorUser)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${getBadgeColor(entry.actionType)}`} title={entry.actionType}>
+                          {ACTION_LABELS[entry.actionType] ?? entry.actionType}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-[#EAF0FF]/70">
+                        {entry.objectType}
+                      </td>
+                      <td className="max-w-[250px] truncate px-4 py-3 text-xs text-[#EAF0FF]/50">
+                        {formatMetadataSummary(entry.actionType, entry.metadataJson)}
+                      </td>
+                    </tr>
+                    {expandedId === entry.id && entry.metadataJson && (
+                      <tr>
+                        <td colSpan={isPlatform ? 6 : 5} className="px-4 py-3 bg-[#0B1623]">
+                          <pre className="max-h-60 overflow-auto text-xs text-[#EAF0FF]/70">
+                            {JSON.stringify(entry.metadataJson, null, 2)}
+                          </pre>
+                        </td>
+                      </tr>
                     )}
-                    <td className="px-4 py-3 text-[#EAF0FF]/80">
-                      {actorName(entry.actorUser)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${getBadgeColor(entry.actionType)}`}>
-                        {entry.actionType}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[#EAF0FF]/70">
-                      {entry.objectType}
-                    </td>
-                    <td className="max-w-[250px] truncate px-4 py-3 text-xs text-[#EAF0FF]/50">
-                      {entry.metadataJson ? JSON.stringify(entry.metadataJson).slice(0, 80) : "—"}
-                    </td>
-                  </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
           </div>
-
-          {/* Expanded metadata */}
-          {expandedId && (() => {
-            const entry = items.find((e: any) => e.id === expandedId);
-            if (!entry?.metadataJson) return null;
-            return (
-              <div className="mt-2 rounded-lg border border-white/10 bg-[#0B1623] p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-[#EAF0FF]/60">Full metadata</span>
-                  <button
-                    onClick={() => setExpandedId(null)}
-                    className="text-xs text-[#EAF0FF]/40 hover:text-[#EAF0FF]/80"
-                  >
-                    Close
-                  </button>
-                </div>
-                <pre className="max-h-60 overflow-auto text-xs text-[#EAF0FF]/70">
-                  {JSON.stringify(entry.metadataJson, null, 2)}
-                </pre>
-              </div>
-            );
-          })()}
 
           {data?.nextCursor && (
             <div className="mt-4 text-center">
