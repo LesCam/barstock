@@ -17,6 +17,12 @@ export const usageReportQuerySchema = z.object({
   toDate: z.coerce.date(),
 });
 
+export const cogsReportQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+});
+
 export const businessRollupQuerySchema = z.object({
   businessId: z.string().uuid(),
   reportType: z.enum(["variance", "on_hand", "usage", "valuation"]),
@@ -28,4 +34,5 @@ export type VarianceReportQueryInput = z.infer<
 >;
 export type OnHandReportQueryInput = z.infer<typeof onHandReportQuerySchema>;
 export type UsageReportQueryInput = z.infer<typeof usageReportQuerySchema>;
+export type COGSReportQueryInput = z.infer<typeof cogsReportQuerySchema>;
 export type BusinessRollupQueryInput = z.infer<typeof businessRollupQuerySchema>;

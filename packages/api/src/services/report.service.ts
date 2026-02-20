@@ -40,27 +40,53 @@ export class ReportService {
       where: {
         locationId,
         eventTs: { gte: fromDate, lt: toDate },
-        eventType: "pos_sale",
+        eventType: { in: ["pos_sale", "tap_flow"] },
       },
-      include: { inventoryItem: true },
+      include: {
+        inventoryItem: {
+          include: {
+            priceHistory: true,
+            category: true,
+          },
+        },
+      },
     });
 
     const usageMap = new Map<
       string,
-      { itemId: string; name: string; quantityUsed: number; uom: string }
+      {
+        itemId: string;
+        name: string;
+        categoryName: string | null;
+        quantityUsed: number;
+        uom: string;
+        unitCost: number | null;
+        totalCost: number | null;
+      }
     >();
 
     for (const event of events) {
       const key = event.inventoryItemId;
+      const qty = Math.abs(Number(event.quantityDelta));
+      const unitCost = this.getEffectiveUnitCost(
+        event.inventoryItem.priceHistory,
+        event.eventTs
+      );
       const existing = usageMap.get(key);
       if (existing) {
-        existing.quantityUsed += Math.abs(Number(event.quantityDelta));
+        existing.quantityUsed += qty;
+        if (unitCost !== null) {
+          existing.totalCost = (existing.totalCost ?? 0) + qty * unitCost;
+        }
       } else {
         usageMap.set(key, {
           itemId: event.inventoryItemId,
           name: event.inventoryItem.name,
-          quantityUsed: Math.abs(Number(event.quantityDelta)),
+          categoryName: event.inventoryItem.category?.name ?? null,
+          quantityUsed: qty,
           uom: event.uom,
+          unitCost,
+          totalCost: unitCost !== null ? qty * unitCost : null,
         });
       }
     }
@@ -72,13 +98,111 @@ export class ReportService {
       },
     });
 
+    const items = Array.from(usageMap.values());
+    const totalUsageCost = items.reduce(
+      (sum, i) => sum + (i.totalCost ?? 0),
+      0
+    );
+
     return {
       locationId,
       fromDate,
       toDate,
-      items: Array.from(usageMap.values()),
+      items,
+      totalItems: items.length,
+      totalUsageCost,
       totalSessions: sessions,
     };
+  }
+
+  async getCOGSReport(
+    locationId: string,
+    fromDate: Date,
+    toDate: Date
+  ) {
+    const [openingItems, closingItems, receivingEvents] = await Promise.all([
+      this.inventoryService.calculateOnHand(locationId, fromDate),
+      this.inventoryService.calculateOnHand(locationId, toDate),
+      this.prisma.consumptionEvent.findMany({
+        where: {
+          locationId,
+          eventTs: { gte: fromDate, lt: toDate },
+          eventType: "receiving",
+        },
+        include: {
+          inventoryItem: {
+            include: { priceHistory: true },
+          },
+        },
+      }),
+    ]);
+
+    const openingValue = openingItems.reduce(
+      (sum, i) => sum + (i.totalValue ?? 0),
+      0
+    );
+    const closingValue = closingItems.reduce(
+      (sum, i) => sum + (i.totalValue ?? 0),
+      0
+    );
+
+    const purchases: Array<{
+      itemName: string;
+      quantityReceived: number;
+      uom: string;
+      unitCost: number | null;
+      totalCost: number | null;
+    }> = [];
+
+    let purchasesValue = 0;
+
+    for (const event of receivingEvents) {
+      const qty = Math.abs(Number(event.quantityDelta));
+      const unitCost = this.getEffectiveUnitCost(
+        event.inventoryItem.priceHistory,
+        event.eventTs
+      );
+      const totalCost = unitCost !== null ? qty * unitCost : null;
+      if (totalCost !== null) {
+        purchasesValue += totalCost;
+      }
+      purchases.push({
+        itemName: event.inventoryItem.name,
+        quantityReceived: qty,
+        uom: event.uom,
+        unitCost,
+        totalCost,
+      });
+    }
+
+    const cogs = openingValue + purchasesValue - closingValue;
+
+    return {
+      locationId,
+      fromDate,
+      toDate,
+      openingValue,
+      purchasesValue,
+      closingValue,
+      cogs,
+      purchases,
+    };
+  }
+
+  private getEffectiveUnitCost(
+    priceHistory: Array<{
+      unitCost: any;
+      effectiveFromTs: Date;
+      effectiveToTs: Date | null;
+    }>,
+    asOf: Date
+  ): number | null {
+    const effective = priceHistory.find(
+      (p) =>
+        p.effectiveFromTs <= asOf &&
+        (p.effectiveToTs === null || p.effectiveToTs > asOf)
+    );
+    return effective ? Number(effective.unitCost) : null;
   }
 
   async getBusinessRollup(businessId: string, asOfDate?: Date) {
