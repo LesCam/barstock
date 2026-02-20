@@ -26,6 +26,19 @@ export const auditRouter = router({
       return rows.map((r) => r.actionType);
     }),
 
+  objectTypes: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ businessId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.auditLog.findMany({
+        where: { businessId: input.businessId },
+        select: { objectType: true },
+        distinct: ["objectType"],
+        orderBy: { objectType: "asc" },
+      });
+      return rows.map((r) => r.objectType).filter(Boolean) as string[];
+    }),
+
   actors: protectedProcedure
     .use(requireRole("business_admin"))
     .input(z.object({ businessId: z.string().uuid() }))

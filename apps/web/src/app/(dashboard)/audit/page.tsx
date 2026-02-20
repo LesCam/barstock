@@ -4,6 +4,72 @@ import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 
+function getBadgeColor(actionType: string): string {
+  if (actionType.startsWith("auth.")) return "bg-red-500/15 text-red-400";
+  if (
+    actionType.startsWith("inventory") ||
+    actionType.startsWith("session.") ||
+    actionType.startsWith("transfer.")
+  )
+    return "bg-blue-500/15 text-blue-400";
+  if (actionType.startsWith("settings.")) return "bg-purple-500/15 text-purple-400";
+  if (actionType.startsWith("user.")) return "bg-cyan-500/15 text-cyan-400";
+  if (
+    actionType.startsWith("guide_") ||
+    actionType.startsWith("artwork.") ||
+    actionType.startsWith("artist.") ||
+    actionType.startsWith("art_sale.")
+  )
+    return "bg-amber-500/15 text-amber-400";
+  return "bg-white/5 text-[#E9B44C]";
+}
+
+function formatRelativeTime(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function exportCsv(items: any[]) {
+  const headers = ["Timestamp", "Actor", "Action", "Object Type", "Object ID", "Metadata"];
+  const rows = items.map((entry) => {
+    const actor = entry.actorUser
+      ? entry.actorUser.firstName || entry.actorUser.lastName
+        ? [entry.actorUser.firstName, entry.actorUser.lastName].filter(Boolean).join(" ")
+        : entry.actorUser.email
+      : "System";
+    const metadata = entry.metadataJson ? JSON.stringify(entry.metadataJson) : "";
+    return [
+      new Date(entry.createdAt).toISOString(),
+      actor,
+      entry.actionType,
+      entry.objectType ?? "",
+      entry.objectId ?? "",
+      metadata,
+    ];
+  });
+
+  const csvContent = [headers, ...rows]
+    .map((row) => row.map((cell: string) => `"${cell.replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function AuditPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
@@ -11,12 +77,19 @@ export default function AuditPage() {
 
   const [actionType, setActionType] = useState("");
   const [actorUserId, setActorUserId] = useState("");
+  const [objectType, setObjectType] = useState("");
+  const [objectId, setObjectId] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data: actionTypes } = trpc.audit.actionTypes.useQuery(
+    { businessId: businessId! },
+    { enabled: !!businessId }
+  );
+
+  const { data: objectTypes } = trpc.audit.objectTypes.useQuery(
     { businessId: businessId! },
     { enabled: !!businessId }
   );
@@ -31,6 +104,8 @@ export default function AuditPage() {
       businessId: businessId!,
       ...(actionType && { actionType }),
       ...(actorUserId && { actorUserId }),
+      ...(objectType && { objectType }),
+      ...(objectType && objectId && { objectId }),
       ...(fromDate && { fromDate: new Date(fromDate) }),
       ...(toDate && { toDate: new Date(toDate + "T23:59:59") }),
       cursor,
@@ -60,6 +135,8 @@ export default function AuditPage() {
     if (actor.firstName || actor.lastName) return [actor.firstName, actor.lastName].filter(Boolean).join(" ");
     return actor.email;
   }
+
+  const hasFilters = actionType || actorUserId || objectType || objectId || fromDate || toDate;
 
   if (!businessId) {
     return <div className="text-[#EAF0FF]/60">No business selected.</div>;
@@ -93,6 +170,31 @@ export default function AuditPage() {
           ))}
         </select>
 
+        <select
+          value={objectType}
+          onChange={(e) => {
+            setObjectType(e.target.value);
+            if (!e.target.value) setObjectId("");
+            handleFilterChange();
+          }}
+          className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+        >
+          <option value="">All object types</option>
+          {objectTypes?.map((ot) => (
+            <option key={ot} value={ot}>{ot}</option>
+          ))}
+        </select>
+
+        {objectType && (
+          <input
+            type="text"
+            value={objectId}
+            onChange={(e) => { setObjectId(e.target.value); handleFilterChange(); }}
+            placeholder="Object ID"
+            className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+          />
+        )}
+
         <input
           type="date"
           value={fromDate}
@@ -109,11 +211,13 @@ export default function AuditPage() {
           placeholder="To"
         />
 
-        {(actionType || actorUserId || fromDate || toDate) && (
+        {hasFilters && (
           <button
             onClick={() => {
               setActionType("");
               setActorUserId("");
+              setObjectType("");
+              setObjectId("");
               setFromDate("");
               setToDate("");
               handleFilterChange();
@@ -121,6 +225,15 @@ export default function AuditPage() {
             className="rounded-md border border-white/10 px-3 py-2 text-sm text-[#EAF0FF]/60 hover:bg-white/5"
           >
             Clear filters
+          </button>
+        )}
+
+        {items.length > 0 && (
+          <button
+            onClick={() => exportCsv(items)}
+            className="rounded-md border border-white/10 px-3 py-2 text-sm text-[#EAF0FF]/60 hover:bg-white/5"
+          >
+            Export CSV
           </button>
         )}
       </div>
@@ -149,14 +262,17 @@ export default function AuditPage() {
                     className="cursor-pointer hover:bg-[#0B1623]/40"
                     onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
                   >
-                    <td className="px-4 py-3 text-xs text-[#EAF0FF]/70">
-                      {new Date(entry.createdAt).toLocaleString()}
+                    <td
+                      className="px-4 py-3 text-xs text-[#EAF0FF]/70"
+                      title={new Date(entry.createdAt).toLocaleString()}
+                    >
+                      {formatRelativeTime(new Date(entry.createdAt))}
                     </td>
                     <td className="px-4 py-3 text-[#EAF0FF]/80">
                       {actorName(entry.actorUser)}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs font-medium text-[#E9B44C]">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${getBadgeColor(entry.actionType)}`}>
                         {entry.actionType}
                       </span>
                     </td>
