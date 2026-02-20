@@ -81,7 +81,11 @@ export default function POSPage() {
               {mappings?.map((m) => (
                 <tr key={m.id} className="hover:bg-[#16283F]/60">
                   <td className="px-4 py-3 font-mono text-xs">{m.posItemId}</td>
-                  <td className="px-4 py-3">{m.inventoryItem.name}</td>
+                  <td className="px-4 py-3">
+                    {m.mode === "recipe"
+                      ? m.recipe?.name ?? "No recipe"
+                      : m.inventoryItem?.name ?? "—"}
+                  </td>
                   <td className="px-4 py-3">{m.mode.replace("_", " ")}</td>
                   <td className="px-4 py-3">
                     <span

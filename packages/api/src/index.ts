@@ -24,6 +24,7 @@ import { transfersRouter } from "./routers/transfers";
 import { receivingRouter } from "./routers/receiving";
 import { scaleProfilesRouter } from "./routers/scale-profiles";
 import { itemCategoriesRouter } from "./routers/item-categories";
+import { recipesRouter } from "./routers/recipes";
 
 export const appRouter = router({
   auth: authRouter,
@@ -51,6 +52,7 @@ export const appRouter = router({
   receiving: receivingRouter,
   scaleProfiles: scaleProfilesRouter,
   itemCategories: itemCategoriesRouter,
+  recipes: recipesRouter,
 });
 
 export type AppRouter = typeof appRouter;

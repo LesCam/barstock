@@ -35,10 +35,11 @@ export const posMappingCreateSchema = z.object({
   locationId: z.string().uuid(),
   sourceSystem: z.nativeEnum(SourceSystem),
   posItemId: z.string().min(1),
-  inventoryItemId: z.string().uuid(),
+  inventoryItemId: z.string().uuid().optional(),
   mode: z.nativeEnum(MappingMode),
   pourProfileId: z.string().uuid().optional(),
   tapLineId: z.string().uuid().optional(),
+  recipeId: z.string().uuid().optional(),
   effectiveFromTs: z.coerce.date(),
   effectiveToTs: z.coerce.date().optional(),
 });

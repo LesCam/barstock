@@ -44,6 +44,7 @@ export const MappingMode = {
   packaged_unit: "packaged_unit",
   draft_by_tap: "draft_by_tap",
   draft_by_product: "draft_by_product",
+  recipe: "recipe",
 } as const;
 export type MappingMode = (typeof MappingMode)[keyof typeof MappingMode];
 

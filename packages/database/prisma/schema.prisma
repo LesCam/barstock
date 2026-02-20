@@ -53,6 +53,7 @@ enum MappingModeT {
   packaged_unit
   draft_by_tap
   draft_by_product
+  recipe
 
   @@map("mapping_mode_t")
 }
@@ -220,6 +221,7 @@ model Location {
   guideCategories  ProductGuideCategory[]
   guideItems       ProductGuideItem[]
   scaleProfiles    ScaleProfile[]
+  recipes          Recipe[]
 
   @@map("locations")
 }
@@ -318,6 +320,7 @@ model InventoryItem {
   bottleTemplates    BottleTemplate[]
   bottleMeasurements BottleMeasurement[]
   guideItems         ProductGuideItem[]
+  recipeIngredients  RecipeIngredient[]
 
   @@index([locationId], map: "ix_inventory_items_location")
   @@map("inventory_items")
@@ -475,22 +478,55 @@ model POSItemMapping {
   locationId      String       @map("location_id") @db.Uuid
   sourceSystem    SourceSystemT @map("source_system")
   posItemId       String       @map("pos_item_id")
-  inventoryItemId String       @map("inventory_item_id") @db.Uuid
+  inventoryItemId String?      @map("inventory_item_id") @db.Uuid
   mode            MappingModeT
   pourProfileId   String?      @map("pour_profile_id") @db.Uuid
   tapLineId       String?      @map("tap_line_id") @db.Uuid
+  recipeId        String?      @map("recipe_id") @db.Uuid
   active          Boolean      @default(true)
   effectiveFromTs DateTime     @map("effective_from_ts") @db.Timestamptz()
   effectiveToTs   DateTime?    @map("effective_to_ts") @db.Timestamptz()
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz()
 
-  location      Location      @relation(fields: [locationId], references: [id])
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  pourProfile   PourProfile?  @relation(fields: [pourProfileId], references: [id])
-  tapLine       TapLine?      @relation(fields: [tapLineId], references: [id])
+  location      Location       @relation(fields: [locationId], references: [id])
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  pourProfile   PourProfile?   @relation(fields: [pourProfileId], references: [id])
+  tapLine       TapLine?       @relation(fields: [tapLineId], references: [id])
+  recipe        Recipe?        @relation(fields: [recipeId], references: [id])
 
   @@index([locationId, sourceSystem, posItemId, effectiveFromTs], map: "ix_mappings_lookup")
   @@map("pos_item_mappings")
+}
+
+// ─── Recipes ────────────────────────────────────────────────
+
+model Recipe {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId  String   @map("location_id") @db.Uuid
+  name        String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  location    Location           @relation(fields: [locationId], references: [id])
+  ingredients RecipeIngredient[]
+  posMappings POSItemMapping[]
+
+  @@index([locationId], map: "ix_recipes_location")
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipeId        String  @map("recipe_id") @db.Uuid
+  inventoryItemId String  @map("inventory_item_id") @db.Uuid
+  quantity        Decimal
+  uom             UomT
+
+  recipe        Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@map("recipe_ingredients")
 }
 
 // ─── Immutable Ledger ────────────────────────────────────────

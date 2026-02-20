@@ -8,6 +8,7 @@ import { MappingMode } from "@barstock/types";
 const MODE_OPTIONS = [
   { value: MappingMode.packaged_unit, label: "Packaged Unit" },
   { value: MappingMode.draft_by_tap, label: "Draft by Tap" },
+  { value: MappingMode.recipe, label: "Recipe" },
 ] as const;
 
 export default function UnmappedPage() {
@@ -22,6 +23,7 @@ export default function UnmappedPage() {
   const [inventorySearch, setInventorySearch] = useState("");
   const [pourProfileId, setPourProfileId] = useState("");
   const [tapLineId, setTapLineId] = useState("");
+  const [recipeId, setRecipeId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
@@ -37,6 +39,12 @@ export default function UnmappedPage() {
   );
 
   const isDraft = mode === MappingMode.draft_by_tap;
+  const isRecipe = mode === MappingMode.recipe;
+
+  const { data: recipes } = trpc.recipes.list.useQuery(
+    { locationId: locationId! },
+    { enabled: !!locationId && isRecipe && !!mappingItemKey }
+  );
 
   const { data: pourProfiles } = trpc.draft.listPourProfiles.useQuery(
     { locationId: locationId! },
@@ -62,6 +70,7 @@ export default function UnmappedPage() {
     setMode(MappingMode.packaged_unit);
     setPourProfileId("");
     setTapLineId("");
+    setRecipeId("");
     setInventorySearch("");
     setError(null);
   }
@@ -72,9 +81,16 @@ export default function UnmappedPage() {
   }
 
   function handleSave(item: { source_system: string; pos_item_id: string }) {
-    if (!inventoryItemId) {
-      setError("Select an inventory item");
-      return;
+    if (isRecipe) {
+      if (!recipeId) {
+        setError("Select a recipe");
+        return;
+      }
+    } else {
+      if (!inventoryItemId) {
+        setError("Select an inventory item");
+        return;
+      }
     }
     if (isDraft && !pourProfileId) {
       setError("Select a pour profile for draft mode");
@@ -89,8 +105,9 @@ export default function UnmappedPage() {
       locationId: locationId!,
       sourceSystem: item.source_system as any,
       posItemId: item.pos_item_id,
-      inventoryItemId,
       mode: mode as any,
+      ...(!isRecipe && { inventoryItemId }),
+      ...(isRecipe && { recipeId }),
       ...(isDraft && { pourProfileId, tapLineId }),
       effectiveFromTs: new Date(),
     });
@@ -169,28 +186,30 @@ export default function UnmappedPage() {
                             </div>
 
                             <div className="flex flex-wrap items-end gap-3">
-                              <div className="min-w-[240px] flex-1">
-                                <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Inventory Item</label>
-                                <input
-                                  type="text"
-                                  placeholder="Search inventory..."
-                                  value={inventorySearch}
-                                  onChange={(e) => setInventorySearch(e.target.value)}
-                                  className="mb-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
-                                />
-                                <select
-                                  value={inventoryItemId}
-                                  onChange={(e) => setInventoryItemId(e.target.value)}
-                                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
-                                >
-                                  <option value="">Select item...</option>
-                                  {filteredInventory.map((inv) => (
-                                    <option key={inv.id} value={inv.id}>
-                                      {inv.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
+                              {!isRecipe && (
+                                <div className="min-w-[240px] flex-1">
+                                  <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Inventory Item</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Search inventory..."
+                                    value={inventorySearch}
+                                    onChange={(e) => setInventorySearch(e.target.value)}
+                                    className="mb-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
+                                  />
+                                  <select
+                                    value={inventoryItemId}
+                                    onChange={(e) => setInventoryItemId(e.target.value)}
+                                    className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
+                                  >
+                                    <option value="">Select item...</option>
+                                    {filteredInventory.map((inv) => (
+                                      <option key={inv.id} value={inv.id}>
+                                        {inv.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
 
                               <div className="min-w-[160px]">
                                 <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Mode</label>
@@ -206,6 +225,24 @@ export default function UnmappedPage() {
                                   ))}
                                 </select>
                               </div>
+
+                              {isRecipe && (
+                                <div className="min-w-[240px] flex-1">
+                                  <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Recipe</label>
+                                  <select
+                                    value={recipeId}
+                                    onChange={(e) => setRecipeId(e.target.value)}
+                                    className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
+                                  >
+                                    <option value="">Select recipe...</option>
+                                    {recipes?.filter((r) => r.active).map((r) => (
+                                      <option key={r.id} value={r.id}>
+                                        {r.name} ({r.ingredients.length} ingredients)
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
 
                               {isDraft && (
                                 <>

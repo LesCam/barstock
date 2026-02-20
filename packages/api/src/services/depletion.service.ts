@@ -100,6 +100,9 @@ export class DepletionEngine {
           { effectiveToTs: { gt: asOfDate } },
         ],
       },
+      include: {
+        recipe: { include: { ingredients: true } },
+      },
     });
   }
 
@@ -117,6 +120,8 @@ export class DepletionEngine {
         return this.depletePackaged(salesLine, mapping);
       case "draft_by_tap":
         return this.depleteDraftByTap(salesLine, mapping);
+      case "recipe":
+        return this.depleteByRecipe(salesLine, mapping);
       case "draft_by_product":
         // Not recommended — draft_by_tap preferred
         return 0;
@@ -206,6 +211,36 @@ export class DepletionEngine {
   }
 
   /**
+   * Deplete multiple inventory items per recipe ingredients
+   */
+  private async depleteByRecipe(
+    salesLine: any,
+    mapping: any
+  ): Promise<number> {
+    const recipe = mapping.recipe;
+    if (!recipe || !recipe.ingredients?.length) return 0;
+
+    const events = recipe.ingredients.map((ing: any) => ({
+      locationId: salesLine.locationId,
+      eventType: "pos_sale" as const,
+      sourceSystem: salesLine.sourceSystem,
+      eventTs: salesLine.soldAt,
+      inventoryItemId: ing.inventoryItemId,
+      receiptId: salesLine.receiptId,
+      salesLineId: salesLine.id,
+      quantityDelta: new Prisma.Decimal(
+        -Number(ing.quantity) * Number(salesLine.quantity)
+      ),
+      uom: ing.uom,
+      confidenceLevel: "theoretical" as const,
+      notes: `Recipe sale: ${salesLine.posItemName} (${recipe.name})`,
+    }));
+
+    await this.prisma.consumptionEvent.createMany({ data: events });
+    return events.length;
+  }
+
+  /**
    * Create reversal event for voided/refunded sale
    * Positive quantity reverses the original depletion
    */
@@ -213,6 +248,31 @@ export class DepletionEngine {
     salesLine: any,
     mapping: any
   ): Promise<number> {
+    // Recipe mode: one positive reversal per ingredient
+    if (mapping.mode === "recipe") {
+      const recipe = mapping.recipe;
+      if (!recipe || !recipe.ingredients?.length) return 0;
+
+      const events = recipe.ingredients.map((ing: any) => ({
+        locationId: salesLine.locationId,
+        eventType: "pos_sale" as const,
+        sourceSystem: salesLine.sourceSystem,
+        eventTs: salesLine.soldAt,
+        inventoryItemId: ing.inventoryItemId,
+        receiptId: salesLine.receiptId,
+        salesLineId: salesLine.id,
+        quantityDelta: new Prisma.Decimal(
+          Number(ing.quantity) * Number(salesLine.quantity)
+        ),
+        uom: ing.uom,
+        confidenceLevel: "theoretical" as const,
+        notes: `Void/Refund reversal: ${salesLine.posItemName} (${recipe.name})`,
+      }));
+
+      await this.prisma.consumptionEvent.createMany({ data: events });
+      return events.length;
+    }
+
     let quantity: number;
     let uom: "units" | "oz";
 

@@ -19,6 +19,7 @@ export const mappingsRouter = router({
           inventoryItem: { select: { name: true, category: { select: { name: true } } } },
           pourProfile: { select: { name: true, oz: true } },
           tapLine: { select: { name: true } },
+          recipe: { select: { name: true, ingredients: { select: { inventoryItem: { select: { name: true } }, quantity: true, uom: true } } } },
         },
         orderBy: { createdAt: "desc" },
       })
