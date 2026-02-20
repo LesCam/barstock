@@ -146,13 +146,15 @@ export class ReportService {
       0
     );
 
-    const purchases: Array<{
-      itemName: string;
-      quantityReceived: number;
-      uom: string;
-      unitCost: number | null;
-      totalCost: number | null;
-    }> = [];
+    const purchaseMap = new Map<
+      string,
+      {
+        itemName: string;
+        quantityReceived: number;
+        uom: string;
+        totalCost: number | null;
+      }
+    >();
 
     let purchasesValue = 0;
 
@@ -162,18 +164,33 @@ export class ReportService {
         event.inventoryItem.priceHistory,
         event.eventTs
       );
-      const totalCost = unitCost !== null ? qty * unitCost : null;
-      if (totalCost !== null) {
-        purchasesValue += totalCost;
+      const cost = unitCost !== null ? qty * unitCost : null;
+      if (cost !== null) {
+        purchasesValue += cost;
       }
-      purchases.push({
-        itemName: event.inventoryItem.name,
-        quantityReceived: qty,
-        uom: event.uom,
-        unitCost,
-        totalCost,
-      });
+      const key = event.inventoryItemId;
+      const existing = purchaseMap.get(key);
+      if (existing) {
+        existing.quantityReceived += qty;
+        if (cost !== null) {
+          existing.totalCost = (existing.totalCost ?? 0) + cost;
+        }
+      } else {
+        purchaseMap.set(key, {
+          itemName: event.inventoryItem.name,
+          quantityReceived: qty,
+          uom: event.uom,
+          totalCost: cost,
+        });
+      }
     }
+
+    const purchases = Array.from(purchaseMap.values()).map((p) => ({
+      ...p,
+      unitCost: p.totalCost !== null && p.quantityReceived > 0
+        ? p.totalCost / p.quantityReceived
+        : null,
+    }));
 
     const cogs = openingValue + purchasesValue - closingValue;
 
