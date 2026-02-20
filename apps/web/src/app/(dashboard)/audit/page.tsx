@@ -26,6 +26,44 @@ const ACTION_LABELS: Record<string, string> = {
   "vendor.created":                "Vendor Created",
   "price.added":                   "Price Added",
   "adjustment.created":            "Adjustment Created",
+  "recipe.created":                "Recipe Created",
+  "recipe.updated":                "Recipe Updated",
+  "recipe.deleted":                "Recipe Deleted",
+  "transfer.created":              "Transfer Created",
+  "guide_category.created":        "Menu Category Created",
+  "guide_category.updated":        "Menu Category Updated",
+  "guide_category.deleted":        "Menu Category Deleted",
+  "guide_category.reordered":      "Menu Categories Reordered",
+  "guide_item.created":            "Menu Item Created",
+  "guide_item.updated":            "Menu Item Updated",
+  "guide_item.deleted":            "Menu Item Deleted",
+  "guide_item.reordered":          "Menu Items Reordered",
+  "guide_item.image_uploaded":     "Menu Image Uploaded",
+  "guide_item.image_removed":      "Menu Image Removed",
+  "guide_item.bulk_created":       "Menu Items Imported",
+  "artist.created":                "Artist Created",
+  "artist.updated":                "Artist Updated",
+  "artist.deactivated":            "Artist Deactivated",
+  "art_sale.recorded":             "Art Sale Recorded",
+};
+
+const OBJECT_TYPE_LABELS: Record<string, string> = {
+  user:                    "User",
+  user_location:           "User Location",
+  inventory_item:          "Inventory Item",
+  price_history:           "Price History",
+  inventory_item_category: "Category",
+  inventory_session:       "Counting Session",
+  consumption_event:       "Consumption Event",
+  business_settings:       "Settings",
+  vendor:                  "Vendor",
+  recipe:                  "Recipe",
+  guide_category:          "Menu Category",
+  guide_item:              "Menu Item",
+  transfer:                "Transfer",
+  artist:                  "Artist",
+  artwork:                 "Artwork",
+  art_sale:                "Art Sale",
 };
 
 function getBadgeColor(actionType: string): string {
@@ -41,6 +79,7 @@ function getBadgeColor(actionType: string): string {
     actionType.startsWith("price.")
   )
     return "bg-blue-500/15 text-blue-400";
+  if (actionType.startsWith("recipe."))   return "bg-[#E9B44C]/15 text-[#E9B44C]";
   if (actionType.startsWith("settings.")) return "bg-purple-500/15 text-purple-400";
   if (actionType.startsWith("user."))     return "bg-cyan-500/15 text-cyan-400";
   if (
@@ -78,6 +117,37 @@ function formatMetadataSummary(actionType: string, meta: any): string {
       return `${meta.email ?? ""} — ${meta.reason}`;
     case "settings.updated":
       return Object.keys(meta).filter(k => meta[k] != null).join(", ");
+    case "recipe.created":
+    case "recipe.updated":
+    case "recipe.deleted":
+      return meta.ingredientCount != null
+        ? `${meta.name ?? "Recipe"} (${meta.ingredientCount} ingredient${meta.ingredientCount === 1 ? "" : "s"})`
+        : meta.name ?? "";
+    case "transfer.created":
+      return meta.fromSubArea && meta.toSubArea
+        ? `${meta.itemName ?? "Item"} from ${meta.fromSubArea} → ${meta.toSubArea}${meta.quantity != null ? ` (${meta.quantity})` : ""}`
+        : meta.itemName ?? "";
+    case "guide_category.created":
+    case "guide_category.updated":
+    case "guide_category.deleted":
+    case "guide_category.reordered":
+      return meta.name ?? "";
+    case "guide_item.created":
+    case "guide_item.updated":
+    case "guide_item.deleted":
+    case "guide_item.reordered":
+    case "guide_item.image_uploaded":
+    case "guide_item.image_removed":
+    case "guide_item.bulk_created":
+      return meta.name ?? (meta.count != null ? `${meta.count} items` : "");
+    case "artist.created":
+    case "artist.updated":
+    case "artist.deactivated":
+      return meta.name ?? "";
+    case "art_sale.recorded":
+      return meta.salePrice != null
+        ? `$${Number(meta.salePrice).toFixed(2)}${meta.commission != null ? ` (commission: $${Number(meta.commission).toFixed(2)})` : ""}`
+        : "";
     default:
       return JSON.stringify(meta).slice(0, 80);
   }
@@ -245,7 +315,7 @@ export default function AuditPage() {
         >
           <option value="">All actions</option>
           {actionTypes?.map((at) => (
-            <option key={at} value={at}>{at}</option>
+            <option key={at} value={at}>{ACTION_LABELS[at] ?? at}</option>
           ))}
         </select>
 
@@ -271,7 +341,7 @@ export default function AuditPage() {
         >
           <option value="">All object types</option>
           {objectTypes?.map((ot) => (
-            <option key={ot} value={ot}>{ot}</option>
+            <option key={ot} value={ot}>{OBJECT_TYPE_LABELS[ot] ?? ot}</option>
           ))}
         </select>
 
@@ -374,7 +444,7 @@ export default function AuditPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-[#EAF0FF]/70">
-                        {entry.objectType}
+                        {OBJECT_TYPE_LABELS[entry.objectType] ?? entry.objectType}
                       </td>
                       <td className="max-w-[250px] truncate px-4 py-3 text-xs text-[#EAF0FF]/50">
                         {formatMetadataSummary(entry.actionType, entry.metadataJson)}
