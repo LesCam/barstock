@@ -192,30 +192,47 @@ export default function RecipesPage() {
         </label>
         {rows.map((row, idx) => (
           <div key={idx} className="flex items-end gap-2">
-            <div className="min-w-[200px] flex-1">
+            <div className="relative min-w-[200px] flex-1">
               <input
                 type="text"
-                placeholder="Search inventory..."
+                placeholder={row.inventoryItemId ? getItemName(row.inventoryItemId) : "Search inventory..."}
                 value={searchMap[idx] ?? ""}
                 onChange={(e) =>
                   searchSetter((prev) => ({ ...prev, [idx]: e.target.value }))
                 }
-                className="mb-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-xs text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
-              />
-              <select
-                value={row.inventoryItemId}
-                onChange={(e) =>
-                  updateIngredient(setter, idx, "inventoryItemId", e.target.value)
-                }
+                onFocus={() => {
+                  if (!searchMap[idx]) searchSetter((prev) => ({ ...prev, [idx]: "" }));
+                }}
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
-              >
-                <option value="">Select item...</option>
-                {filteredItems(searchMap, idx).map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
+              />
+              {row.inventoryItemId && !searchMap[idx] && (
+                <div className="mt-0.5 text-xs text-[#E9B44C]">{getItemName(row.inventoryItemId)}</div>
+              )}
+              {(searchMap[idx] !== undefined) && (
+                <div className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-white/10 bg-[#0B1623] shadow-lg">
+                  {filteredItems(searchMap, idx).length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-[#EAF0FF]/40">No items found</div>
+                  ) : (
+                    filteredItems(searchMap, idx).slice(0, 20).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          updateIngredient(setter, idx, "inventoryItemId", item.id);
+                          searchSetter((prev) => {
+                            const next = { ...prev };
+                            delete next[idx];
+                            return next;
+                          });
+                        }}
+                        className="w-full px-2 py-1.5 text-left text-sm text-[#EAF0FF] hover:bg-[#16283F]"
+                      >
+                        {item.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
             <div className="w-24">
               <input
