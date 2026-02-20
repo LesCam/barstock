@@ -16,6 +16,7 @@ interface SidebarProps {
 const navItems = [
   { href: "/", label: "Dashboard", icon: "📊" },
   { href: "/inventory", label: "Inventory", icon: "📦" },
+  { href: "/inventory/expected", label: "Expected Stock", icon: "📉" },
   { href: "/pos", label: "POS Connections", icon: "🔗" },
   { href: "/pos/unmapped", label: "Unmapped Items", icon: "⚠️" },
   { href: "/draft", label: "Draft / Kegs", icon: "🍺" },

@@ -36,3 +36,15 @@ export type OnHandReportQueryInput = z.infer<typeof onHandReportQuerySchema>;
 export type UsageReportQueryInput = z.infer<typeof usageReportQuerySchema>;
 export type COGSReportQueryInput = z.infer<typeof cogsReportQuerySchema>;
 export type BusinessRollupQueryInput = z.infer<typeof businessRollupQuerySchema>;
+
+export const expectedOnHandQuerySchema = z.object({
+  locationId: z.string().uuid(),
+});
+
+export const variancePatternsQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  sessionCount: z.number().int().min(3).max(50).default(10),
+});
+
+export type ExpectedOnHandQueryInput = z.infer<typeof expectedOnHandQuerySchema>;
+export type VariancePatternsQueryInput = z.infer<typeof variancePatternsQuerySchema>;

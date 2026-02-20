@@ -4,9 +4,10 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 
-type ActiveTab = "variance" | "cogs" | "usage";
+type ActiveTab = "variance" | "cogs" | "usage" | "patterns";
 type VarianceSortKey = "itemName" | "categoryName" | "variance" | "variancePercent" | "valueImpact";
 type UsageSortKey = "name" | "categoryName" | "quantityUsed" | "unitCost" | "totalCost";
+type PatternSortKey = "itemName" | "categoryName" | "sessionsAppeared" | "avgVariance" | "totalEstimatedLoss" | "trend";
 type SortDir = "asc" | "desc";
 
 export default function ReportsPage() {
@@ -23,7 +24,10 @@ export default function ReportsPage() {
   const [filter, setFilter] = useState("");
   const [varianceSortKey, setVarianceSortKey] = useState<VarianceSortKey>("itemName");
   const [usageSortKey, setUsageSortKey] = useState<UsageSortKey>("name");
+  const [patternSortKey, setPatternSortKey] = useState<PatternSortKey>("avgVariance");
+  const [patternSortDir, setPatternSortDir] = useState<SortDir>("asc");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sessionCount, setSessionCount] = useState(10);
 
   const { data: variance } = trpc.reports.variance.useQuery(
     {
@@ -55,6 +59,11 @@ export default function ReportsPage() {
       toDate: new Date(dateRange.to),
     },
     { enabled: !!locationId && activeTab === "usage" }
+  );
+
+  const { data: patterns } = trpc.reports.variancePatterns.useQuery(
+    { locationId: locationId!, sessionCount },
+    { enabled: !!locationId && activeTab === "patterns" }
   );
 
   // --- Variance sorting ---
@@ -153,10 +162,64 @@ export default function ReportsPage() {
     );
   }
 
+  // --- Pattern sorting ---
+  function togglePatternSort(key: PatternSortKey) {
+    if (patternSortKey === key) {
+      setPatternSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setPatternSortKey(key);
+      setPatternSortDir("asc");
+    }
+  }
+
+  const sortedPatternItems = useMemo(() => {
+    if (!patterns) return [];
+    const lc = filter.toLowerCase();
+    const filtered = patterns.filter(
+      (item) =>
+        item.itemName.toLowerCase().includes(lc) ||
+        (item.categoryName ?? "").toLowerCase().includes(lc)
+    );
+    return [...filtered].sort((a, b) => {
+      const aVal = a[patternSortKey];
+      const bVal = b[patternSortKey];
+      if (patternSortKey === "trend") {
+        const order = { worsening: 0, stable: 1, improving: 2 };
+        const cmp = order[a.trend] - order[b.trend];
+        return patternSortDir === "asc" ? cmp : -cmp;
+      }
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        const cmp = aVal.toLowerCase().localeCompare(bVal.toLowerCase());
+        return patternSortDir === "asc" ? cmp : -cmp;
+      }
+      const aNum = (aVal as number) ?? 0;
+      const bNum = (bVal as number) ?? 0;
+      return patternSortDir === "asc" ? aNum - bNum : bNum - aNum;
+    });
+  }, [patterns, filter, patternSortKey, patternSortDir]);
+
+  function PatternSortHeader({ label, field, className }: { label: string; field: PatternSortKey; className?: string }) {
+    const active = patternSortKey === field;
+    return (
+      <th
+        className={`cursor-pointer select-none px-4 py-3 hover:text-[#EAF0FF]/80 ${className ?? ""}`}
+        onClick={() => togglePatternSort(field)}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}
+          <span className={`text-xs ${active ? "text-[#E9B44C]" : "text-[#EAF0FF]/30"}`}>
+            {active ? (patternSortDir === "asc" ? "▲" : "▼") : "▲"}
+          </span>
+        </span>
+      </th>
+    );
+  }
+
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: "variance", label: "Variance" },
     { key: "cogs", label: "COGS" },
     { key: "usage", label: "Usage" },
+    { key: "patterns", label: "Patterns" },
   ];
 
   return (
@@ -391,6 +454,119 @@ export default function ReportsPage() {
                   <tr>
                     <td colSpan={6} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                       {filter ? "No items match your search." : "No usage data for this period."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ── Patterns tab ── */}
+      {activeTab === "patterns" && (
+        <section>
+          <h2 className="mb-4 text-lg font-semibold">Variance Patterns</h2>
+
+          {/* Session count input */}
+          <div className="mb-4 flex items-center gap-3">
+            <label className="text-sm text-[#EAF0FF]/60">Sessions to analyze:</label>
+            <input
+              type="number"
+              min={3}
+              max={50}
+              value={sessionCount}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (v >= 3 && v <= 50) setSessionCount(v);
+              }}
+              className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+            />
+          </div>
+
+          {/* Pattern summary cards */}
+          <div className="mb-6 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Items Analyzed</p>
+              <p className="text-2xl font-bold">{patterns?.length ?? 0}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Shrinkage Suspects</p>
+              <p className={`text-2xl font-bold ${(patterns?.filter((p) => p.isShrinkageSuspect).length ?? 0) > 0 ? "text-red-400" : ""}`}>
+                {patterns?.filter((p) => p.isShrinkageSuspect).length ?? 0}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Total Est. Loss</p>
+              <p className="text-2xl font-bold text-red-400">
+                {(patterns?.reduce((s, p) => s + p.totalEstimatedLoss, 0) ?? 0).toFixed(1)}
+              </p>
+            </div>
+          </div>
+
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="mb-4 w-full max-w-sm rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+          />
+
+          <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                <tr>
+                  <PatternSortHeader label="Item" field="itemName" />
+                  <PatternSortHeader label="Category" field="categoryName" />
+                  <PatternSortHeader label="Sessions" field="sessionsAppeared" />
+                  <PatternSortHeader label="Avg Variance" field="avgVariance" />
+                  <PatternSortHeader label="Trend" field="trend" />
+                  <PatternSortHeader label="Est. Loss" field="totalEstimatedLoss" />
+                  <th className="px-4 py-3">Flag</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {sortedPatternItems.map((item) => (
+                  <tr key={item.inventoryItemId} className="hover:bg-[#0B1623]/60">
+                    <td className="px-4 py-3 font-medium">{item.itemName}</td>
+                    <td className="px-4 py-3">{item.categoryName ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      {item.sessionsWithVariance}/{item.sessionsAppeared}
+                    </td>
+                    <td
+                      className={`px-4 py-3 font-medium ${
+                        item.avgVariance < 0 ? "text-red-400" : item.avgVariance > 0 ? "text-green-400" : ""
+                      }`}
+                    >
+                      {item.avgVariance.toFixed(1)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {item.trend === "worsening" && (
+                        <span className="text-red-400" title="Worsening">&#x2193;</span>
+                      )}
+                      {item.trend === "improving" && (
+                        <span className="text-green-400" title="Improving">&#x2191;</span>
+                      )}
+                      {item.trend === "stable" && (
+                        <span className="text-[#EAF0FF]/40" title="Stable">&#x2192;</span>
+                      )}
+                    </td>
+                    <td className={`px-4 py-3 ${item.totalEstimatedLoss < 0 ? "text-red-400" : ""}`}>
+                      {item.totalEstimatedLoss.toFixed(1)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {item.isShrinkageSuspect && (
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500/20 text-xs font-bold text-red-400">
+                          !
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {sortedPatternItems.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                      {filter ? "No items match your search." : "Not enough session data for pattern analysis."}
                     </td>
                   </tr>
                 )}
