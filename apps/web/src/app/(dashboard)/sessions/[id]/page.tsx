@@ -87,7 +87,10 @@ export default function SessionDetailPage({
   const utils = trpc.useUtils();
 
   // --- Data fetching ---
-  const { data: session, isLoading } = trpc.sessions.getById.useQuery({ id });
+  const { data: session, isLoading } = trpc.sessions.getById.useQuery(
+    { id },
+    { refetchInterval: 15_000 }
+  );
 
   // Poll participants every 15s for open sessions
   const { data: participants } = trpc.sessions.listParticipants.useQuery(
@@ -99,11 +102,16 @@ export default function SessionDetailPage({
     { locationId: locationId! },
     { enabled: !!locationId }
   );
+  const { data: barAreas } = trpc.areas.listBarAreas.useQuery(
+    { locationId: locationId! },
+    { enabled: !!locationId }
+  );
 
   // --- Add line state ---
   const [selectedItemId, setSelectedItemId] = useState("");
   const [countInput, setCountInput] = useState("");
   const [itemSearch, setItemSearch] = useState("");
+  const [selectedSubAreaId, setSelectedSubAreaId] = useState("");
 
   // --- Close session state ---
   const [varianceItemIds, setVarianceItemIds] = useState<string[]>([]);
@@ -127,6 +135,7 @@ export default function SessionDetailPage({
       setSelectedItemId("");
       setCountInput("");
       setItemSearch("");
+      setSelectedSubAreaId("");
     },
   });
 
@@ -168,12 +177,20 @@ export default function SessionDetailPage({
     return line?.inventoryItem.name ?? itemId;
   }
 
+  // Resolve selected item's counting method
+  const selectedItem = inventoryItems?.find((i) => i.id === selectedItemId);
+  const isWeighable = selectedItem?.category?.countingMethod === "weighable";
+
   function handleAddLine() {
     if (!selectedItemId) return;
+    const value = countInput ? Number(countInput) : undefined;
     addLineMut.mutate({
       sessionId: id,
       inventoryItemId: selectedItemId,
-      countUnits: countInput ? Number(countInput) : undefined,
+      subAreaId: selectedSubAreaId || undefined,
+      ...(isWeighable
+        ? { grossWeightGrams: value }
+        : { countUnits: value }),
     });
   }
 
@@ -409,12 +426,33 @@ export default function SessionDetailPage({
               )}
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Count</label>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Area</label>
+              <select
+                value={selectedSubAreaId}
+                onChange={(e) => setSelectedSubAreaId(e.target.value)}
+                className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-2 text-sm text-[#EAF0FF]"
+              >
+                <option value="">No area</option>
+                {barAreas?.map((area) => (
+                  <optgroup key={area.id} label={area.name}>
+                    {area.subAreas.map((sa: { id: string; name: string }) => (
+                      <option key={sa.id} value={sa.id}>
+                        {sa.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">
+                {isWeighable ? "Weight (g)" : "Count"}
+              </label>
               <input
                 type="number"
                 value={countInput}
                 onChange={(e) => setCountInput(e.target.value)}
-                placeholder="0"
+                placeholder={isWeighable ? "grams" : "0"}
                 className="w-24 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
               />
             </div>

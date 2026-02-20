@@ -56,11 +56,16 @@ export default function SessionDetailScreen() {
 
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
     { id: id! },
-    { refetchOnMount: "always" }
+    { refetchOnMount: "always", refetchInterval: 30_000 }
   );
 
   // --- Multi-user participant support ---
-  const joinMutation = trpc.sessions.join.useMutation();
+  const joinMutation = trpc.sessions.join.useMutation({
+    onError: () => {
+      // Session may have been closed externally — refetch to update UI
+      utils.sessions.getById.invalidate({ id: id! });
+    },
+  });
   const heartbeatMutation = trpc.sessions.heartbeat.useMutation();
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -235,15 +240,35 @@ export default function SessionDetailScreen() {
     }
   }
 
+  const [pendingVarianceItemIds, setPendingVarianceItemIds] = useState<string[]>([]);
+
   const closeMutation = trpc.sessions.close.useMutation({
     onSuccess() {
       setShowVerification(false);
+      setPendingVarianceItemIds([]);
       Alert.alert("Session Closed", "Adjustments have been created.");
       utils.sessions.getById.invalidate({ id: id! });
       utils.sessions.list.invalidate();
     },
     onError(error: { message: string }) {
-      Alert.alert("Error", error.message);
+      // Parse variance reasons required error
+      const match = error.message.match(/Variance reasons required for items:\s*(.+)/);
+      if (match) {
+        const ids = match[1].split(",").map((s) => s.trim());
+        setPendingVarianceItemIds(ids);
+        // Start prompting for the first item
+        const firstId = ids[0];
+        const line = session?.lines.find((l: any) => l.inventoryItemId === firstId);
+        if (line) {
+          setVarianceItem({
+            itemId: firstId,
+            name: (line as any).inventoryItem?.name ?? firstId,
+            variance: 0,
+          });
+        }
+      } else {
+        Alert.alert("Error", error.message);
+      }
     },
   });
 
@@ -947,13 +972,39 @@ export default function SessionDetailScreen() {
           itemName={varianceItem.name}
           variance={varianceItem.variance}
           onSelect={(reason) => {
-            setVarianceReasons((prev) => [
-              ...prev,
+            const updatedReasons = [
+              ...varianceReasons,
               { itemId: varianceItem.itemId, reason },
-            ]);
+            ];
+            setVarianceReasons(updatedReasons);
             setVarianceItem(null);
+
+            // Check if more items need reasons
+            const remaining = pendingVarianceItemIds.filter(
+              (pid) => !updatedReasons.some((r) => r.itemId === pid)
+            );
+            if (remaining.length > 0) {
+              // Prompt for next item
+              const nextId = remaining[0];
+              const line = session?.lines.find((l: any) => l.inventoryItemId === nextId);
+              setVarianceItem({
+                itemId: nextId,
+                name: (line as any)?.inventoryItem?.name ?? nextId,
+                variance: 0,
+              });
+            } else if (pendingVarianceItemIds.length > 0) {
+              // All reasons collected — retry close
+              closeMutation.mutate({
+                sessionId: id!,
+                varianceReasons: updatedReasons,
+              });
+              setPendingVarianceItemIds([]);
+            }
           }}
-          onCancel={() => setVarianceItem(null)}
+          onCancel={() => {
+            setVarianceItem(null);
+            setPendingVarianceItemIds([]);
+          }}
         />
       )}
     </View>

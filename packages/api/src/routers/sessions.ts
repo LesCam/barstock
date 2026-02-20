@@ -12,12 +12,6 @@ export const sessionsRouter = router({
   create: protectedProcedure
     .input(sessionCreateSchema)
     .mutation(async ({ ctx, input }) => {
-      // Auto-close any open sessions for this location
-      await ctx.prisma.inventorySession.updateMany({
-        where: { locationId: input.locationId, endedTs: null },
-        data: { endedTs: new Date(), closedBy: ctx.user.userId },
-      });
-
       const session = await ctx.prisma.inventorySession.create({
         data: { ...input, createdBy: ctx.user.userId },
       });

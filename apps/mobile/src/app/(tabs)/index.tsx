@@ -45,7 +45,7 @@ export default function SessionsTab() {
 
   const { data: sessions, isLoading } = trpc.sessions.list.useQuery(
     { locationId: selectedLocationId!, openOnly: false, limit },
-    { enabled: !!selectedLocationId && canAccessSessions, refetchOnMount: "always" }
+    { enabled: !!selectedLocationId && canAccessSessions, refetchOnMount: "always", refetchInterval: 15_000 }
   );
 
   const createSession = trpc.sessions.create.useMutation();
@@ -71,6 +71,43 @@ export default function SessionsTab() {
 
   async function handleStartCount() {
     if (creating || !selectedLocationId) return;
+
+    // If there's already an open session, offer to join it
+    if (openSessions.length > 0) {
+      const existing = openSessions[0] as any;
+      const lineCount = existing._count?.lines ?? 0;
+      Alert.alert(
+        "Open Session Exists",
+        `There's already an open session with ${lineCount} item${lineCount !== 1 ? "s" : ""} counted. Join it or start a new one?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Join Existing",
+            onPress: () => router.push(`/session/${existing.id}`),
+          },
+          {
+            text: "Start New",
+            onPress: async () => {
+              setCreating(true);
+              try {
+                const session = await createSession.mutateAsync({
+                  locationId: selectedLocationId,
+                  sessionType: "shift",
+                  startedTs: new Date(),
+                });
+                router.push(`/session/${session.id}`);
+              } catch (e: any) {
+                Alert.alert("Error", e.message ?? "Failed to create session");
+              } finally {
+                setCreating(false);
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setCreating(true);
     try {
       const session = await createSession.mutateAsync({
