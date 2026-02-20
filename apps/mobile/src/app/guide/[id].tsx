@@ -75,18 +75,32 @@ export default function GuideItemDetail() {
       <Stack.Screen options={{ title: item.inventoryItem.name }} />
 
       {/* Hero image */}
-      {imgUrl ? (
-        <Image
-          source={{ uri: imgUrl }}
-          style={styles.heroImage}
-          contentFit="contain"
-          transition={200}
-        />
-      ) : (
-        <View style={styles.heroPlaceholder}>
-          <Text style={styles.heroPlaceholderText}>🍷</Text>
-        </View>
-      )}
+      <View>
+        {imgUrl ? (
+          <Image
+            source={{ uri: imgUrl }}
+            style={styles.heroImage}
+            contentFit="contain"
+            transition={200}
+          />
+        ) : (
+          <View style={styles.heroPlaceholder}>
+            <Text style={styles.heroPlaceholderText}>🍷</Text>
+          </View>
+        )}
+        {isManager && (
+          <TouchableOpacity
+            style={styles.cameraButton}
+            onPress={() =>
+              router.push(
+                `/guide/photo?guideItemId=${id}&locationId=${selectedLocationId}`
+              )
+            }
+          >
+            <Text style={styles.cameraButtonText}>📷</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       <View style={styles.content}>
         <Text style={styles.name}>{item.inventoryItem.name}</Text>
@@ -182,6 +196,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   heroPlaceholderText: { fontSize: 64, opacity: 0.3 },
+  cameraButton: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cameraButtonText: { fontSize: 20 },
   content: { padding: 16 },
   name: {
     fontSize: 22,
