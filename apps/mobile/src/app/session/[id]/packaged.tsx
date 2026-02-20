@@ -69,7 +69,7 @@ export default function PackagedCountScreen() {
   const countUnits = quantity ? parseInt(quantity, 10) * multiplier : 0;
 
   function handleSubmit() {
-    if (!selectedItem || !quantity || countUnits <= 0) return;
+    if (!selectedItem || quantity === "") return;
     addLineMutation.mutate({
       sessionId: sessionId!,
       inventoryItemId: selectedItem.id,
@@ -202,10 +202,10 @@ export default function PackagedCountScreen() {
             <TouchableOpacity
               style={[
                 styles.submitBtn,
-                (!quantity || addLineMutation.isPending) && styles.submitBtnDisabled,
+                (quantity === "" || addLineMutation.isPending) && styles.submitBtnDisabled,
               ]}
               onPress={handleSubmit}
-              disabled={!quantity || addLineMutation.isPending}
+              disabled={quantity === "" || addLineMutation.isPending}
             >
               <Text style={styles.submitBtnText}>
                 {addLineMutation.isPending ? "Submitting..." : `Submit — ${countUnits} units`}

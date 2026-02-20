@@ -111,6 +111,7 @@ export const sessionsRouter = router({
       grossWeightGrams: z.number().min(0).optional(),
       percentRemaining: z.number().min(0).max(100).optional(),
       notes: z.string().optional(),
+      subAreaId: z.string().uuid().optional(),
     }))
     .mutation(({ ctx, input }) => {
       const { id, ...data } = input;

@@ -242,6 +242,18 @@ export default function SessionDetailScreen() {
 
   const [pendingVarianceItemIds, setPendingVarianceItemIds] = useState<string[]>([]);
 
+  function promptVarianceForItem(itemId: string) {
+    const line = session?.lines.find((l: any) => l.inventoryItemId === itemId);
+    const name = (line as any)?.inventoryItem?.name ?? itemId;
+    const counted = line
+      ? Number((line as any).countUnits ?? (line as any).grossWeightGrams ?? 0)
+      : 0;
+    // Use preview data for real variance if available
+    const preview = previewData?.lines.find((v) => v.inventoryItemId === itemId);
+    const variance = preview ? preview.variance : -counted;
+    setVarianceItem({ itemId, name, variance });
+  }
+
   const closeMutation = trpc.sessions.close.useMutation({
     onSuccess() {
       setShowVerification(false);
@@ -257,15 +269,7 @@ export default function SessionDetailScreen() {
         const ids = match[1].split(",").map((s) => s.trim());
         setPendingVarianceItemIds(ids);
         // Start prompting for the first item
-        const firstId = ids[0];
-        const line = session?.lines.find((l: any) => l.inventoryItemId === firstId);
-        if (line) {
-          setVarianceItem({
-            itemId: firstId,
-            name: (line as any).inventoryItem?.name ?? firstId,
-            variance: 0,
-          });
-        }
+        promptVarianceForItem(ids[0]);
       } else {
         Alert.alert("Error", error.message);
       }
@@ -395,20 +399,33 @@ export default function SessionDetailScreen() {
   }
 
   function handleConfirmClose() {
-    const allAcknowledged = uncountedItems.every((item) => item.acknowledged);
-    if (!allAcknowledged) {
+    const unacknowledgedCount = uncountedItems.filter((item) => !item.acknowledged).length;
+    if (unacknowledgedCount > 0) {
       Alert.alert(
-        "Unacknowledged Items",
-        "Please acknowledge all uncounted items before closing."
+        "Uncounted Items",
+        `${unacknowledgedCount} item${unacknowledgedCount !== 1 ? "s" : ""} still not counted or skipped. Close anyway?`,
+        [
+          { text: "Go Back", style: "cancel" },
+          {
+            text: "Close Anyway",
+            style: "destructive",
+            onPress: () => {
+              setShowVerification(false);
+              closeMutation.mutate({ sessionId: id!, varianceReasons });
+            },
+          },
+        ]
       );
       return;
     }
+    // Close verification modal first to avoid iOS modal conflict
+    setShowVerification(false);
     closeMutation.mutate({ sessionId: id!, varianceReasons });
   }
 
   function handleSaveEdit(lineId: string) {
     const val = parseInt(editingQty, 10);
-    if (!val || val <= 0) return;
+    if (isNaN(val) || val < 0) return;
     updateLine.mutate({ id: lineId, countUnits: val });
     setEditingLineId(null);
     setEditingQty("");
@@ -426,8 +443,11 @@ export default function SessionDetailScreen() {
   }
 
   function formatLineValue(line: any) {
-    if (line.countUnits != null)
-      return `${Number(line.countUnits)} ${line.inventoryItem.baseUom}`;
+    if (line.countUnits != null) {
+      const isWeighableItem = line.inventoryItem.category?.countingMethod === "weighable";
+      const unit = isWeighableItem ? "units" : line.inventoryItem.baseUom;
+      return `${Number(line.countUnits)} ${unit}`;
+    }
     if (line.grossWeightGrams != null)
       return `${Number(line.grossWeightGrams)}g`;
     if (line.percentRemaining != null)
@@ -805,10 +825,38 @@ export default function SessionDetailScreen() {
                         <Text style={styles.reviewItemName}>
                           {line.inventoryItem?.name ?? "Unknown"}
                         </Text>
-                        <Text style={styles.reviewItemMeta}>
-                          {line.inventoryItem?.category?.name ?? ""}
-                          {line.subArea ? ` | ${line.subArea.name}` : ""}
-                        </Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (!isOpen || submitMode) return;
+                            const allSubAreas: { id: string; label: string }[] = [];
+                            for (const area of (areas as BarArea[]) ?? []) {
+                              for (const sa of area.subAreas) {
+                                allSubAreas.push({ id: sa.id, label: `${area.name} — ${sa.name}` });
+                              }
+                            }
+                            Alert.alert(
+                              "Change Area",
+                              line.inventoryItem?.name,
+                              [
+                                ...allSubAreas.map((sa) => ({
+                                  text: sa.label + (sa.id === line.subArea?.id ? " ✓" : ""),
+                                  onPress: () => {
+                                    if (sa.id !== line.subArea?.id) {
+                                      updateLine.mutate({ id: line.id, subAreaId: sa.id });
+                                    }
+                                  },
+                                })),
+                                { text: "Cancel", style: "cancel" as const },
+                              ]
+                            );
+                          }}
+                        >
+                          <Text style={styles.reviewItemMeta}>
+                            {line.inventoryItem?.category?.name ?? ""}
+                            {line.subArea ? ` | ${line.subArea.name}` : " | No area"}
+                            {isOpen && !submitMode ? "  ✎" : ""}
+                          </Text>
+                        </TouchableOpacity>
                         {submitMode && variance && (
                           <Text style={[
                             styles.varianceText,
@@ -914,31 +962,51 @@ export default function SessionDetailScreen() {
 
           <ScrollView style={styles.verificationList}>
             {uncountedItems.map((item) => (
-              <TouchableOpacity
+              <View
                 key={item.inventoryItemId}
                 style={[
                   styles.verificationItem,
                   item.acknowledged && styles.verificationItemAcknowledged,
                 ]}
-                onPress={() => toggleAcknowledge(item.inventoryItemId)}
               >
-                <View style={styles.verificationItemInfo}>
+                <TouchableOpacity
+                  style={styles.verificationItemInfo}
+                  onPress={() => {
+                    // Close verification modal and navigate to count screen
+                    setShowVerification(false);
+                    handleExpectedItemTap({
+                      inventoryItemId: item.inventoryItemId,
+                      name: item.name,
+                      countingMethod: item.countingMethod ?? "unit_count",
+                    });
+                  }}
+                >
                   <Text style={styles.verificationItemName}>{item.name}</Text>
                   <Text style={styles.verificationItemArea}>
                     {item.subAreaName}
                   </Text>
-                </View>
-                <View
-                  style={[
-                    styles.checkbox,
-                    item.acknowledged && styles.checkboxChecked,
-                  ]}
+                  <Text style={styles.verificationCountLink}>Tap to count</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => toggleAcknowledge(item.inventoryItemId)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  style={styles.checkboxTouchArea}
                 >
-                  {item.acknowledged && (
-                    <Text style={styles.checkmark}>✓</Text>
-                  )}
-                </View>
-              </TouchableOpacity>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      item.acknowledged && styles.checkboxChecked,
+                    ]}
+                  >
+                    {item.acknowledged && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </View>
+                  <Text style={styles.checkboxLabel}>
+                    {item.acknowledged ? "Skipped" : "Skip"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </ScrollView>
 
@@ -985,13 +1053,7 @@ export default function SessionDetailScreen() {
             );
             if (remaining.length > 0) {
               // Prompt for next item
-              const nextId = remaining[0];
-              const line = session?.lines.find((l: any) => l.inventoryItemId === nextId);
-              setVarianceItem({
-                itemId: nextId,
-                name: (line as any)?.inventoryItem?.name ?? nextId,
-                variance: 0,
-              });
+              promptVarianceForItem(remaining[0]);
             } else if (pendingVarianceItemIds.length > 0) {
               // All reasons collected — retry close
               closeMutation.mutate({
@@ -1422,6 +1484,13 @@ const styles = StyleSheet.create({
   verificationItemInfo: { flex: 1 },
   verificationItemName: { fontSize: 15, fontWeight: "500", color: "#EAF0FF" },
   verificationItemArea: { fontSize: 12, color: "#5A6A7A", marginTop: 2 },
+  verificationCountLink: { fontSize: 12, color: "#E9B44C", fontWeight: "600", marginTop: 4 },
+  checkboxTouchArea: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingLeft: 12,
+    paddingVertical: 4,
+  },
   checkbox: {
     width: 28,
     height: 28,
@@ -1430,7 +1499,11 @@ const styles = StyleSheet.create({
     borderColor: "#5A6A7A",
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 12,
+  },
+  checkboxLabel: {
+    color: "#5A6A7A",
+    fontSize: 10,
+    marginTop: 2,
   },
   checkboxChecked: {
     borderColor: "#2BA8A0",

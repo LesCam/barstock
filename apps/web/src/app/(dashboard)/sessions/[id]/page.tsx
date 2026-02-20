@@ -112,6 +112,7 @@ export default function SessionDetailPage({
   const [countInput, setCountInput] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [selectedSubAreaId, setSelectedSubAreaId] = useState("");
+  const [useWeight, setUseWeight] = useState(false);
 
   // --- Close session state ---
   const [varianceItemIds, setVarianceItemIds] = useState<string[]>([]);
@@ -129,6 +130,10 @@ export default function SessionDetailPage({
     onSuccess: () => utils.sessions.getById.invalidate({ id }),
   });
 
+  const deleteLineMut = trpc.sessions.deleteLine.useMutation({
+    onSuccess: () => utils.sessions.getById.invalidate({ id }),
+  });
+
   const addLineMut = trpc.sessions.addLine.useMutation({
     onSuccess: () => {
       utils.sessions.getById.invalidate({ id });
@@ -136,6 +141,7 @@ export default function SessionDetailPage({
       setCountInput("");
       setItemSearch("");
       setSelectedSubAreaId("");
+      setUseWeight(false);
     },
   });
 
@@ -188,7 +194,7 @@ export default function SessionDetailPage({
       sessionId: id,
       inventoryItemId: selectedItemId,
       subAreaId: selectedSubAreaId || undefined,
-      ...(isWeighable
+      ...(useWeight
         ? { grossWeightGrams: value }
         : { countUnits: value }),
     });
@@ -312,12 +318,13 @@ export default function SessionDetailPage({
               <th className="px-4 py-3">Area</th>
               <th className="px-4 py-3">Counted By</th>
               <th className="px-4 py-3">Notes</th>
+              {isOpen && <th className="px-4 py-3"></th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5 text-[#EAF0FF]">
             {session.lines.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                <td colSpan={isOpen ? 9 : 8} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                   No items counted yet.
                 </td>
               </tr>
@@ -376,6 +383,20 @@ export default function SessionDetailPage({
                   <td className="px-4 py-3 text-xs">
                     {line.notes ?? "\u2014"}
                   </td>
+                  {isOpen && (
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => {
+                          if (confirm(`Remove ${line.inventoryItem.name}?`)) {
+                            deleteLineMut.mutate({ id: line.id });
+                          }
+                        }}
+                        className="text-xs text-red-400 hover:text-red-300"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -389,8 +410,14 @@ export default function SessionDetailPage({
           <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]">Add Item</h2>
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[200px]">
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">
+              <label className="mb-1 flex items-center gap-2 text-xs text-[#EAF0FF]/60">
                 Inventory Item
+                {selectedItem?.category && (
+                  <span className="rounded-full bg-[#2BA8A0]/20 px-2 py-0.5 text-[10px] font-medium capitalize text-[#2BA8A0]">
+                    {selectedItem.category.name}
+                    {isWeighable && " — weighable"}
+                  </span>
+                )}
               </label>
               <input
                 type="text"
@@ -410,6 +437,7 @@ export default function SessionDetailPage({
                       onClick={() => {
                         setSelectedItemId(item.id);
                         setItemSearch(item.name);
+                        setUseWeight(item.category?.countingMethod === "weighable");
                       }}
                       className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-[#EAF0FF] hover:bg-white/10"
                     >
@@ -445,20 +473,29 @@ export default function SessionDetailPage({
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">
-                {isWeighable ? "Weight (g)" : "Count"}
+              <label className="mb-1 flex items-center gap-2 text-xs text-[#EAF0FF]/60">
+                {useWeight ? "Weight (g)" : "Count"}
+                {isWeighable && (
+                  <button
+                    type="button"
+                    onClick={() => setUseWeight(!useWeight)}
+                    className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-[#E9B44C] hover:bg-white/5"
+                  >
+                    {useWeight ? "switch to units" : "switch to weight"}
+                  </button>
+                )}
               </label>
               <input
                 type="number"
                 value={countInput}
                 onChange={(e) => setCountInput(e.target.value)}
-                placeholder={isWeighable ? "grams" : "0"}
+                placeholder={useWeight ? "grams" : "0"}
                 className="w-24 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
               />
             </div>
             <button
               onClick={handleAddLine}
-              disabled={!selectedItemId || addLineMut.isPending}
+              disabled={!selectedItemId || !selectedSubAreaId || addLineMut.isPending}
               className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
             >
               {addLineMut.isPending ? "Adding..." : "Add"}
