@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../trpc";
-import { inventoryItemCreateSchema, inventoryItemUpdateSchema, priceHistoryCreateSchema, onHandQuerySchema } from "@barstock/validators";
+import { inventoryItemCreateSchema, inventoryItemUpdateSchema, priceHistoryCreateSchema, onHandQuerySchema, setItemVendorsSchema } from "@barstock/validators";
 import { InventoryService } from "../services/inventory.service";
 import { AuditService } from "../services/audit.service";
 import { z } from "zod";
@@ -26,7 +26,10 @@ export const inventoryRouter = router({
     .query(({ ctx, input }) =>
       ctx.prisma.inventoryItem.findMany({
         where: { locationId: input.locationId, active: true },
-        include: { category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } } },
+        include: {
+          category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } },
+          vendor: { select: { id: true, name: true } },
+        },
         orderBy: { name: "asc" },
       })
     ),
@@ -38,6 +41,8 @@ export const inventoryRouter = router({
         where: { id: input.id },
         include: {
           category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } },
+          vendor: { select: { id: true, name: true } },
+          itemVendors: { include: { vendor: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
           priceHistory: { orderBy: { effectiveFromTs: "desc" }, take: 5 },
           bottleTemplates: { where: { enabled: true }, take: 1 },
         },
@@ -150,13 +155,51 @@ export const inventoryRouter = router({
       };
     }),
 
+  setVendors: protectedProcedure
+    .input(setItemVendorsSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { inventoryItemId, vendors } = input;
+
+      return ctx.prisma.$transaction(async (tx) => {
+        // Delete existing item_vendors for this item
+        await tx.itemVendor.deleteMany({ where: { inventoryItemId } });
+
+        // Insert new rows
+        if (vendors.length > 0) {
+          await tx.itemVendor.createMany({
+            data: vendors.map((v) => ({
+              inventoryItemId,
+              vendorId: v.vendorId,
+              vendorSku: v.vendorSku ?? null,
+              isPreferred: v.isPreferred ?? false,
+            })),
+          });
+        }
+
+        // Sync preferred vendor to InventoryItem.vendorId
+        const preferred = vendors.find((v) => v.isPreferred);
+        await tx.inventoryItem.update({
+          where: { id: inventoryItemId },
+          data: { vendorId: preferred?.vendorId ?? null },
+        });
+
+        return tx.itemVendor.findMany({
+          where: { inventoryItemId },
+          include: { vendor: { select: { id: true, name: true } } },
+        });
+      });
+    }),
+
   listWithStock: protectedProcedure
     .input(z.object({ locationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const [items, stockRows] = await Promise.all([
         ctx.prisma.inventoryItem.findMany({
           where: { locationId: input.locationId, active: true },
-          include: { category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } } },
+          include: {
+            category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } },
+            vendor: { select: { id: true, name: true } },
+          },
           orderBy: { name: "asc" },
         }),
         ctx.prisma.consumptionEvent.groupBy({

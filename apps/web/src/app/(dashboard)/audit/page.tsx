@@ -24,6 +24,8 @@ const ACTION_LABELS: Record<string, string> = {
   "category.updated":              "Category Updated",
   "category.deleted":              "Category Deleted",
   "vendor.created":                "Vendor Created",
+  "vendor.updated":                "Vendor Updated",
+  "vendor.deleted":                "Vendor Deactivated",
   "price.added":                   "Price Added",
   "adjustment.created":            "Adjustment Created",
   "recipe.created":                "Recipe Created",
@@ -118,6 +120,8 @@ function formatMetadataSummary(actionType: string, meta: any): string {
     case "category.deleted":
       return meta.name ?? "";
     case "vendor.created":
+    case "vendor.updated":
+    case "vendor.deleted":
       return meta.name ?? "";
     case "user.created":
       return `${meta.email} (${meta.role})`;

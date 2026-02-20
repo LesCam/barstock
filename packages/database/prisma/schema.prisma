@@ -330,6 +330,7 @@ model InventoryItem {
   location           Location             @relation(fields: [locationId], references: [id])
   category           InventoryItemCategory? @relation(fields: [categoryId], references: [id])
   vendor             Vendor?              @relation(fields: [vendorId], references: [id])
+  itemVendors        ItemVendor[]
   priceHistory       PriceHistory[]
   kegInstances       KegInstance[]
   consumptionEvents  ConsumptionEvent[]
@@ -812,11 +813,26 @@ model Vendor {
 
   business       Business        @relation(fields: [businessId], references: [id])
   inventoryItems InventoryItem[]
+  itemVendors    ItemVendor[]
   parLevels      ParLevel[]
   purchaseOrders PurchaseOrder[]
 
   @@index([businessId], map: "ix_vendors_business")
   @@map("vendors")
+}
+
+model ItemVendor {
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  vendorId        String   @map("vendor_id") @db.Uuid
+  vendorSku       String?  @map("vendor_sku")
+  isPreferred     Boolean  @default(false) @map("is_preferred")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  vendor        Vendor        @relation(fields: [vendorId], references: [id])
+
+  @@id([inventoryItemId, vendorId])
+  @@map("item_vendors")
 }
 
 // ─── Par Levels ────────────────────────────────────────────

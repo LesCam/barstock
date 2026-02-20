@@ -272,6 +272,7 @@ export default function InventoryPage() {
               <tr>
                 <SortHeader label="Name" field="name" />
                 <SortHeader label="Category" field="category" />
+                <th className="px-4 py-3">Vendor</th>
                 <th className="px-4 py-3">On Hand</th>
                 <th className="px-4 py-3">Value</th>
                 <th className="px-4 py-3">Status</th>
@@ -288,6 +289,7 @@ export default function InventoryPage() {
                   >
                     <td className="px-4 py-3 font-medium">{item.name}</td>
                     <td className="px-4 py-3">{item.category?.name ?? "—"}</td>
+                    <td className="px-4 py-3 max-w-[120px] truncate text-[#EAF0FF]/70">{(item as any).vendor?.name ?? "—"}</td>
                     <td className="px-4 py-3">{oh?.quantity?.toFixed(1) ?? "—"}</td>
                     <td className="px-4 py-3">
                       {oh?.totalValue != null ? `$${oh.totalValue.toFixed(2)}` : "—"}

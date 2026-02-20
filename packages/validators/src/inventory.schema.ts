@@ -56,6 +56,18 @@ export const onHandQuerySchema = z.object({
   asOf: z.coerce.date().optional(),
 });
 
+export const setItemVendorsSchema = z.object({
+  inventoryItemId: z.string().uuid(),
+  vendors: z.array(
+    z.object({
+      vendorId: z.string().uuid(),
+      vendorSku: z.string().optional(),
+      isPreferred: z.boolean().optional(),
+    })
+  ),
+});
+
+export type SetItemVendorsInput = z.infer<typeof setItemVendorsSchema>;
 export type InventoryItemCreateInput = z.infer<
   typeof inventoryItemCreateSchema
 >;

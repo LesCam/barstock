@@ -1,5 +1,5 @@
-import { router, protectedProcedure, requireBusinessAccess } from "../trpc";
-import { vendorCreateSchema, vendorListSchema } from "@barstock/validators";
+import { router, protectedProcedure, requireBusinessAccess, requireRole } from "../trpc";
+import { vendorCreateSchema, vendorListSchema, vendorGetByIdSchema, vendorUpdateSchema } from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
 
 export const vendorsRouter = router({
@@ -34,4 +34,51 @@ export const vendorsRouter = router({
         orderBy: { name: "asc" },
       })
     ),
+
+  getById: protectedProcedure
+    .input(vendorGetByIdSchema)
+    .query(({ ctx, input }) =>
+      ctx.prisma.vendor.findUniqueOrThrow({
+        where: { id: input.id },
+        include: { _count: { select: { itemVendors: true } } },
+      })
+    ),
+
+  update: protectedProcedure
+    .use(requireRole("manager"))
+    .input(vendorUpdateSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      const vendor = await ctx.prisma.vendor.update({ where: { id }, data });
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: vendor.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "vendor.updated",
+        objectType: "vendor",
+        objectId: vendor.id,
+        metadata: data,
+      });
+      return vendor;
+    }),
+
+  delete: protectedProcedure
+    .use(requireRole("manager"))
+    .input(vendorGetByIdSchema)
+    .mutation(async ({ ctx, input }) => {
+      const vendor = await ctx.prisma.vendor.update({
+        where: { id: input.id },
+        data: { active: false },
+      });
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: vendor.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "vendor.deleted",
+        objectType: "vendor",
+        objectId: vendor.id,
+        metadata: { name: vendor.name },
+      });
+      return vendor;
+    }),
 });

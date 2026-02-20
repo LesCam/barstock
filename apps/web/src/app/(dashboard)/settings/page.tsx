@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
+import Link from "next/link";
 
 const ADMIN_ROLES = ["platform_admin", "business_admin"];
 
@@ -38,6 +39,25 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold text-[#EAF0FF]">Settings</h1>
+
+      {/* Quick links */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Link
+          href="/settings/categories"
+          className="rounded-lg border border-white/10 bg-[#16283F] p-4 hover:border-[#E9B44C]/30 transition-colors"
+        >
+          <h3 className="font-medium text-[#EAF0FF]">Manage Categories</h3>
+          <p className="mt-1 text-xs text-[#EAF0FF]/50">Item categories and counting methods</p>
+        </Link>
+        <Link
+          href="/settings/vendors"
+          className="rounded-lg border border-white/10 bg-[#16283F] p-4 hover:border-[#E9B44C]/30 transition-colors"
+        >
+          <h3 className="font-medium text-[#EAF0FF]">Manage Vendors</h3>
+          <p className="mt-1 text-xs text-[#EAF0FF]/50">Suppliers and contact information</p>
+        </Link>
+      </div>
+
       <BusinessProfileSection businessId={businessId} canEdit={canEdit} />
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
       <AutoLockPolicySection businessId={businessId} canEdit={canEdit} />
@@ -806,6 +826,11 @@ const ALERT_RULE_LABELS: Record<string, { label: string; unit: string; descripti
     label: "Shrinkage Patterns",
     unit: "sessions",
     description: "Alert when items show consistent negative variance across this many sessions",
+  },
+  parReorderAlert: {
+    label: "Par Reorder Alert",
+    unit: "days",
+    description: "Alert when items are below min level or will stockout within this many days",
   },
 };
 

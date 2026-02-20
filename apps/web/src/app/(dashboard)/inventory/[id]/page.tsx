@@ -159,6 +159,10 @@ export default function InventoryDetailPage({
     { businessId: businessId! },
     { enabled: !!businessId }
   );
+  const { data: allVendors } = trpc.vendors.list.useQuery(
+    { businessId: businessId!, activeOnly: true },
+    { enabled: !!businessId }
+  );
 
   // --- Edit state ---
   const [editing, setEditing] = useState(false);
@@ -169,6 +173,12 @@ export default function InventoryDetailPage({
   const [editPackSize, setEditPackSize] = useState("");
   const [editContainerSize, setEditContainerSize] = useState("");
   const [editContainerUom, setEditContainerUom] = useState("");
+
+  // --- Vendor edit state ---
+  type VendorRow = { vendorId: string; vendorSku: string; isPreferred: boolean };
+  const [editVendors, setEditVendors] = useState<VendorRow[]>([]);
+  const [addVendorId, setAddVendorId] = useState("");
+  const [addVendorSku, setAddVendorSku] = useState("");
 
   // --- Add price state ---
   const [showAddPrice, setShowAddPrice] = useState(false);
@@ -184,6 +194,13 @@ export default function InventoryDetailPage({
       utils.inventory.getById.invalidate({ id });
       utils.inventory.list.invalidate();
       setEditing(false);
+    },
+  });
+
+  const setVendorsMut = trpc.inventory.setVendors.useMutation({
+    onSuccess: () => {
+      utils.inventory.getById.invalidate({ id });
+      utils.inventory.list.invalidate();
     },
   });
 
@@ -208,10 +225,29 @@ export default function InventoryDetailPage({
     setEditPackSize(item.packSize != null ? String(item.packSize) : "");
     setEditContainerSize(item.containerSize != null ? String(item.containerSize) : "");
     setEditContainerUom(item.containerUom ?? "");
+    setEditVendors(
+      (item.itemVendors ?? []).map((iv: any) => ({
+        vendorId: iv.vendorId,
+        vendorSku: iv.vendorSku ?? "",
+        isPreferred: iv.isPreferred,
+      }))
+    );
+    setAddVendorId("");
+    setAddVendorSku("");
     setEditing(true);
   }
 
   function handleSave() {
+    // Save vendors
+    setVendorsMut.mutate({
+      inventoryItemId: id,
+      vendors: editVendors.map((v) => ({
+        vendorId: v.vendorId,
+        vendorSku: v.vendorSku || undefined,
+        isPreferred: v.isPreferred,
+      })),
+    });
+    // Save item fields
     updateMut.mutate({
       id,
       name: editName.trim(),
@@ -224,6 +260,27 @@ export default function InventoryDetailPage({
       containerSize: editContainerSize ? Number(editContainerSize) : null,
       containerUom: editContainerUom ? (editContainerUom as any) : null,
     });
+  }
+
+  function handleAddVendor() {
+    if (!addVendorId || editVendors.some((v) => v.vendorId === addVendorId)) return;
+    const isFirst = editVendors.length === 0;
+    setEditVendors([...editVendors, { vendorId: addVendorId, vendorSku: addVendorSku, isPreferred: isFirst }]);
+    setAddVendorId("");
+    setAddVendorSku("");
+  }
+
+  function handleRemoveVendor(vendorId: string) {
+    const updated = editVendors.filter((v) => v.vendorId !== vendorId);
+    // If we removed the preferred vendor, auto-prefer the first
+    if (updated.length > 0 && !updated.some((v) => v.isPreferred)) {
+      updated[0].isPreferred = true;
+    }
+    setEditVendors(updated);
+  }
+
+  function handleSetPreferred(vendorId: string) {
+    setEditVendors(editVendors.map((v) => ({ ...v, isPreferred: v.vendorId === vendorId })));
   }
 
   function handleToggleActive() {
@@ -360,15 +417,6 @@ export default function InventoryDetailPage({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[#EAF0FF]/60">Vendor SKU</label>
-                <input
-                  type="text"
-                  value={editVendorSku}
-                  onChange={(e) => setEditVendorSku(e.target.value)}
-                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
-                />
-              </div>
-              <div>
                 <label className="mb-1 inline-flex items-center gap-1 text-xs text-[#EAF0FF]/60">
                   Pack Size
                   <span title="Number of items per case or pack. E.g. 12 for a case of 12 bottles." className="cursor-help rounded-full border border-[#EAF0FF]/20 px-1 text-[10px] leading-tight text-[#EAF0FF]/40 hover:text-[#EAF0FF]/70">?</span>
@@ -409,13 +457,80 @@ export default function InventoryDetailPage({
                 </select>
               </div>
             </div>
+
+            {/* Multi-vendor editor */}
+            <div className="mt-4 rounded-md border border-white/10 bg-[#0B1623]/50 p-3">
+              <label className="mb-2 block text-xs font-medium text-[#EAF0FF]/60">Vendors</label>
+              {editVendors.length > 0 && (
+                <div className="mb-2 space-y-1">
+                  {editVendors.map((ev) => {
+                    const vendorName = allVendors?.find((v) => v.id === ev.vendorId)?.name ?? ev.vendorId;
+                    return (
+                      <div key={ev.vendorId} className="flex items-center gap-2 text-sm">
+                        <button
+                          type="button"
+                          onClick={() => handleSetPreferred(ev.vendorId)}
+                          className={`text-base ${ev.isPreferred ? "text-[#E9B44C]" : "text-[#EAF0FF]/20 hover:text-[#E9B44C]/60"}`}
+                          title={ev.isPreferred ? "Preferred vendor" : "Set as preferred"}
+                        >
+                          &#9733;
+                        </button>
+                        <span className="text-[#EAF0FF]">{vendorName}</span>
+                        {ev.vendorSku && <span className="text-[#EAF0FF]/40 text-xs">(SKU: {ev.vendorSku})</span>}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveVendor(ev.vendorId)}
+                          className="ml-auto text-xs text-red-400/60 hover:text-red-400"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <select
+                    value={addVendorId}
+                    onChange={(e) => setAddVendorId(e.target.value)}
+                    className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF]"
+                  >
+                    <option value="">Select vendor...</option>
+                    {allVendors
+                      ?.filter((v) => !editVendors.some((ev) => ev.vendorId === v.id))
+                      .map((v) => (
+                        <option key={v.id} value={v.id}>{v.name}</option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={addVendorSku}
+                    onChange={(e) => setAddVendorSku(e.target.value)}
+                    placeholder="SKU (optional)"
+                    className="w-28 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddVendor}
+                  disabled={!addVendorId}
+                  className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-xs font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
             <div className="mt-3 flex items-center gap-3">
               <button
                 onClick={handleSave}
-                disabled={updateMut.isPending || !editName.trim()}
+                disabled={updateMut.isPending || setVendorsMut.isPending || !editName.trim()}
                 className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
               >
-                {updateMut.isPending ? "Saving..." : "Save"}
+                {updateMut.isPending || setVendorsMut.isPending ? "Saving..." : "Save"}
               </button>
               <button
                 onClick={() => setEditing(false)}
@@ -423,8 +538,8 @@ export default function InventoryDetailPage({
               >
                 Cancel
               </button>
-              {updateMut.error && (
-                <p className="text-sm text-red-400">{updateMut.error.message}</p>
+              {(updateMut.error || setVendorsMut.error) && (
+                <p className="text-sm text-red-400">{(updateMut.error || setVendorsMut.error)?.message}</p>
               )}
             </div>
           </div>
@@ -438,9 +553,23 @@ export default function InventoryDetailPage({
               <dt className="text-[#EAF0FF]/60">Barcode</dt>
               <dd className="text-[#EAF0FF]">{item.barcode || "—"}</dd>
             </div>
-            <div>
-              <dt className="text-[#EAF0FF]/60">Vendor SKU</dt>
-              <dd className="text-[#EAF0FF]">{item.vendorSku || "—"}</dd>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <dt className="text-[#EAF0FF]/60">Vendors</dt>
+              <dd className="text-[#EAF0FF]">
+                {item.itemVendors && item.itemVendors.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {item.itemVendors.map((iv: any) => (
+                      <span key={iv.vendorId} className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-0.5 text-xs">
+                        {iv.isPreferred && <span className="text-[#E9B44C]" title="Preferred vendor">&#9733;</span>}
+                        {iv.vendor.name}
+                        {iv.vendorSku && <span className="text-[#EAF0FF]/40">(SKU: {iv.vendorSku})</span>}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  "—"
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-[#EAF0FF]/60">Pack Size</dt>
