@@ -3,6 +3,7 @@ import { VarianceService } from "./variance.service";
 import { InventoryService } from "./inventory.service";
 import { NotificationService } from "./notification.service";
 import { SettingsService } from "./settings.service";
+import { ParLevelService } from "./par-level.service";
 import { Prisma } from "@prisma/client";
 
 export interface AlertResult {
@@ -59,6 +60,11 @@ export class AlertService {
       if (rules.shrinkagePattern?.enabled) {
         const patternAlerts = await this.checkShrinkagePatterns(loc.id, loc.name, rules.shrinkagePattern.threshold);
         alerts.push(...patternAlerts);
+      }
+
+      if ((rules as any).parReorderAlert?.enabled) {
+        const parAlerts = await this.checkParLevels(loc.id, loc.name, (rules as any).parReorderAlert.threshold);
+        alerts.push(...parAlerts);
       }
     }
 
@@ -306,6 +312,43 @@ export class AlertService {
     } catch {
       return [];
     }
+  }
+
+  private async checkParLevels(locationId: string, locationName: string, thresholdDays: number): Promise<AlertResult[]> {
+    const svc = new ParLevelService(this.prisma);
+    const items = await svc.list(locationId);
+    const alerts: AlertResult[] = [];
+
+    // Items at or below min level
+    const needsReorder = items.filter((i) => i.needsReorder);
+    if (needsReorder.length > 0) {
+      alerts.push({
+        title: `Reorder needed at ${locationName}`,
+        body: `${needsReorder.length} item(s) at or below minimum level: ${needsReorder.slice(0, 3).map((i) => i.itemName).join(", ")}`,
+        linkUrl: "/par",
+        metadata: { rule: "parReorderAlert", locationId, itemCount: needsReorder.length },
+      });
+    }
+
+    // Items approaching stockout within threshold days
+    if (thresholdDays > 0) {
+      const approaching = items.filter(
+        (i) =>
+          i.daysToStockout != null &&
+          i.daysToStockout <= thresholdDays &&
+          !i.needsReorder
+      );
+      if (approaching.length > 0) {
+        alerts.push({
+          title: `Stock running low at ${locationName}`,
+          body: `${approaching.length} item(s) will stockout within ${thresholdDays} days: ${approaching.slice(0, 3).map((i) => `${i.itemName} (${i.daysToStockout}d)`).join(", ")}`,
+          linkUrl: "/par",
+          metadata: { rule: "parReorderAlert", locationId, itemCount: approaching.length, type: "approaching" },
+        });
+      }
+    }
+
+    return alerts;
   }
 
   async checkHighVarianceSession(

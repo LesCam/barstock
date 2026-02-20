@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     loginFailures: { enabled: true, threshold: 5 },
     largeAdjustment: { enabled: true, threshold: 20 },
     shrinkagePattern: { enabled: true, threshold: 3 },
+    parReorderAlert: { enabled: false, threshold: 3 },
   },
 };
 

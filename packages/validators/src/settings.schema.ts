@@ -36,6 +36,7 @@ export const alertRulesSchema = z.object({
   loginFailures: alertRuleSchema.default({ enabled: true, threshold: 5 }),
   largeAdjustment: alertRuleSchema.default({ enabled: true, threshold: 20 }),
   shrinkagePattern: alertRuleSchema.default({ enabled: true, threshold: 3 }),
+  parReorderAlert: alertRuleSchema.default({ enabled: false, threshold: 3 }),
 });
 
 export type AlertRules = z.infer<typeof alertRulesSchema>;
