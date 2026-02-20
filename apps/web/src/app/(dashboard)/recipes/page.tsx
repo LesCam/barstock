@@ -53,6 +53,7 @@ export default function RecipesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
+  const [addingNewCategory, setAddingNewCategory] = useState(false);
   const [ingredients, setIngredients] = useState<IngredientRow[]>([
     emptyIngredient(),
   ]);
@@ -64,6 +65,7 @@ export default function RecipesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [editAddingNewCategory, setEditAddingNewCategory] = useState(false);
   const [editIngredients, setEditIngredients] = useState<IngredientRow[]>([]);
   const [editIngredientSearch, setEditIngredientSearch] = useState<
     Record<number, string>
@@ -96,6 +98,7 @@ export default function RecipesPage() {
     setShowCreate(false);
     setName("");
     setCategory("");
+    setAddingNewCategory(false);
     setIngredients([emptyIngredient()]);
     setIngredientSearch({});
   }
@@ -122,6 +125,7 @@ export default function RecipesPage() {
     setEditingId(recipe.id);
     setEditName(recipe.name);
     setEditCategory(recipe.category ?? "");
+    setEditAddingNewCategory(false);
     setEditIngredients(
       recipe.ingredients.map((ing: any) => ({
         inventoryItemId: ing.inventoryItemId,
@@ -341,23 +345,49 @@ export default function RecipesPage() {
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30 focus:border-[#E9B44C] focus:outline-none"
               />
             </div>
-            <div className="w-48">
+            <div className="w-52">
               <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">
                 Category
               </label>
-              <input
-                type="text"
-                list="recipe-categories"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g. Cocktail"
-                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30 focus:border-[#E9B44C] focus:outline-none"
-              />
-              <datalist id="recipe-categories">
-                {(existingCategories ?? []).map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
+              {addingNewCategory ? (
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    placeholder="New category name"
+                    autoFocus
+                    className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30 focus:border-[#E9B44C] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setAddingNewCategory(false); setCategory(""); }}
+                    className="shrink-0 rounded px-2 text-xs text-[#EAF0FF]/40 hover:text-[#EAF0FF]"
+                    title="Cancel"
+                  >
+                    X
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={category}
+                  onChange={(e) => {
+                    if (e.target.value === "__add_new__") {
+                      setAddingNewCategory(true);
+                      setCategory("");
+                    } else {
+                      setCategory(e.target.value);
+                    }
+                  }}
+                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
+                >
+                  <option value="">No category</option>
+                  {(existingCategories ?? []).map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                  <option value="__add_new__">+ Add New...</option>
+                </select>
+              )}
             </div>
           </div>
           {renderIngredientForm(
@@ -459,23 +489,49 @@ export default function RecipesPage() {
                                     className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
                                   />
                                 </div>
-                                <div className="w-48">
+                                <div className="w-52">
                                   <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">
                                     Category
                                   </label>
-                                  <input
-                                    type="text"
-                                    list="recipe-categories-edit"
-                                    value={editCategory}
-                                    onChange={(e) => setEditCategory(e.target.value)}
-                                    placeholder="e.g. Cocktail"
-                                    className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30 focus:border-[#E9B44C] focus:outline-none"
-                                  />
-                                  <datalist id="recipe-categories-edit">
-                                    {(existingCategories ?? []).map((c) => (
-                                      <option key={c} value={c} />
-                                    ))}
-                                  </datalist>
+                                  {editAddingNewCategory ? (
+                                    <div className="flex gap-1">
+                                      <input
+                                        type="text"
+                                        value={editCategory}
+                                        onChange={(e) => setEditCategory(e.target.value)}
+                                        placeholder="New category name"
+                                        autoFocus
+                                        className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30 focus:border-[#E9B44C] focus:outline-none"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => { setEditAddingNewCategory(false); setEditCategory(""); }}
+                                        className="shrink-0 rounded px-2 text-xs text-[#EAF0FF]/40 hover:text-[#EAF0FF]"
+                                        title="Cancel"
+                                      >
+                                        X
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <select
+                                      value={(existingCategories ?? []).includes(editCategory) ? editCategory : editCategory ? "__custom__" : ""}
+                                      onChange={(e) => {
+                                        if (e.target.value === "__add_new__") {
+                                          setEditAddingNewCategory(true);
+                                          setEditCategory("");
+                                        } else {
+                                          setEditCategory(e.target.value);
+                                        }
+                                      }}
+                                      className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
+                                    >
+                                      <option value="">No category</option>
+                                      {(existingCategories ?? []).map((c) => (
+                                        <option key={c} value={c}>{c}</option>
+                                      ))}
+                                      <option value="__add_new__">+ Add New...</option>
+                                    </select>
+                                  )}
                                 </div>
                               </div>
                               {renderIngredientForm(
