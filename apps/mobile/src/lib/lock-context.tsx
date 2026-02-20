@@ -66,7 +66,10 @@ export function LockProvider({ children }: { children: ReactNode }) {
     trpcVanilla.settings.autoLockPolicy
       .query({ businessId: user.businessId })
       .then((policy) => setLockPolicy(policy))
-      .catch(() => setLockPolicy(DEFAULT_POLICY));
+      .catch((err) => {
+        console.warn("[LockContext] Failed to fetch lock policy:", err?.message);
+        setLockPolicy(DEFAULT_POLICY);
+      });
   }, [token, user?.businessId]);
 
   // AppState listener for background/foreground transitions
