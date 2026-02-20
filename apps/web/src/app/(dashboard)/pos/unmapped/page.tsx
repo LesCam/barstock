@@ -241,6 +241,22 @@ export default function UnmappedPage() {
                                       </option>
                                     ))}
                                   </select>
+                                  {recipeId && (() => {
+                                    const selected = recipes?.find((r) => r.id === recipeId);
+                                    if (!selected) return null;
+                                    return (
+                                      <div className="mt-1.5 rounded-md border border-white/5 bg-[#0B1623]/50 px-2 py-1.5">
+                                        <p className="mb-1 text-xs font-medium text-[#E9B44C]">{selected.name}</p>
+                                        {selected.ingredients.map((ing: any) => (
+                                          <div key={ing.id} className="flex gap-1.5 text-xs text-[#EAF0FF]/70">
+                                            <span>{Number(ing.quantity)} {ing.uom}</span>
+                                            <span className="text-[#EAF0FF]/50">-</span>
+                                            <span>{ing.inventoryItem.name}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               )}
 
