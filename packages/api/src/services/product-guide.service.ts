@@ -139,7 +139,10 @@ export class ProductGuideService {
   }
 
   async listItems(params: GuideItemListInput) {
-    const where: Record<string, unknown> = { locationId: params.locationId };
+    const where: Record<string, unknown> = {
+      locationId: params.locationId,
+      inventoryItem: { active: true },
+    };
     if (params.categoryId) where.categoryId = params.categoryId;
     if (params.activeOnly) where.active = true;
 
@@ -469,7 +472,7 @@ export class ProductGuideService {
           description: true,
           sortOrder: true,
           items: {
-            where: { active: true },
+            where: { active: true, inventoryItem: { active: true } },
             orderBy: { sortOrder: "asc" },
             select: {
               id: true,
