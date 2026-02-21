@@ -73,6 +73,7 @@ export default function ScanWeighScreen() {
   const autoSubmitProgress = useRef(new Animated.Value(0)).current;
   const [autoSubmitActive, setAutoSubmitActive] = useState(false);
   const autoSubmitWeightRef = useRef<number | null>(null);
+  const autoSubmitSuppressedRef = useRef(false);
 
   // Use refs so the scale listener closure always sees current values
   const phaseRef = useRef(phase);
@@ -136,6 +137,7 @@ export default function ScanWeighScreen() {
   matchedTemplateRef.current = matchedTemplate;
   const usingManualRef = useRef(usingManual);
   usingManualRef.current = usingManual;
+  const handleSubmitRef = useRef<() => void>(() => {});
 
   const calcQuery = trpc.scale.calculateLiquid.useQuery(
     { templateId: matchedTemplate?.id ?? "", grossWeightG: grossWeightG ?? 0 },
@@ -147,8 +149,8 @@ export default function ScanWeighScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
 
-  // Cancel auto-submit helper
-  function cancelAutoSubmit() {
+  // Cancel auto-submit helper (suppress = true prevents restart until next item)
+  function cancelAutoSubmit(suppress = false) {
     if (autoSubmitTimerRef.current) {
       clearTimeout(autoSubmitTimerRef.current);
       autoSubmitTimerRef.current = null;
@@ -157,6 +159,7 @@ export default function ScanWeighScreen() {
     autoSubmitProgress.setValue(0);
     setAutoSubmitActive(false);
     autoSubmitWeightRef.current = null;
+    if (suppress) autoSubmitSuppressedRef.current = true;
   }
 
   // Start auto-submit countdown
@@ -175,7 +178,7 @@ export default function ScanWeighScreen() {
       autoSubmitTimerRef.current = null;
       setAutoSubmitActive(false);
       autoSubmitProgress.setValue(0);
-      handleSubmit();
+      handleSubmitRef.current();
     }, AUTO_SUBMIT_DELAY_MS);
   }
 
@@ -186,12 +189,13 @@ export default function ScanWeighScreen() {
       if (reading.stable && phaseRef.current === "weighing") {
         setScaleWeight(reading.weightGrams);
 
-        // Auto-submit: if stable, has template, not manual, weight > 0
+        // Auto-submit: if stable, has template, not manual, weight > 0, not suppressed
         if (
           reading.weightGrams > 0 &&
           matchedItemRef.current &&
           matchedTemplateRef.current &&
-          !usingManualRef.current
+          !usingManualRef.current &&
+          !autoSubmitSuppressedRef.current
         ) {
           const prevWeight = autoSubmitWeightRef.current;
           if (prevWeight !== null && Math.abs(reading.weightGrams - prevWeight) > 5) {
@@ -357,7 +361,7 @@ export default function ScanWeighScreen() {
     if (!matchedItem || grossWeightG == null || grossWeightG <= 0) return;
     const dup = checkForDuplicate();
     if (dup) {
-      cancelAutoSubmit();
+      cancelAutoSubmit(true);
       Alert.alert(
         "Possible Duplicate",
         `${matchedItem.name} was already weighed at ${dup.existingWeight.toFixed(1)}g (now ${grossWeightG.toFixed(1)}g). Submit anyway?`,
@@ -370,9 +374,11 @@ export default function ScanWeighScreen() {
       doSubmit();
     }
   }
+  handleSubmitRef.current = handleSubmit;
 
   function resetToScanning() {
     cancelAutoSubmit();
+    autoSubmitSuppressedRef.current = false;
     setPhase("scanning");
     setMatchedItem(null);
     setScannedBarcode(null);
@@ -735,7 +741,7 @@ export default function ScanWeighScreen() {
             {autoSubmitActive && (
               <TouchableOpacity
                 style={styles.autoSubmitBar}
-                onPress={cancelAutoSubmit}
+                onPress={() => cancelAutoSubmit(true)}
                 activeOpacity={0.7}
               >
                 <Animated.View
