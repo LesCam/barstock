@@ -811,26 +811,15 @@ export default function SessionDetailScreen() {
         {isOpen && (
           <View style={styles.actions}>
             <TouchableOpacity
-              style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
+              style={[styles.scanWeighBtn, !areaSelected && styles.actionBtnDisabled]}
               disabled={!areaSelected}
               onPress={() =>
                 router.push(
-                  `/session/${id}/packaged?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
+                  `/session/${id}/scan-weigh?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
                 )
               }
             >
-              <Text style={styles.actionText}>Count New Item</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
-              disabled={!areaSelected}
-              onPress={() =>
-                router.push(
-                  `/session/${id}/liquor?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
-                )
-              }
-            >
-              <Text style={styles.actionText}>Weigh Bottle</Text>
+              <Text style={styles.scanWeighBtnText}>Scan Weigh Count</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, !areaSelected && styles.actionBtnDisabled]}
@@ -844,21 +833,6 @@ export default function SessionDetailScreen() {
               <Text style={styles.actionText}>Draft Verify</Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        {/* Scan & Weigh shortcut */}
-        {isOpen && (
-          <TouchableOpacity
-            style={[styles.scanWeighBtn, !areaSelected && styles.actionBtnDisabled]}
-            disabled={!areaSelected}
-            onPress={() =>
-              router.push(
-                `/session/${id}/scan-weigh?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
-              )
-            }
-          >
-            <Text style={styles.scanWeighBtnText}>Scan & Weigh</Text>
-          </TouchableOpacity>
         )}
 
         {/* Expected Items Checklist */}
@@ -1458,7 +1432,7 @@ const styles = StyleSheet.create({
   areaBannerProgress: { color: "#2BA8A0", fontSize: 12, fontWeight: "600", marginTop: 4 },
 
   // Count actions
-  actions: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  actions: { flexDirection: "row", gap: 10, marginBottom: 12 },
   actionBtn: {
     flex: 1,
     backgroundColor: "#16283F",
@@ -1471,13 +1445,13 @@ const styles = StyleSheet.create({
   actionBtnDisabled: { opacity: 0.4 },
   actionText: { fontSize: 13, fontWeight: "500", color: "#EAF0FF" },
   scanWeighBtn: {
+    flex: 1,
     backgroundColor: "#16283F",
     borderWidth: 1,
     borderColor: "#2BA8A0",
     borderRadius: 8,
-    padding: 14,
+    padding: 12,
     alignItems: "center",
-    marginBottom: 12,
   },
   scanWeighBtnText: { fontSize: 15, fontWeight: "600", color: "#2BA8A0" },
 

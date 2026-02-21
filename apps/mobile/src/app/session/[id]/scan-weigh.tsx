@@ -26,7 +26,7 @@ type Phase =
   | "submitting"
   | "submitted"
   | "not_found"
-  | "not_weighable";
+  | "counting";
 
 interface MatchedItem {
   id: string;
@@ -57,6 +57,7 @@ export default function ScanWeighScreen() {
   const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
   const [lastSubmittedName, setLastSubmittedName] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [unitCount, setUnitCount] = useState("");
   const searchInputRef = useRef<TextInput>(null);
 
   const successOpacity = useRef(new Animated.Value(0)).current;
@@ -159,7 +160,7 @@ export default function ScanWeighScreen() {
           const typedItem = item as MatchedItem;
           setMatchedItem(typedItem);
           if (typedItem.category?.countingMethod !== "weighable") {
-            setPhase("not_weighable");
+            setPhase("counting");
           } else {
             setPhase("weighing");
           }
@@ -266,6 +267,7 @@ export default function ScanWeighScreen() {
     setManualWeight("");
     setShowManualEntry(false);
     setSearchQuery("");
+    setUnitCount("");
   }
 
   function handleSearchSelect(item: MatchedItem) {
@@ -273,7 +275,7 @@ export default function ScanWeighScreen() {
     setSearchQuery("");
     setMatchedItem(item);
     if (item.category?.countingMethod !== "weighable") {
-      setPhase("not_weighable");
+      setPhase("counting");
     } else {
       setScaleWeight(null);
       setManualWeight("");
@@ -291,11 +293,45 @@ export default function ScanWeighScreen() {
     setCreatingFromScan({ barcode: scannedBarcode });
   }
 
-  function handleGoToPackaged() {
-    if (!matchedItem) return;
-    router.replace(
-      `/session/${sessionId}/packaged?subAreaId=${subAreaId ?? ""}&areaName=${encodeURIComponent(areaName ?? "")}&itemId=${matchedItem.id}` as any
-    );
+  async function handleUnitSubmit() {
+    if (!matchedItem || !unitCount) return;
+    const count = parseInt(unitCount, 10);
+    if (isNaN(count) || count < 0) return;
+    setPhase("submitting");
+
+    try {
+      await addLineMutation.mutateAsync({
+        sessionId: sessionId!,
+        inventoryItemId: matchedItem.id,
+        countUnits: count,
+        isManual: true,
+        subAreaId: subAreaId || undefined,
+      });
+
+      setSubmittedCount((c) => c + 1);
+      setLastSubmittedName(matchedItem.name);
+      utils.sessions.getById.invalidate({ id: sessionId! });
+
+      setPhase("submitted");
+      Animated.sequence([
+        Animated.timing(successOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.delay(800),
+        Animated.timing(successOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        resetToScanning();
+      });
+    } catch (error: any) {
+      Alert.alert("Error", error.message ?? "Failed to submit.");
+      setPhase("counting");
+    }
   }
 
   // Camera permission
@@ -482,6 +518,16 @@ export default function ScanWeighScreen() {
               </TouchableOpacity>
             </View>
 
+            <TouchableOpacity
+              style={styles.fullUnitsBtn}
+              onPress={() => {
+                setUnitCount("");
+                setPhase("counting");
+              }}
+            >
+              <Text style={styles.fullUnitsBtnText}>Count full units instead</Text>
+            </TouchableOpacity>
+
             {!hasTemplate && (
               <View style={styles.noTemplateBox}>
                 <Text style={styles.noTemplateText}>
@@ -598,21 +644,57 @@ export default function ScanWeighScreen() {
         </View>
       )}
 
-      {/* Not weighable panel */}
-      {phase === "not_weighable" && matchedItem && (
+      {/* Unit count panel */}
+      {phase === "counting" && matchedItem && (
         <View style={styles.bottomPanel}>
-          <Text style={styles.itemName}>{matchedItem.name}</Text>
-          <Text style={styles.notWeighableText}>
-            This item uses unit counting, not weighing.
-          </Text>
-          <View style={styles.notFoundActions}>
-            <TouchableOpacity style={styles.createBtn} onPress={handleGoToPackaged}>
-              <Text style={styles.createBtnText}>Count Units</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.skipBtn} onPress={resetToScanning}>
-              <Text style={styles.skipBtnText}>Skip</Text>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
+          <View style={styles.itemHeader}>
+            <Text style={styles.itemName}>{matchedItem.name}</Text>
+            <TouchableOpacity onPress={resetToScanning}>
+              <Text style={styles.rescanLink}>Rescan</Text>
             </TouchableOpacity>
           </View>
+          <Text style={styles.countingLabel}>
+            {matchedItem.category?.name ?? "Unit Count"}
+          </Text>
+          <View style={styles.unitCountDisplay}>
+            <Text style={styles.unitCountValue}>{unitCount || "0"}</Text>
+            <Text style={styles.unitCountUnit}>
+              {matchedItem.baseUom || "units"}
+            </Text>
+          </View>
+          <NumericKeypad value={unitCount} onChange={setUnitCount} />
+          {matchedItem.category?.countingMethod === "weighable" && (
+            <TouchableOpacity
+              style={styles.modeToggle}
+              onPress={() => {
+                setManualWeight("");
+                setScaleWeight(null);
+                setShowManualEntry(false);
+                setPhase("weighing");
+              }}
+            >
+              <Text style={styles.modeToggleText}>Weigh instead</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.submitBtn,
+              { marginTop: 8 },
+              (unitCount === "" || addLineMutation.isPending) && styles.submitBtnDisabled,
+            ]}
+            onPress={handleUnitSubmit}
+            disabled={unitCount === "" || addLineMutation.isPending}
+          >
+            <Text style={styles.submitBtnText}>
+              {addLineMutation.isPending ? "Submitting..." : "Submit Count"}
+            </Text>
+          </TouchableOpacity>
+          </ScrollView>
         </View>
       )}
 
@@ -827,6 +909,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 12,
   },
+  fullUnitsBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#2BA8A0",
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "rgba(43,168,160,0.1)",
+  },
+  fullUnitsBtnText: {
+    color: "#2BA8A0",
+    fontSize: 14,
+    fontWeight: "600",
+  },
 
   // No template
   noTemplateBox: {
@@ -995,11 +1092,28 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Not weighable
-  notWeighableText: {
+  // Unit counting
+  countingLabel: {
     color: "#8899AA",
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  unitCountDisplay: {
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  unitCountValue: {
+    fontSize: 48,
+    fontWeight: "bold",
+    color: "#EAF0FF",
+  },
+  unitCountUnit: {
+    color: "#5A6A7A",
     fontSize: 14,
-    marginBottom: 16,
+    marginTop: 4,
   },
 
   // Search panel
