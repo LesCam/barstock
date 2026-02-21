@@ -38,6 +38,12 @@ export class AlertService {
 
     const alerts: AlertResult[] = [];
 
+    // Login failures are business-scoped, check before location loop
+    if ((rules as any).loginFailures?.enabled) {
+      const loginAlerts = await this.checkLoginFailures(businessId, (rules as any).loginFailures.threshold);
+      alerts.push(...loginAlerts);
+    }
+
     for (const loc of locations) {
       if (rules.variancePercent.enabled) {
         const varAlerts = await this.checkVariance(loc.id, loc.name, rules.variancePercent.threshold);
@@ -406,6 +412,26 @@ export class AlertService {
     }
 
     return alerts;
+  }
+
+  private async checkLoginFailures(businessId: string, threshold: number): Promise<AlertResult[]> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const failCount = await this.prisma.auditLog.count({
+      where: {
+        actionType: { in: ["auth.login_failed", "auth.login_pin_failed"] },
+        businessId,
+        createdAt: { gte: oneHourAgo },
+      },
+    });
+
+    if (failCount < threshold) return [];
+
+    return [{
+      title: "Multiple failed login attempts",
+      body: `${failCount} failed login attempt(s) in the last hour.`,
+      linkUrl: "/audit",
+      metadata: { rule: "loginFailures", failCount },
+    }];
   }
 
   async checkHighVarianceSession(

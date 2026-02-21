@@ -48,7 +48,7 @@ export const authRouter = router({
           const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
           const failCount = await ctx.prisma.auditLog.count({
             where: {
-              actionType: "auth.login_failed",
+              actionType: { in: ["auth.login_failed", "auth.login_pin_failed"] },
               businessId: user.businessId,
               createdAt: { gte: oneHourAgo },
             },
@@ -108,6 +108,36 @@ export const authRouter = router({
           objectType: "user",
           metadata: { reason: "invalid_pin" },
         });
+
+        // Check if failed logins exceed threshold and alert admins
+        try {
+          const settingsSvc = new SettingsService(ctx.prisma);
+          const settings = await settingsSvc.getSettings(input.businessId);
+          const loginRule = (settings.alertRules as any).loginFailures;
+          if (loginRule?.enabled) {
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+            const failCount = await ctx.prisma.auditLog.count({
+              where: {
+                actionType: { in: ["auth.login_failed", "auth.login_pin_failed"] },
+                businessId: input.businessId,
+                createdAt: { gte: oneHourAgo },
+              },
+            });
+            if (failCount >= loginRule.threshold) {
+              const alertSvc = new AlertService(ctx.prisma);
+              await alertSvc.notifyAdmins(
+                input.businessId,
+                "Multiple failed login attempts",
+                `${failCount} failed login attempt(s) in the last hour (PIN).`,
+                "/audit",
+                { rule: "loginFailures", method: "pin", failCount }
+              );
+            }
+          }
+        } catch {
+          // Don't fail the login flow if alert fails
+        }
+
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid PIN" });
       }
 
@@ -259,6 +289,13 @@ export const authRouter = router({
     .input(z.object({ userId: z.string().uuid() }).merge(userUpdateSchema))
     .mutation(async ({ ctx, input }) => {
       const { userId, ...data } = input;
+
+      // Fetch current state to detect deactivation
+      const currentUser = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: userId, businessId: ctx.user.businessId },
+        select: { isActive: true, email: true },
+      });
+
       const updateData: any = {};
       if (data.email) updateData.email = data.email;
       if (data.password) updateData.passwordHash = await hashPassword(data.password);
@@ -292,6 +329,22 @@ export const authRouter = router({
         objectId: userId,
         metadata: metaFields,
       });
+
+      // Alert admins when a staff member is deactivated
+      if (data.isActive === false && currentUser.isActive === true) {
+        try {
+          const alertSvc = new AlertService(ctx.prisma);
+          await alertSvc.notifyAdmins(
+            ctx.user.businessId,
+            "Staff member deactivated",
+            `${ctx.user.email} deactivated ${currentUser.email}`,
+            "/staff",
+            { userId, email: currentUser.email }
+          );
+        } catch {
+          // Don't fail update if alert fails
+        }
+      }
 
       return user;
     }),
@@ -482,6 +535,11 @@ export const authRouter = router({
 
       const passwordHash = await hashPassword(input.password);
 
+      const resetUser = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: resetToken.userId },
+        select: { businessId: true, email: true },
+      });
+
       await ctx.prisma.$transaction([
         ctx.prisma.user.update({
           where: { id: resetToken.userId },
@@ -491,6 +549,16 @@ export const authRouter = router({
           where: { id: resetToken.id },
         }),
       ]);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: resetUser.businessId,
+        actorUserId: resetToken.userId,
+        actionType: "auth.password_reset",
+        objectType: "user",
+        objectId: resetToken.userId,
+        metadata: { email: resetUser.email },
+      });
 
       return { success: true };
     }),
