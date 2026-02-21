@@ -888,9 +888,13 @@ export default function SessionDetailScreen() {
                       const key = `${item.inventoryItemId}|${item.subAreaId ?? ""}`;
                       const hint = hintsMap.get(item.inventoryItemId);
                       return item.counted ? (
-                        <View
+                        <TouchableOpacity
                           key={key}
                           style={[styles.expectedRow, styles.expectedRowCounted]}
+                          onPress={() => Alert.alert("Recount?", `${item.name} was already counted. Recount it?`, [
+                            { text: "Cancel", style: "cancel" },
+                            { text: "Recount", onPress: () => handleExpectedItemTap(item) },
+                          ])}
                         >
                           <View style={[styles.expectedCheck, styles.expectedCheckDone]}>
                             <Text style={styles.expectedCheckmark}>✓</Text>
@@ -898,7 +902,7 @@ export default function SessionDetailScreen() {
                           <Text style={[styles.expectedName, styles.expectedNameCounted]}>
                             {item.name}
                           </Text>
-                        </View>
+                        </TouchableOpacity>
                       ) : (
                         <TouchableOpacity
                           key={key}
@@ -926,9 +930,13 @@ export default function SessionDetailScreen() {
               expectedChecklist.map((item: any) => {
                 const hint = hintsMap.get(item.inventoryItemId);
                 return item.counted ? (
-                  <View
+                  <TouchableOpacity
                     key={item.inventoryItemId}
                     style={[styles.expectedRow, styles.expectedRowCounted]}
+                    onPress={() => Alert.alert("Recount?", `${item.name} was already counted. Recount it?`, [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Recount", onPress: () => handleExpectedItemTap(item) },
+                    ])}
                   >
                     <View style={[styles.expectedCheck, styles.expectedCheckDone]}>
                       <Text style={styles.expectedCheckmark}>✓</Text>
@@ -936,7 +944,7 @@ export default function SessionDetailScreen() {
                     <Text style={[styles.expectedName, styles.expectedNameCounted]}>
                       {item.name}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     key={item.inventoryItemId}

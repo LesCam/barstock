@@ -9,6 +9,8 @@ import {
   Alert,
   Animated,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -237,6 +239,8 @@ export default function ScanWeighScreen() {
           if (typedItem.category?.countingMethod !== "weighable") {
             setPhase("counting");
           } else {
+            // Suppress auto-submit for tap-to-count — no barcode confirmation
+            autoSubmitSuppressedRef.current = true;
             setPhase("weighing");
           }
         } else {
@@ -582,7 +586,11 @@ export default function ScanWeighScreen() {
 
       {/* Search panel */}
       {phase === "searching" && (
-        <View style={styles.searchPanel}>
+        <KeyboardAvoidingView
+          style={styles.searchPanel}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={0}
+        >
           <View style={styles.searchHeader}>
             <Text style={styles.searchTitle}>Search by Name</Text>
             <TouchableOpacity onPress={resetToScanning}>
@@ -623,7 +631,7 @@ export default function ScanWeighScreen() {
               ))
             )}
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       )}
 
       {/* Weighing panel */}
@@ -1292,15 +1300,14 @@ const styles = StyleSheet.create({
   // Search panel
   searchPanel: {
     position: "absolute",
+    top: 0,
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: "#0B1623",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     padding: 20,
+    paddingTop: 60,
     paddingBottom: 36,
-    maxHeight: "75%",
   },
   searchHeader: {
     flexDirection: "row",
