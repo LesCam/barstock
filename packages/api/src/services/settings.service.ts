@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     parReorderAlert: { enabled: false, threshold: 3 },
   },
   lastAlertEvaluation: undefined,
-  endOfDayTime: "23:59",
+  endOfDayTime: "04:00",
 };
 
 export class SettingsService {
