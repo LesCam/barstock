@@ -10,6 +10,8 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Switch,
+  Alert,
 } from "react-native";
 import { useAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
@@ -22,7 +24,7 @@ type WeightKind = "full" | "tare";
 interface Props {
   barcode: string;
   locationId: string;
-  onSuccess: () => void;
+  onSuccess: (result: { guideItemId?: string }) => void;
   onCancel: () => void;
 }
 
@@ -44,6 +46,12 @@ export function CreateItemFromScanModal({
     (c) => c.countingMethod === "weighable"
   );
 
+  // Fetch product guide categories
+  const { data: guideCategories } = trpc.productGuide.listCategories.useQuery(
+    { locationId, activeOnly: true },
+    { enabled: !!locationId }
+  );
+
   // Form state
   const [name, setName] = useState("");
   const [containerSizeMl, setContainerSizeMl] = useState("750");
@@ -52,12 +60,23 @@ export function CreateItemFromScanModal({
   const [newVendorName, setNewVendorName] = useState("");
   const [addingNewVendor, setAddingNewVendor] = useState(false);
 
+  // Product guide state
+  const [addToGuide, setAddToGuide] = useState(false);
+  const [guideCategoryId, setGuideCategoryId] = useState<string>("");
+
   // Auto-select first weighable category
   useEffect(() => {
     if (!selectedCategoryId && weighableCategories?.length) {
       setSelectedCategoryId(weighableCategories[0].id);
     }
   }, [weighableCategories, selectedCategoryId]);
+
+  // Auto-select first guide category when toggled on
+  useEffect(() => {
+    if (addToGuide && !guideCategoryId && guideCategories?.length) {
+      setGuideCategoryId(guideCategories[0].id);
+    }
+  }, [addToGuide, guideCategories, guideCategoryId]);
 
   // Scale weight capture
   const [capturedWeight, setCapturedWeight] = useState<{
@@ -75,10 +94,10 @@ export function CreateItemFromScanModal({
       { enabled: !!businessId }
     );
 
-  // Create mutation
-  const createMutation = trpc.scale.createItemWithTemplate.useMutation({
-    onSuccess: () => onSuccess(),
-  });
+  // Create mutations
+  const createMutation = trpc.scale.createItemWithTemplate.useMutation();
+  const guideCreateMutation = trpc.productGuide.createItem.useMutation();
+  const isSaving = createMutation.isPending || guideCreateMutation.isPending;
 
   // Scale listener
   useEffect(() => {
@@ -106,7 +125,7 @@ export function CreateItemFromScanModal({
     setPendingReading(null);
   }
 
-  function handleSave() {
+  async function handleSave() {
     const sizeMl = parseInt(containerSizeMl) || 750;
     const emptyG =
       capturedWeight?.kind === "tare" ? capturedWeight.grams : undefined;
@@ -118,27 +137,46 @@ export function CreateItemFromScanModal({
     const density = selectedCategory?.defaultDensity ? Number(selectedCategory.defaultDensity) : DEFAULT_DENSITY;
     const finalEmptyG = emptyG;
     const finalFullG = fullG ?? (emptyG ? undefined : Math.round(sizeMl * density + 300));
-    const submitEmptyG = finalEmptyG;
-    const submitFullG = finalFullG;
 
-    createMutation.mutate({
-      locationId,
-      name: name.trim(),
-      barcode,
-      containerSizeMl: sizeMl,
-      categoryId: selectedCategoryId,
-      vendorId: selectedVendorId ?? undefined,
-      newVendorName:
-        addingNewVendor && newVendorName.trim()
-          ? newVendorName.trim()
-          : undefined,
-      emptyBottleWeightG: submitEmptyG,
-      fullBottleWeightG: submitFullG,
-    });
+    try {
+      const result = await createMutation.mutateAsync({
+        locationId,
+        name: name.trim(),
+        barcode,
+        containerSizeMl: sizeMl,
+        categoryId: selectedCategoryId,
+        vendorId: selectedVendorId ?? undefined,
+        newVendorName:
+          addingNewVendor && newVendorName.trim()
+            ? newVendorName.trim()
+            : undefined,
+        emptyBottleWeightG: finalEmptyG,
+        fullBottleWeightG: finalFullG,
+      });
+
+      if (addToGuide && guideCategoryId) {
+        try {
+          const guideItem = await guideCreateMutation.mutateAsync({
+            locationId,
+            categoryId: guideCategoryId,
+            inventoryItemId: result.item.id,
+          });
+          onSuccess({ guideItemId: guideItem.id });
+        } catch {
+          // Guide creation failed but item was created — proceed without guide
+          onSuccess({});
+        }
+      } else {
+        onSuccess({});
+      }
+    } catch {
+      // createMutation.error will be populated automatically
+    }
   }
 
   const sizeMl = parseInt(containerSizeMl) || 0;
-  const canSave = name.trim().length > 0 && sizeMl > 0 && !!selectedCategoryId;
+  const canSave = name.trim().length > 0 && sizeMl > 0 && !!selectedCategoryId
+    && (!addToGuide || !!guideCategoryId);
 
   return (
     <Modal visible animationType="slide" transparent>
@@ -149,6 +187,7 @@ export function CreateItemFromScanModal({
         <View style={styles.sheet}>
           <ScrollView
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
           >
             {/* Header */}
@@ -192,27 +231,61 @@ export function CreateItemFromScanModal({
 
             {/* Category */}
             <Text style={styles.label}>Category</Text>
-            <View style={styles.toggleRow}>
-              {weighableCategories?.map((cat) => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.toggleBtn,
-                    selectedCategoryId === cat.id && styles.toggleBtnActive,
-                  ]}
-                  onPress={() => setSelectedCategoryId(cat.id)}
-                >
-                  <Text
-                    style={[
-                      styles.toggleText,
-                      selectedCategoryId === cat.id && styles.toggleTextActive,
-                    ]}
-                  >
-                    {cat.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <TouchableOpacity
+              style={styles.dropdown}
+              onPress={() => {
+                if (!weighableCategories?.length) return;
+                Alert.alert("Select Category", undefined, [
+                  ...weighableCategories.map((cat) => ({
+                    text: cat.name,
+                    onPress: () => setSelectedCategoryId(cat.id),
+                  })),
+                  { text: "Cancel", style: "cancel" },
+                ]);
+              }}
+            >
+              <Text style={styles.dropdownText}>
+                {weighableCategories?.find((c) => c.id === selectedCategoryId)?.name ?? "Select..."}
+              </Text>
+              <Text style={styles.dropdownArrow}>&#x25BC;</Text>
+            </TouchableOpacity>
+
+            {/* Product Guide toggle */}
+            <View style={styles.guideRow}>
+              <Text style={styles.guideLabel}>Add to Product Guide?</Text>
+              <Switch
+                value={addToGuide}
+                onValueChange={setAddToGuide}
+                trackColor={{ false: "#e5e7eb", true: "#93c5fd" }}
+                thumbColor={addToGuide ? "#2563eb" : "#fff"}
+              />
             </View>
+            {addToGuide && guideCategories?.length ? (
+              <>
+                <Text style={styles.label}>Guide Category</Text>
+                <View style={styles.guideCatRow}>
+                  {guideCategories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.guideCatBtn,
+                        guideCategoryId === cat.id && styles.guideCatBtnActive,
+                      ]}
+                      onPress={() => setGuideCategoryId(cat.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.guideCatText,
+                          guideCategoryId === cat.id && styles.guideCatTextActive,
+                        ]}
+                      >
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ) : null}
 
             {/* Vendor section */}
             <Text style={styles.label}>Vendor (optional)</Text>
@@ -223,7 +296,7 @@ export function CreateItemFromScanModal({
                 style={{ marginVertical: 8 }}
               />
             ) : (
-              <View style={styles.vendorList}>
+              <ScrollView style={styles.vendorList} nestedScrollEnabled>
                 {/* Add New row */}
                 <TouchableOpacity
                   style={[
@@ -285,7 +358,7 @@ export function CreateItemFromScanModal({
                     )}
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
             )}
 
             {/* Scale weight capture info card */}
@@ -336,9 +409,9 @@ export function CreateItemFromScanModal({
             )}
 
             {/* Error */}
-            {createMutation.error && (
+            {(createMutation.error || guideCreateMutation.error) && (
               <Text style={styles.errorText}>
-                {createMutation.error.message}
+                {createMutation.error?.message ?? guideCreateMutation.error?.message}
               </Text>
             )}
 
@@ -347,9 +420,9 @@ export function CreateItemFromScanModal({
               <TouchableOpacity
                 style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
                 onPress={handleSave}
-                disabled={!canSave || createMutation.isPending}
+                disabled={!canSave || isSaving}
               >
-                {createMutation.isPending ? (
+                {isSaving ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={styles.saveBtnText}>Save</Text>
@@ -424,34 +497,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#1a1a1a",
   },
-  toggleRow: {
+  dropdown: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: "#f3f4f6",
     borderRadius: 8,
-    padding: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  toggleBtnActive: {
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  toggleText: {
-    fontSize: 14,
+  dropdownText: {
+    fontSize: 15,
     fontWeight: "500",
-    color: "#666",
-  },
-  toggleTextActive: {
     color: "#1a1a1a",
-    fontWeight: "600",
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: "#999",
   },
   vendorList: {
     maxHeight: 180,
@@ -579,5 +641,40 @@ const styles = StyleSheet.create({
     color: "#666",
     fontSize: 16,
     fontWeight: "500",
+  },
+  guideRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  guideLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1a1a1a",
+  },
+  guideCatRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
+  guideCatBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    backgroundColor: "#f3f4f6",
+  },
+  guideCatBtnActive: {
+    backgroundColor: "#2563eb",
+  },
+  guideCatText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#666",
+  },
+  guideCatTextActive: {
+    color: "#fff",
+    fontWeight: "600",
   },
 });

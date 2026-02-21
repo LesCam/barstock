@@ -55,9 +55,19 @@ export default function TareWeightsScreen() {
   const [viewingTemplate, setViewingTemplate] = useState<TemplateRow | null>(null);
   const [addingItem, setAddingItem] = useState<SelectedItem | null>(null);
   const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
+  const [filterCategoryId, setFilterCategoryId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const utils = trpc.useUtils();
+  const businessId = user?.businessId ?? "";
+
+  const { data: itemCategories } = trpc.itemCategories.list.useQuery(
+    { businessId },
+    { enabled: !!businessId }
+  );
+  const weighableCategories = itemCategories?.filter(
+    (c) => c.countingMethod === "weighable"
+  );
 
   const { data: templates, isLoading } = trpc.scale.listTemplates.useQuery(
     { locationId },
@@ -120,17 +130,22 @@ export default function TareWeightsScreen() {
 
   const filteredTemplates = useMemo(() => {
     if (!templates) return [];
-    const list = [...(templates as TemplateRow[])].sort((a, b) =>
+    let list = [...(templates as TemplateRow[])].sort((a, b) =>
       a.inventoryItem.name.localeCompare(b.inventoryItem.name)
     );
-    if (!search.trim()) return list;
-    const q = search.toLowerCase();
-    return list.filter(
-      (t) =>
-        t.inventoryItem.name.toLowerCase().includes(q) ||
-        (t.inventoryItem.barcode && t.inventoryItem.barcode.includes(q))
-    );
-  }, [templates, search]);
+    if (filterCategoryId) {
+      list = list.filter((t) => t.inventoryItem.category?.id === filterCategoryId);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (t) =>
+          t.inventoryItem.name.toLowerCase().includes(q) ||
+          (t.inventoryItem.barcode && t.inventoryItem.barcode.includes(q))
+      );
+    }
+    return list;
+  }, [templates, search, filterCategoryId]);
 
 
   function promptScaleOrEdit(template: TemplateRow) {
@@ -280,6 +295,33 @@ export default function TareWeightsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Category filter dropdown */}
+      {weighableCategories && weighableCategories.length > 1 && (
+        <TouchableOpacity
+          style={styles.filterDropdown}
+          onPress={() => {
+            const options = [
+              { text: "All Categories", onPress: () => setFilterCategoryId(null) },
+              ...weighableCategories.map((cat) => ({
+                text: cat.name,
+                onPress: () => setFilterCategoryId(cat.id),
+              })),
+            ];
+            Alert.alert("Filter by Category", undefined, [
+              ...options,
+              { text: "Cancel", style: "cancel" },
+            ]);
+          }}
+        >
+          <Text style={styles.filterDropdownText}>
+            {filterCategoryId
+              ? weighableCategories.find((c) => c.id === filterCategoryId)?.name ?? "All Categories"
+              : "All Categories"}
+          </Text>
+          <Text style={styles.filterDropdownArrow}>&#x25BC;</Text>
+        </TouchableOpacity>
+      )}
+
       <Text style={styles.heading}>Tare Weight Management</Text>
 
       {/* Column headers */}
@@ -411,9 +453,26 @@ export default function TareWeightsScreen() {
           key={creatingFromScan.barcode}
           barcode={creatingFromScan.barcode}
           locationId={locationId}
-          onSuccess={() => {
+          onSuccess={({ guideItemId }) => {
             utils.scale.listTemplates.invalidate({ locationId });
             setCreatingFromScan(null);
+            if (guideItemId) {
+              // Delay to let Modal fully dismiss before showing Alert
+              setTimeout(() => {
+                Alert.alert(
+                  "Take a Photo?",
+                  "Add a photo to the product guide entry.",
+                  [
+                    { text: "No", style: "cancel" },
+                    {
+                      text: "Yes",
+                      onPress: () =>
+                        router.push(`/guide/photo?guideItemId=${guideItemId}&locationId=${locationId}&returnTo=/tare-weights`),
+                    },
+                  ]
+                );
+              }, 500);
+            }
           }}
           onCancel={() => setCreatingFromScan(null)}
         />
@@ -724,5 +783,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#EAF0FF",
+  },
+  filterDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#16283F",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  filterDropdownText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#EAF0FF",
+  },
+  filterDropdownArrow: {
+    fontSize: 12,
+    color: "#8899AA",
   },
 });

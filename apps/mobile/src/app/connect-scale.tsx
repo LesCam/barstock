@@ -84,8 +84,21 @@ export default function ConnectScaleSettingsScreen() {
       ]);
       setDevices(found);
       setDeviceMappings(mappings);
-    } catch {
-      // Scan may fail on simulator or without BLE
+      if (found.length === 0) {
+        Alert.alert(
+          "No Scales Found",
+          "Make sure your scale is powered on and within range, then try again."
+        );
+      }
+    } catch (err: any) {
+      const msg = err?.message ?? "";
+      if (msg.includes("Bluetooth") || msg.includes("powered on")) {
+        Alert.alert(
+          "Bluetooth is Off",
+          "Please enable Bluetooth in Settings to scan for scales.",
+          [{ text: "OK" }]
+        );
+      }
     } finally {
       setScanning(false);
     }

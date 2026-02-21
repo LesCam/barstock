@@ -6,9 +6,10 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { trpc } from "@/lib/trpc";
 
 export default function GuidePhotoScreen() {
-  const { guideItemId, locationId } = useLocalSearchParams<{
+  const { guideItemId, locationId, returnTo } = useLocalSearchParams<{
     guideItemId: string;
     locationId: string;
+    returnTo?: string;
   }>();
   const utils = trpc.useUtils();
   const cameraRef = useRef<CameraView>(null);
@@ -19,7 +20,11 @@ export default function GuidePhotoScreen() {
     onSuccess: () => {
       utils.productGuide.getItem.invalidate({ id: guideItemId, locationId });
       utils.productGuide.listItems.invalidate();
-      router.back();
+      if (returnTo) {
+        router.replace(returnTo as any);
+      } else {
+        router.back();
+      }
     },
     onError: (err) => {
       Alert.alert("Error", err.message);

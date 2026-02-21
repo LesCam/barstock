@@ -56,8 +56,8 @@ function waitForPoweredOn(): Promise<void> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       sub.remove();
-      reject(new Error("Bluetooth adapter did not power on within 10 s"));
-    }, 10_000);
+      reject(new Error("Bluetooth adapter did not power on in time"));
+    }, 3_000);
 
     const sub = manager.onStateChange((state) => {
       if (state === State.PoweredOn) {
