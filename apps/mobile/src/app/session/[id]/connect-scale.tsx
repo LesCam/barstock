@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -39,8 +39,7 @@ export default function ConnectScaleScreen() {
   );
   const [lastReading, setLastReading] = useState<ScaleReading | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
-  const [needsTare, setNeedsTare] = useState(false);
-  const checkedInitialRef = useRef(false);
+  const [userTared, setUserTared] = useState(false);
 
   // Saved device → profile mappings (for display in scan list)
   const [deviceMappings, setDeviceMappings] = useState<Record<string, { profileId: string; profileName: string }>>({});
@@ -54,24 +53,16 @@ export default function ConnectScaleScreen() {
   // Heartbeat while connected with a profile
   useScaleHeartbeat(profileId);
 
+  // Always prompt to tare after connecting — scale may have stale tare from previous session
+  const needsTare = connected && !userTared;
+
   // Subscribe to scale readings
   useEffect(() => {
     const unsubscribe = scaleManager.onReading((reading) => {
       setLastReading(reading);
-      // Check first stable reading after connection — if weight > 5g, scale needs taring
-      if (!checkedInitialRef.current && reading.stable) {
-        checkedInitialRef.current = true;
-        if (reading.weightGrams > 5) {
-          setNeedsTare(true);
-        }
-      }
-      // Clear tare warning once weight drops near zero
-      if (needsTare && reading.stable && reading.weightGrams <= 5) {
-        setNeedsTare(false);
-      }
     });
     return unsubscribe;
-  }, [needsTare]);
+  }, []);
 
   // Handle unexpected disconnection
   useEffect(() => {
@@ -81,8 +72,7 @@ export default function ConnectScaleScreen() {
       setLastReading(null);
       setProfileId(null);
       setProfileName(null);
-      setNeedsTare(false);
-      checkedInitialRef.current = false;
+      setUserTared(false);
     });
     return unsubscribe;
   }, []);
@@ -112,8 +102,7 @@ export default function ConnectScaleScreen() {
   const handleConnect = useCallback(async (deviceId: string, name: string) => {
     setConnecting(deviceId);
     try {
-      checkedInitialRef.current = false;
-      setNeedsTare(false);
+      setUserTared(false);
       await scaleManager.connect(deviceId);
       setConnected(true);
       setConnectedDeviceName(name);
@@ -161,13 +150,12 @@ export default function ConnectScaleScreen() {
     setLastReading(null);
     setProfileId(null);
     setProfileName(null);
-    setNeedsTare(false);
-    checkedInitialRef.current = false;
+    setUserTared(false);
   }, []);
 
   const handleTare = useCallback(async () => {
     await scaleManager.tare();
-    setNeedsTare(false);
+    setUserTared(true);
   }, []);
 
   const handleContinue = useCallback(() => {
@@ -229,7 +217,7 @@ export default function ConnectScaleScreen() {
             {needsTare && (
               <View style={styles.tareWarning}>
                 <Text style={styles.tareWarningText}>
-                  Remove item from scale before continuing
+                  Clear the scale and tap Tare before weighing
                 </Text>
                 <TouchableOpacity style={styles.tareBtn} onPress={handleTare}>
                   <Text style={styles.tareBtnText}>Tare Scale</Text>
@@ -307,11 +295,12 @@ export default function ConnectScaleScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Continue Button (when connected) */}
+        {/* Continue Button (when connected and tared) */}
         {connected && (
           <TouchableOpacity
-            style={styles.continueButton}
+            style={[styles.continueButton, needsTare && styles.buttonDisabled]}
             onPress={handleContinue}
+            disabled={needsTare}
           >
             <Text style={styles.continueButtonText}>Continue to Weighing</Text>
           </TouchableOpacity>
