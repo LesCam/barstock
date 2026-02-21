@@ -29,6 +29,9 @@ const ALERT_BORDER_COLORS: Record<string, string> = {
   lowStock: "border-yellow-500/60",
   staleCountDays: "border-yellow-500/60",
   kegNearEmpty: "border-blue-500/60",
+  sessionAutoClosed: "border-purple-500/60",
+  loginFailures: "border-red-500/60",
+  parReorderAlert: "border-blue-500/60",
 };
 
 function timeAgo(date: Date): string {
@@ -44,6 +47,10 @@ function AlertBanner() {
     { limit: 5 },
     { refetchInterval: 60_000 }
   );
+  const { data: unreadData } = trpc.notifications.unreadCount.useQuery(
+    undefined,
+    { refetchInterval: 60_000 }
+  );
   const markReadMutation = trpc.notifications.markRead.useMutation();
   const utils = trpc.useUtils();
 
@@ -54,7 +61,9 @@ function AlertBanner() {
     return meta && typeof meta.rule === "string" && !n.isRead;
   });
 
-  if (alertNotifications.length === 0) return null;
+  const unreadCount = unreadData ?? 0;
+
+  if (alertNotifications.length === 0 && unreadCount === 0) return null;
 
   function handleDismiss(id: string) {
     markReadMutation.mutate(
@@ -105,6 +114,12 @@ function AlertBanner() {
           </div>
         );
       })}
+      <div className="flex items-center justify-between pt-1">
+        <span className="text-xs text-[#EAF0FF]/40">{unreadCount} unread</span>
+        <Link href="/notifications" className="text-xs font-medium text-[#E9B44C]">
+          View all notifications →
+        </Link>
+      </div>
     </div>
   );
 }

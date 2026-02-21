@@ -65,7 +65,16 @@ const RULE_CONFIG = [
 ] as const;
 
 type RuleKey = (typeof RULE_CONFIG)[number]["key"];
-type RulesState = Record<RuleKey, { enabled: boolean; threshold: number }>;
+type RulesState = Record<RuleKey, { enabled: boolean; threshold: number; lastTriggeredAt?: string }>;
+
+function formatTimeAgo(dateStr: string | undefined): string {
+  if (!dateStr) return "Never";
+  const secs = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (secs < 60) return "Just now";
+  if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return `${Math.floor(secs / 86400)}d ago`;
+}
 
 export default function AlertSettingsScreen() {
   const { user } = useAuth();
@@ -88,18 +97,20 @@ export default function AlertSettingsScreen() {
   });
 
   const [localRules, setLocalRules] = useState<RulesState | null>(null);
+  const lastAlertEvaluation = (settings as any)?.lastAlertEvaluation as string | undefined;
 
   useEffect(() => {
     if (settings?.alertRules && !localRules) {
       const rules = settings.alertRules as Record<
         string,
-        { enabled: boolean; threshold: number }
+        { enabled: boolean; threshold: number; lastTriggeredAt?: string }
       >;
       const initial = {} as RulesState;
       for (const cfg of RULE_CONFIG) {
         initial[cfg.key] = {
           enabled: rules[cfg.key]?.enabled ?? false,
           threshold: rules[cfg.key]?.threshold ?? 0,
+          lastTriggeredAt: rules[cfg.key]?.lastTriggeredAt,
         };
       }
       setLocalRules(initial);
@@ -145,6 +156,9 @@ export default function AlertSettingsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.evalTimestamp}>
+        Last evaluation: {formatTimeAgo(lastAlertEvaluation)}
+      </Text>
       {RULE_CONFIG.map((cfg) => {
         const rule = localRules[cfg.key];
         return (
@@ -153,6 +167,9 @@ export default function AlertSettingsScreen() {
               <View style={styles.labelCol}>
                 <Text style={styles.ruleLabel}>{cfg.label}</Text>
                 <Text style={styles.ruleDesc}>{cfg.description}</Text>
+                <Text style={styles.lastTriggered}>
+                  Last triggered: {formatTimeAgo(rule.lastTriggeredAt)}
+                </Text>
               </View>
               <Switch
                 value={rule.enabled}
@@ -228,6 +245,8 @@ const styles = StyleSheet.create({
   labelCol: { flex: 1, marginRight: 12 },
   ruleLabel: { fontSize: 15, fontWeight: "600", color: "#EAF0FF" },
   ruleDesc: { fontSize: 12, color: "#5A6A7A", marginTop: 2 },
+  lastTriggered: { fontSize: 11, color: "#3A4A5A", marginTop: 2 },
+  evalTimestamp: { fontSize: 12, color: "#3A4A5A", marginBottom: 12 },
   thresholdRow: {
     flexDirection: "row",
     alignItems: "center",

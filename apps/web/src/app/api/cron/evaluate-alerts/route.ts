@@ -30,6 +30,16 @@ export async function GET(req: Request) {
       const sent = await alertSvc.evaluateAndNotify(biz.id);
       totalSent += sent;
       evaluated++;
+
+      await prisma.auditLog.create({
+        data: {
+          businessId: biz.id,
+          actionType: "system.alerts_evaluated",
+          objectType: "business_settings",
+          objectId: biz.id,
+          metadataJson: { alertsSent: sent },
+        },
+      });
     } catch (err) {
       errors.push(
         `Business ${biz.id}: ${err instanceof Error ? err.message : String(err)}`,

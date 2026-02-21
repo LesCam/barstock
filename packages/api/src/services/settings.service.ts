@@ -5,6 +5,7 @@ export interface BusinessSettingsData {
   capabilities: CapabilityToggles;
   autoLock: AutoLockPolicy;
   alertRules: AlertRules;
+  lastAlertEvaluation?: string;
 }
 
 const DEFAULT_SETTINGS: BusinessSettingsData = {
@@ -35,6 +36,7 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     shrinkagePattern: { enabled: true, threshold: 3 },
     parReorderAlert: { enabled: false, threshold: 3 },
   },
+  lastAlertEvaluation: undefined,
 };
 
 export class SettingsService {
@@ -61,6 +63,7 @@ export class SettingsService {
         ...DEFAULT_SETTINGS.alertRules,
         ...stored.alertRules,
       },
+      lastAlertEvaluation: stored.lastAlertEvaluation,
     };
   }
 
@@ -70,6 +73,7 @@ export class SettingsService {
       capabilities?: Partial<CapabilityToggles>;
       autoLock?: Partial<AutoLockPolicy>;
       alertRules?: Partial<AlertRules>;
+      lastAlertEvaluation?: string;
     }
   ): Promise<BusinessSettingsData> {
     const current = await this.getSettings(businessId);
@@ -86,6 +90,7 @@ export class SettingsService {
         ...current.alertRules,
         ...patch.alertRules,
       },
+      lastAlertEvaluation: patch.lastAlertEvaluation ?? current.lastAlertEvaluation,
     };
 
     await this.prisma.businessSettings.upsert({

@@ -11,7 +11,32 @@ interface Notification {
   linkUrl: string | null;
   isRead: boolean;
   createdAt: Date;
+  metadataJson?: Record<string, unknown> | null;
 }
+
+const RULE_LABELS: Record<string, string> = {
+  variancePercent: "Variance",
+  lowStock: "Low Stock",
+  staleCountDays: "Stale Count",
+  kegNearEmpty: "Keg Alert",
+  loginFailures: "Login Alert",
+  largeAdjustment: "Large Adjustment",
+  shrinkagePattern: "Shrinkage",
+  parReorderAlert: "Reorder",
+  sessionAutoClosed: "Auto-Closed",
+};
+
+const RULE_BADGE_COLORS: Record<string, string> = {
+  shrinkagePattern: "border-red-500/60 text-red-400",
+  largeAdjustment: "border-red-500/60 text-red-400",
+  loginFailures: "border-red-500/60 text-red-400",
+  variancePercent: "border-yellow-500/60 text-yellow-400",
+  lowStock: "border-yellow-500/60 text-yellow-400",
+  staleCountDays: "border-yellow-500/60 text-yellow-400",
+  kegNearEmpty: "border-blue-500/60 text-blue-400",
+  parReorderAlert: "border-blue-500/60 text-blue-400",
+  sessionAutoClosed: "border-purple-500/60 text-purple-400",
+};
 
 function timeAgo(date: Date): string {
   const now = new Date();
@@ -122,26 +147,41 @@ export default function NotificationsPage() {
       ) : (
         <>
           <div className="overflow-hidden rounded-lg border border-white/10 bg-[#16283F]">
-            {items.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => handleClick(n)}
-                className={`flex w-full items-start gap-3 border-b border-white/5 px-5 py-4 text-left transition-colors hover:bg-white/5 ${
-                  !n.isRead ? "bg-[#E9B44C]/5" : ""
-                }`}
-              >
-                {!n.isRead && (
-                  <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#E9B44C]" />
-                )}
-                <div className={!n.isRead ? "" : "pl-[22px]"}>
-                  <p className="text-sm font-medium text-[#EAF0FF]">{n.title}</p>
-                  {n.body && (
-                    <p className="mt-0.5 text-sm text-[#EAF0FF]/50 line-clamp-2">{n.body}</p>
+            {items.map((n) => {
+              const meta = n.metadataJson as Record<string, unknown> | null;
+              const rule = meta && typeof meta.rule === "string" ? meta.rule : null;
+              const badgeLabel = rule ? RULE_LABELS[rule] : null;
+              const badgeColor = rule ? (RULE_BADGE_COLORS[rule] ?? "border-white/20 text-[#EAF0FF]/60") : null;
+              const borderAccent = rule ? (RULE_BADGE_COLORS[rule]?.split(" ")[0] ?? "") : "";
+
+              return (
+                <button
+                  key={n.id}
+                  onClick={() => handleClick(n)}
+                  className={`flex w-full items-start gap-3 border-b border-white/5 px-5 py-4 text-left transition-colors hover:bg-white/5 ${
+                    !n.isRead ? "bg-[#E9B44C]/5" : ""
+                  } ${borderAccent ? `border-l-4 ${borderAccent}` : ""}`}
+                >
+                  {!n.isRead && (
+                    <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#E9B44C]" />
                   )}
-                  <p className="mt-1 text-xs text-[#EAF0FF]/30">{timeAgo(n.createdAt)}</p>
-                </div>
-              </button>
-            ))}
+                  <div className={!n.isRead ? "" : "pl-[22px]"}>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-[#EAF0FF]">{n.title}</p>
+                      {badgeLabel && (
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${badgeColor}`}>
+                          {badgeLabel}
+                        </span>
+                      )}
+                    </div>
+                    {n.body && (
+                      <p className="mt-0.5 text-sm text-[#EAF0FF]/50 line-clamp-2">{n.body}</p>
+                    )}
+                    <p className="mt-1 text-xs text-[#EAF0FF]/30">{timeAgo(n.createdAt)}</p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           {hasMore && (

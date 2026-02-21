@@ -81,7 +81,14 @@ export class AlertService {
 
   async evaluateAndNotify(businessId: string): Promise<number> {
     const alerts = await this.evaluateRules(businessId);
-    if (alerts.length === 0) return 0;
+    const settingsSvc = new SettingsService(this.prisma);
+    const now = new Date().toISOString();
+
+    if (alerts.length === 0) {
+      // Always update lastAlertEvaluation even if no alerts
+      await settingsSvc.updateSettings(businessId, { lastAlertEvaluation: now });
+      return 0;
+    }
 
     const notifSvc = new NotificationService(this.prisma);
 
@@ -92,7 +99,14 @@ export class AlertService {
     });
 
     let sent = 0;
+    const firedRules = new Set<string>();
+
     for (const alert of alerts) {
+      // Track which rules fired
+      if (typeof alert.metadata.rule === "string") {
+        firedRules.add(alert.metadata.rule);
+      }
+
       // For par reorder alerts, also notify orderers
       const recipientIds = new Set(admins.map((a) => a.id));
 
@@ -126,6 +140,19 @@ export class AlertService {
         sent++;
       }
     }
+
+    // Update lastTriggeredAt for fired rules and lastAlertEvaluation
+    const currentSettings = await settingsSvc.getSettings(businessId);
+    const updatedRules = { ...currentSettings.alertRules } as any;
+    for (const ruleName of firedRules) {
+      if (updatedRules[ruleName]) {
+        updatedRules[ruleName] = { ...updatedRules[ruleName], lastTriggeredAt: now };
+      }
+    }
+    await settingsSvc.updateSettings(businessId, {
+      alertRules: updatedRules,
+      lastAlertEvaluation: now,
+    });
 
     return sent;
   }

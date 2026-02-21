@@ -834,12 +834,23 @@ const ALERT_RULE_LABELS: Record<string, { label: string; unit: string; descripti
   },
 };
 
+function formatTimeAgo(dateStr: string | undefined): string {
+  if (!dateStr) return "Never";
+  const secs = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (secs < 60) return "Just now";
+  if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)} hour${Math.floor(secs / 3600) === 1 ? "" : "s"} ago`;
+  return `${Math.floor(secs / 86400)} day${Math.floor(secs / 86400) === 1 ? "" : "s"} ago`;
+}
+
 function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {
   const { data: settings } = trpc.settings.get.useQuery({ businessId });
   const utils = trpc.useUtils();
 
   const [local, setLocal] = useState<Record<string, { enabled: boolean; threshold: number }> | null>(null);
   const [dirty, setDirty] = useState(false);
+
+  const lastEvaluation = (settings as any)?.lastAlertEvaluation as string | undefined;
 
   useEffect(() => {
     if (settings?.alertRules) {
@@ -893,8 +904,13 @@ function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdi
         )}
       </div>
 
-      <p className="mb-4 text-sm text-[#EAF0FF]/50">
-        Configure thresholds for daily inventory alerts. Notifications are sent to business admins. Par reorder alerts are also sent to assigned vendor orderers (configure in Vendor settings).
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm text-[#EAF0FF]/50">
+          Configure thresholds for daily inventory alerts. Notifications are sent to business admins. Par reorder alerts are also sent to assigned vendor orderers (configure in Vendor settings).
+        </p>
+      </div>
+      <p className="mb-4 text-xs text-[#EAF0FF]/30">
+        Last evaluation: {formatTimeAgo(lastEvaluation)}
       </p>
 
       <div className="space-y-4">
@@ -923,6 +939,9 @@ function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdi
               <div className="flex-1">
                 <span className="text-sm text-[#EAF0FF]/80">{info.label}</span>
                 <p className="text-xs text-[#EAF0FF]/40">{info.description}</p>
+                <p className="text-xs text-[#EAF0FF]/25 mt-0.5">
+                  Last triggered: {formatTimeAgo((rule as any).lastTriggeredAt)}
+                </p>
               </div>
 
               {/* Threshold input */}

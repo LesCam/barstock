@@ -26,6 +26,7 @@ export type AutoLockPolicy = z.infer<typeof autoLockPolicySchema>;
 export const alertRuleSchema = z.object({
   enabled: z.boolean().default(false),
   threshold: z.number().min(0),
+  lastTriggeredAt: z.string().datetime().optional(),
 });
 
 export const alertRulesSchema = z.object({
@@ -46,6 +47,7 @@ export const settingsUpdateSchema = z.object({
   capabilities: capabilityTogglesSchema.partial().optional(),
   autoLock: autoLockPolicySchema.partial().optional(),
   alertRules: alertRulesSchema.partial().optional(),
+  lastAlertEvaluation: z.string().datetime().optional(),
 });
 
 export const settingsGetSchema = z.object({
