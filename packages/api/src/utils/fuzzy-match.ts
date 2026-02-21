@@ -39,6 +39,7 @@ export interface FuzzyResult<T> {
  *
  * Scoring tiers:
  *  - Exact normalized match → 1.0
+ *  - Same tokens, different order (e.g. "Vodka Rail" = "Rail Vodka") → 0.95
  *  - Candidate starts with query → 0.9
  *  - Candidate contains query → 0.8
  *  - Jaccard token overlap → 0–0.7
@@ -62,13 +63,20 @@ export function fuzzyMatch<T>(
     let score: number;
     if (normLabel === normQuery) {
       score = 1.0;
-    } else if (normLabel.startsWith(normQuery)) {
-      score = 0.9;
-    } else if (normLabel.includes(normQuery)) {
-      score = 0.8;
     } else {
       const labelTokens = tokenize(label);
-      score = jaccardSimilarity(queryTokens, labelTokens) * 0.7;
+      const jaccard = jaccardSimilarity(queryTokens, labelTokens);
+
+      if (jaccard === 1.0) {
+        // All tokens match — same words, different order (e.g. "Rail Vodka" / "Vodka Rail")
+        score = 0.95;
+      } else if (normLabel.startsWith(normQuery)) {
+        score = 0.9;
+      } else if (normLabel.includes(normQuery)) {
+        score = 0.8;
+      } else {
+        score = jaccard * 0.7;
+      }
     }
 
     if (score >= threshold) {
