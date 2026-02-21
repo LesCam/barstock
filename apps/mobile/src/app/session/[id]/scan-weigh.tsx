@@ -116,6 +116,33 @@ export default function ScanWeighScreen() {
     );
   }, [inventoryItems, searchQuery]);
 
+  // Count hints for matched item
+  const { data: countHints } = trpc.sessions.itemCountHints.useQuery(
+    { locationId: selectedLocationId!, inventoryItemIds: matchedItem ? [matchedItem.id] : [] },
+    { enabled: !!selectedLocationId && !!matchedItem }
+  );
+  const hint = countHints?.[0] ?? null;
+
+  function formatHint(h: { lastCountValue: number | null; lastCountDate: Date | string; avgDailyUsage: number | null; isWeight?: boolean }) {
+    const parts: string[] = [];
+    if (h.lastCountValue != null) {
+      const daysAgo = Math.round((Date.now() - new Date(h.lastCountDate).getTime()) / 86400000);
+      const unit = h.isWeight ? "g" : " units";
+      parts.push(`Last: ${Math.round(h.lastCountValue * 10) / 10}${unit}`);
+      if (daysAgo > 0) parts[0] += ` (${daysAgo}d ago)`;
+    }
+    if (h.avgDailyUsage != null && h.avgDailyUsage > 0) {
+      parts.push(`~${(Math.round(h.avgDailyUsage * 10) / 10)}/day`);
+    }
+    if (h.lastCountValue != null && h.avgDailyUsage != null && h.avgDailyUsage > 0) {
+      const daysAgo = (Date.now() - new Date(h.lastCountDate).getTime()) / 86400000;
+      const predicted = Math.max(0, h.lastCountValue - h.avgDailyUsage * daysAgo);
+      const unit = h.isWeight ? "g" : "";
+      parts.push(`Est: ~${Math.round(predicted * 10) / 10}${unit}`);
+    }
+    return parts.join(" · ");
+  }
+
   // Templates for weight calculation
   const { data: templates } = trpc.scale.listTemplates.useQuery(
     { locationId: selectedLocationId! },
@@ -126,6 +153,18 @@ export default function ScanWeighScreen() {
     if (!matchedItem || !templates) return null;
     return templates.find((t: any) => t.inventoryItemId === matchedItem.id) ?? null;
   }, [matchedItem, templates]);
+
+  const weightWarning = useMemo(() => {
+    const gw = showManualEntry || !scaleConnected || !matchedTemplate
+      ? (manualWeight ? parseInt(manualWeight, 10) : null)
+      : scaleWeight;
+    if (!gw || !matchedTemplate) return null;
+    const full = Number(matchedTemplate.fullBottleWeightG);
+    const empty = Number(matchedTemplate.emptyBottleWeightG);
+    if (full && gw > full * 1.15) return "Weight seems high for this item";
+    if (empty && gw < empty * 0.85) return "Weight seems low — wrong bottle?";
+    return null;
+  }, [scaleWeight, manualWeight, matchedTemplate, showManualEntry, scaleConnected]);
 
   const usingManual = showManualEntry || !scaleConnected || !matchedTemplate;
   const grossWeightG = usingManual
@@ -648,6 +687,7 @@ export default function ScanWeighScreen() {
                 <Text style={styles.rescanLink}>Rescan</Text>
               </TouchableOpacity>
             </View>
+            {hint && <Text style={styles.hintText}>{formatHint(hint)}</Text>}
 
             <TouchableOpacity
               style={styles.fullUnitsBtn}
@@ -745,6 +785,9 @@ export default function ScanWeighScreen() {
               </View>
             )}
 
+            {/* Weight range warning */}
+            {weightWarning && <Text style={styles.weightWarning}>{weightWarning}</Text>}
+
             {/* Auto-submit countdown bar */}
             {autoSubmitActive && (
               <TouchableOpacity
@@ -763,7 +806,7 @@ export default function ScanWeighScreen() {
                     },
                   ]}
                 />
-                <Text style={styles.autoSubmitText}>Auto-submitting... tap to cancel</Text>
+                <Text style={styles.autoSubmitText} numberOfLines={1}>Auto-submitting {matchedItem?.name}... tap to cancel</Text>
               </TouchableOpacity>
             )}
 
@@ -1066,6 +1109,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginLeft: 12,
+  },
+  hintText: {
+    color: "#5A6A7A",
+    fontSize: 12,
+    marginTop: 2,
+    marginBottom: 8,
+    fontStyle: "italic",
+  },
+  weightWarning: {
+    color: "#FCD34D",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+    marginVertical: 6,
   },
   fullUnitsBtn: {
     paddingVertical: 10,

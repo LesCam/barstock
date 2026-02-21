@@ -163,7 +163,7 @@ export default function ConnectScaleScreen() {
   }, [sessionId]);
 
   const handleManualEntry = useCallback(() => {
-    router.replace(`/session/${sessionId}/liquor?manual=1`);
+    router.replace(`/session/${sessionId}/scan-weigh`);
   }, [sessionId]);
 
   const handleTroubleshooting = useCallback(() => {
