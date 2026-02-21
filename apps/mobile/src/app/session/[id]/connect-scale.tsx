@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -39,6 +39,8 @@ export default function ConnectScaleScreen() {
   );
   const [lastReading, setLastReading] = useState<ScaleReading | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [needsTare, setNeedsTare] = useState(false);
+  const checkedInitialRef = useRef(false);
 
   // Saved device → profile mappings (for display in scan list)
   const [deviceMappings, setDeviceMappings] = useState<Record<string, { profileId: string; profileName: string }>>({});
@@ -56,9 +58,20 @@ export default function ConnectScaleScreen() {
   useEffect(() => {
     const unsubscribe = scaleManager.onReading((reading) => {
       setLastReading(reading);
+      // Check first stable reading after connection — if weight > 5g, scale needs taring
+      if (!checkedInitialRef.current && reading.stable) {
+        checkedInitialRef.current = true;
+        if (reading.weightGrams > 5) {
+          setNeedsTare(true);
+        }
+      }
+      // Clear tare warning once weight drops near zero
+      if (needsTare && reading.stable && reading.weightGrams <= 5) {
+        setNeedsTare(false);
+      }
     });
     return unsubscribe;
-  }, []);
+  }, [needsTare]);
 
   // Handle unexpected disconnection
   useEffect(() => {
@@ -68,6 +81,8 @@ export default function ConnectScaleScreen() {
       setLastReading(null);
       setProfileId(null);
       setProfileName(null);
+      setNeedsTare(false);
+      checkedInitialRef.current = false;
     });
     return unsubscribe;
   }, []);
@@ -97,6 +112,8 @@ export default function ConnectScaleScreen() {
   const handleConnect = useCallback(async (deviceId: string, name: string) => {
     setConnecting(deviceId);
     try {
+      checkedInitialRef.current = false;
+      setNeedsTare(false);
       await scaleManager.connect(deviceId);
       setConnected(true);
       setConnectedDeviceName(name);
@@ -144,6 +161,13 @@ export default function ConnectScaleScreen() {
     setLastReading(null);
     setProfileId(null);
     setProfileName(null);
+    setNeedsTare(false);
+    checkedInitialRef.current = false;
+  }, []);
+
+  const handleTare = useCallback(async () => {
+    await scaleManager.tare();
+    setNeedsTare(false);
   }, []);
 
   const handleContinue = useCallback(() => {
@@ -201,6 +225,16 @@ export default function ConnectScaleScreen() {
             </Text>
             {lastReading && (
               <Text style={styles.liveWeight}>{formatWeight(lastReading)}</Text>
+            )}
+            {needsTare && (
+              <View style={styles.tareWarning}>
+                <Text style={styles.tareWarningText}>
+                  Remove item from scale before continuing
+                </Text>
+                <TouchableOpacity style={styles.tareBtn} onPress={handleTare}>
+                  <Text style={styles.tareBtnText}>Tare Scale</Text>
+                </TouchableOpacity>
+              </View>
             )}
             <TouchableOpacity
               style={styles.disconnectBtn}
@@ -379,6 +413,31 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#E9B44C",
     marginTop: 8,
+  },
+  tareWarning: {
+    backgroundColor: "#422006",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+  },
+  tareWarningText: {
+    color: "#FCD34D",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  tareBtn: {
+    backgroundColor: "#F59E0B",
+    borderRadius: 6,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  tareBtnText: {
+    color: "#422006",
+    fontWeight: "700",
+    fontSize: 14,
   },
   disconnectBtn: {
     marginTop: 16,
