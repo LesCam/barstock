@@ -11,6 +11,9 @@ export default function GuideItemDetail() {
   const isManager = ["manager", "business_admin", "platform_admin"].includes(
     user?.highestRole ?? ""
   );
+  const isAdmin = ["business_admin", "platform_admin"].includes(
+    user?.highestRole ?? ""
+  );
 
   const utils = trpc.useUtils();
 
@@ -88,7 +91,7 @@ export default function GuideItemDetail() {
             <Text style={styles.heroPlaceholderText}>🍷</Text>
           </View>
         )}
-        {isManager && (
+        {isAdmin && (
           <TouchableOpacity
             style={styles.cameraButton}
             onPress={() =>
