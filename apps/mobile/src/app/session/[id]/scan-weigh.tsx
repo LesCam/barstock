@@ -269,6 +269,7 @@ export default function ScanWeighScreen() {
         if (item) {
           const typedItem = item as MatchedItem;
           setMatchedItem(typedItem);
+          scaleManager.flashLed();
           if (typedItem.category?.countingMethod !== "weighable") {
             setPhase("counting");
           } else {
@@ -328,6 +329,7 @@ export default function ScanWeighScreen() {
       if (hapticEnabled) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+      scaleManager.flashLed(2);
 
       setSubmittedCount((c) => c + 1);
       setLastSubmittedName(matchedItem.name);
@@ -430,6 +432,7 @@ export default function ScanWeighScreen() {
       if (hapticEnabled) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+      scaleManager.flashLed(2);
 
       setSubmittedCount((c) => c + 1);
       setLastSubmittedName(matchedItem.name);

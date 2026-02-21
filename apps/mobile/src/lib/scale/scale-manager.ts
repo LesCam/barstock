@@ -32,6 +32,8 @@ const SKALE_COMMAND_CHARACTERISTIC_UUID = "0000ef80-0000-1000-8000-00805f9b34fb"
 const SKALE_CMD_TARE = 0x10;
 const SKALE_CMD_UNIT_GRAMS = 0x03;
 const SKALE_CMD_DISPLAY_WEIGHT = 0xec;
+const SKALE_CMD_LED_ON = 0xed;
+const SKALE_CMD_LED_OFF = 0xee;
 
 // Standard BLE Battery Service
 const BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb";
@@ -401,6 +403,17 @@ export class ScaleManager {
   async tare(): Promise<void> {
     if (this.connectedDevice && this.scaleType === "skale2") {
       await this.sendSkaleCommand(this.connectedDevice, SKALE_CMD_TARE);
+    }
+  }
+
+  /** Flash the Skale 2 LED display (quick off/on blink). */
+  async flashLed(count = 1): Promise<void> {
+    if (!this.connectedDevice || this.scaleType !== "skale2") return;
+    for (let i = 0; i < count; i++) {
+      await this.sendSkaleCommand(this.connectedDevice, SKALE_CMD_LED_OFF);
+      await new Promise((r) => setTimeout(r, 100));
+      await this.sendSkaleCommand(this.connectedDevice, SKALE_CMD_LED_ON);
+      if (i < count - 1) await new Promise((r) => setTimeout(r, 100));
     }
   }
 
