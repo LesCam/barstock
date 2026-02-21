@@ -273,6 +273,7 @@ model User {
   countedSessionLines     InventorySessionLine[] @relation("LineCountedBy")
   createdPurchaseOrders   PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
   vendorOrderers          VendorOrderer[]
+  deviceTokens            DeviceToken[]
 
   @@map("users")
 }
@@ -1065,6 +1066,22 @@ model ArtSale {
   @@index([businessId, soldAt], map: "ix_art_sales_business_sold")
   @@index([artistId], map: "ix_art_sales_artist")
   @@map("art_sales")
+}
+
+// ─── Device Tokens (Push Notifications) ─────────────────────
+
+model DeviceToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  platform  String   @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "ix_device_tokens_user")
+  @@map("device_tokens")
 }
 
 // ─── Password Reset ─────────────────────────────────────────

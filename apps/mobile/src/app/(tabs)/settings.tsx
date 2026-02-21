@@ -160,6 +160,18 @@ export default function SettingsTab() {
         )}
       </View>
 
+      {(user?.highestRole === "business_admin" || user?.highestRole === "platform_admin") && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Administration</Text>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push("/audit-log")}
+          >
+            <Text style={styles.rowText}>Audit Log</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>About</Text>
         <View style={styles.card}>

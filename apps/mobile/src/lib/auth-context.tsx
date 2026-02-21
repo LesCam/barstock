@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useReducer } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { trpcVanilla, setAuthToken, setRefreshToken, setOnSignOut } from "./trpc";
 import { scaleManager } from "./scale/scale-manager";
+import { unregisterPushToken } from "./use-push-notifications";
 
 const KEYS = {
   token: "authToken",
@@ -179,6 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (scaleManager.isConnected) {
       await scaleManager.disconnect();
     }
+    await unregisterPushToken();
     setAuthToken(null);
     setRefreshToken(null);
     await clearStorage();

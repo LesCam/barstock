@@ -1,4 +1,6 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
+import { PushService } from "./push.service";
+import { EmailService } from "./email.service";
 
 interface SendParams {
   businessId: string;
@@ -19,7 +21,7 @@ export class NotificationService {
   constructor(private prisma: ExtendedPrismaClient) {}
 
   async send(params: SendParams) {
-    return this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: {
         businessId: params.businessId,
         recipientUserId: params.recipientUserId,
@@ -30,6 +32,39 @@ export class NotificationService {
         metadataJson: params.metadata ?? undefined,
       },
     });
+
+    // Push notification (fire-and-forget)
+    try {
+      const pushSvc = new PushService(this.prisma);
+      pushSvc.sendPush(params.recipientUserId, params.title, params.body, {
+        notificationId: notification.id,
+        linkUrl: params.linkUrl,
+      });
+    } catch {
+      // best-effort
+    }
+
+    // Email for alert-type notifications (fire-and-forget)
+    if (params.metadata?.rule) {
+      try {
+        const user = await this.prisma.user.findUnique({
+          where: { id: params.recipientUserId },
+          select: { email: true },
+        });
+        if (user?.email) {
+          EmailService.sendAlertEmail(
+            user.email,
+            params.title,
+            params.body ?? "",
+            params.linkUrl
+          );
+        }
+      } catch {
+        // best-effort
+      }
+    }
+
+    return notification;
   }
 
   async list(userId: string, params: ListParams) {

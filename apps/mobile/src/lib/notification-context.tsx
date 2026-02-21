@@ -1,6 +1,7 @@
 import React, { createContext, useContext } from "react";
 import { trpc } from "./trpc";
 import { useAuth } from "./auth-context";
+import { usePushNotifications } from "./use-push-notifications";
 
 interface NotificationContextValue {
   unreadCount: number;
@@ -18,6 +19,8 @@ export function useNotifications() {
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
+
+  usePushNotifications(!!token);
 
   const { data, refetch } = trpc.notifications.unreadCount.useQuery(undefined, {
     enabled: !!token,
