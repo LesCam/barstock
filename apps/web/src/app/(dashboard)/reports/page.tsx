@@ -87,7 +87,8 @@ function VarianceHeatmapGrid({ data }: { data: HeatmapCell[] }) {
  *  so we add a day (e.g. "Feb 21" with EOD "04:00" → Feb 22 04:00). */
 function toEndOfDay(dateStr: string, eodTime: string): Date {
   const [hh, mm] = eodTime.split(":").map(Number);
-  const d = new Date(dateStr);
+  const [y, m, day] = dateStr.split("-").map(Number);
+  const d = new Date(y, m - 1, day); // local midnight
   if (eodTime <= "12:00" && eodTime !== "00:00") {
     d.setDate(d.getDate() + 1);
   }
