@@ -177,10 +177,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    await unregisterPushToken();
     if (scaleManager.isConnected) {
       await scaleManager.disconnect();
     }
-    await unregisterPushToken();
     setAuthToken(null);
     setRefreshToken(null);
     await clearStorage();

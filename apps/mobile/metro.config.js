@@ -15,6 +15,13 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, "node_modules"),
 ];
 
+// Force singleton React — prevent root node_modules/react@18 from being picked up
+const singletonPackages = {
+  react: path.resolve(projectRoot, "node_modules/react"),
+  "react-dom": path.resolve(projectRoot, "node_modules/react-dom"),
+  "react-native": path.resolve(projectRoot, "node_modules/react-native"),
+};
+
 // ESM-only packages that lack a "main" field — manually map to their dist entry
 const esmPackages = {
   "copy-anything": path.join(
@@ -28,6 +35,14 @@ const esmPackages = {
 };
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Force singleton resolution for React packages
+  if (singletonPackages[moduleName]) {
+    return context.resolveRequest(
+      { ...context, resolveRequest: undefined },
+      singletonPackages[moduleName],
+      platform
+    );
+  }
   if (esmPackages[moduleName]) {
     return { type: "sourceFile", filePath: esmPackages[moduleName] };
   }

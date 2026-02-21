@@ -1,6 +1,5 @@
 import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { useNotifications } from "@/lib/notification-context";
 
 export function NotificationBell() {
@@ -13,7 +12,7 @@ export function NotificationBell() {
       style={styles.button}
       accessibilityLabel="Notifications"
     >
-      <Ionicons name="notifications-outline" size={22} color="#EAF0FF" />
+      <Text style={styles.bellIcon}>{"\uD83D\uDD14"}</Text>
       {unreadCount > 0 && (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>
@@ -29,6 +28,9 @@ const styles = StyleSheet.create({
   button: {
     padding: 6,
     marginRight: 8,
+  },
+  bellIcon: {
+    fontSize: 20,
   },
   badge: {
     position: "absolute",

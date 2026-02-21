@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "barstock",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.barstock.app",

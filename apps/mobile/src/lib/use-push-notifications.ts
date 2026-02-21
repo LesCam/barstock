@@ -1,20 +1,29 @@
 import { useEffect, useRef } from "react";
-import * as Notifications from "expo-notifications";
-import type { EventSubscription } from "expo-modules-core";
 import { Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { trpcVanilla } from "./trpc";
 import { mapNotificationRoute } from "./notification-route-map";
 
+let Notifications: typeof import("expo-notifications") | null = null;
+try {
+  Notifications = require("expo-notifications");
+} catch {
+  // Native module not available — skip push
+}
+
 // Show notifications while app is foregrounded
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+try {
+  Notifications?.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch {
+  // ignore
+}
 
 let registeredToken: string | null = null;
 
@@ -32,25 +41,25 @@ export async function unregisterPushToken(): Promise<void> {
 
 export function usePushNotifications(isAuthenticated: boolean) {
   const router = useRouter();
-  const responseListener = useRef<EventSubscription | null>(null);
+  const responseListener = useRef<{ remove: () => void } | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !Notifications) return;
 
     (async () => {
-      const { status: existingStatus } =
-        await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-
-      if (existingStatus !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-
-      if (finalStatus !== "granted") return;
-
       try {
-        const tokenData = await Notifications.getExpoPushTokenAsync({
+        const { status: existingStatus } =
+          await Notifications!.getPermissionsAsync();
+        let finalStatus = existingStatus;
+
+        if (existingStatus !== "granted") {
+          const { status } = await Notifications!.requestPermissionsAsync();
+          finalStatus = status;
+        }
+
+        if (finalStatus !== "granted") return;
+
+        const tokenData = await Notifications!.getExpoPushTokenAsync({
           projectId: "52eb4767-125b-40a0-9c2c-d28e99abcc9f",
         });
         const token = tokenData.data;
@@ -66,29 +75,35 @@ export function usePushNotifications(isAuthenticated: boolean) {
     })();
 
     // Handle notification taps
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data;
-        const linkUrl = data?.linkUrl as string | undefined;
-        const notificationId = data?.notificationId as string | undefined;
+    try {
+      responseListener.current =
+        Notifications!.addNotificationResponseReceivedListener((response) => {
+          const data = response.notification.request.content.data;
+          const linkUrl = data?.linkUrl as string | undefined;
+          const notificationId = data?.notificationId as string | undefined;
 
-        // Mark as read
-        if (notificationId) {
-          trpcVanilla.notifications.markRead
-            .mutate({ id: notificationId })
-            .catch(() => {});
-        }
+          if (notificationId) {
+            trpcVanilla.notifications.markRead
+              .mutate({ id: notificationId })
+              .catch(() => {});
+          }
 
-        // Navigate to the right screen
-        const route = mapNotificationRoute(linkUrl);
-        if (route) {
-          router.push(route as any);
-        }
-      });
+          const route = mapNotificationRoute(linkUrl);
+          if (route) {
+            router.push(route as any);
+          }
+        });
+    } catch {
+      // listener setup failed — non-critical
+    }
 
     return () => {
       if (responseListener.current) {
-        responseListener.current.remove();
+        try {
+          responseListener.current.remove();
+        } catch {
+          // ignore
+        }
         responseListener.current = null;
       }
     };

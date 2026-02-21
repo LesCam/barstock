@@ -153,8 +153,8 @@ export function VoiceButton() {
 const styles = StyleSheet.create({
   wrapper: {
     position: "absolute",
-    top: 50,
-    right: 16,
+    bottom: 100,
+    right: 20,
     alignItems: "center",
     zIndex: 999,
   },
