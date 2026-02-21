@@ -110,6 +110,7 @@ enum VarianceReasonT {
   line_cleaning
   transfer
   unknown
+  session_expired
 
   @@map("variance_reason_t")
 }

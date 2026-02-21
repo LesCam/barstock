@@ -87,6 +87,7 @@ export const VarianceReason = {
   line_cleaning: "line_cleaning",
   transfer: "transfer",
   unknown: "unknown",
+  session_expired: "session_expired",
 } as const;
 export type VarianceReason =
   (typeof VarianceReason)[keyof typeof VarianceReason];

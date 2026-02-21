@@ -152,6 +152,105 @@ export class SessionService {
     };
   }
 
+  /**
+   * Auto-close session at end of business day.
+   * Uses session_expired as variance reason for all items — no threshold prompt.
+   */
+  async autoCloseSession(sessionId: string): Promise<SessionCloseResult> {
+    const session = await this.prisma.inventorySession.findUnique({
+      where: { id: sessionId },
+      include: { lines: { include: { inventoryItem: true } } },
+    });
+
+    if (!session) throw new Error("Session not found");
+    if (session.endedTs) throw new Error("Session already closed");
+
+    let adjustmentsCreated = 0;
+    let totalVariance = 0;
+    const adjustments: AdjustmentDetail[] = [];
+    const audit = new AuditService(this.prisma);
+
+    const itemTotals = this.aggregateLinesByItem(session.lines);
+
+    const location = await this.prisma.location.findUnique({
+      where: { id: session.locationId },
+      select: { businessId: true },
+    });
+
+    for (const [itemId, { total, item }] of itemTotals) {
+      const theoretical = await this.calculateTheoreticalOnHand(
+        itemId,
+        session.startedTs
+      );
+
+      const variance = total - theoretical;
+      totalVariance += Math.abs(variance);
+
+      if (variance !== 0) {
+        const event = await this.prisma.consumptionEvent.create({
+          data: {
+            locationId: session.locationId,
+            eventType: "inventory_count_adjustment",
+            sourceSystem: "manual",
+            eventTs: new Date(),
+            inventoryItemId: itemId,
+            quantityDelta: new Prisma.Decimal(variance),
+            uom: item.baseUom,
+            confidenceLevel: "measured",
+            varianceReason: "session_expired",
+            notes: "Auto-closed at end of business day",
+          },
+        });
+
+        const variancePercent = theoretical !== 0
+          ? (variance / theoretical) * 100
+          : 0;
+
+        adjustments.push({
+          itemId,
+          itemName: item.name,
+          variance,
+          variancePercent,
+          reason: "session_expired",
+        });
+
+        if (location) {
+          await audit.log({
+            businessId: location.businessId,
+            actionType: "adjustment.created",
+            objectType: "consumption_event",
+            objectId: event.id,
+            metadata: {
+              inventoryItemId: itemId,
+              itemName: item.name,
+              variance,
+              variancePercent,
+              varianceReason: "session_expired",
+              sessionId,
+              autoClose: true,
+            },
+          });
+        }
+
+        adjustmentsCreated++;
+      }
+    }
+
+    // Close session — closedBy = null indicates system close
+    await this.prisma.inventorySession.update({
+      where: { id: sessionId },
+      data: { endedTs: new Date(), closedBy: null },
+    });
+
+    return {
+      sessionId,
+      adjustmentsCreated,
+      totalVariance,
+      requiresReasons: [],
+      adjustments,
+    };
+  }
+
   async calculateTheoreticalOnHand(
     itemId: string,
     asOf: Date
