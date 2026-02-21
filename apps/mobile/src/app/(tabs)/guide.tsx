@@ -7,10 +7,11 @@ import {
   StyleSheet,
   Dimensions,
   TextInput,
+  RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { API_URL } from "@/lib/trpc";
@@ -53,6 +54,17 @@ export default function GuideTab() {
       (item.varietal ?? "").toLowerCase().includes(q)
     );
   }, [items, searchQuery]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const utils = trpc.useUtils();
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      utils.productGuide.listCategories.invalidate(),
+      utils.productGuide.listItems.invalidate(),
+    ]);
+    setRefreshing(false);
+  }, [utils]);
 
   function resolveImageUrl(url: string | null | undefined): string | null {
     if (!url) return null;
@@ -127,6 +139,9 @@ export default function GuideTab() {
         keyExtractor={(i: any) => i.id}
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.grid}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E9B44C" />
+        }
         renderItem={({ item }: { item: any }) => {
           const imgUrl = resolveImageUrl(item.imageUrl);
           const prices = Array.isArray(item.prices) ? (item.prices as any[]) : [];
