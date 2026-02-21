@@ -59,6 +59,7 @@ export default function ScanWeighScreen() {
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [scaleWeight, setScaleWeight] = useState<number | null>(null);
   const [scaleConnected, setScaleConnected] = useState(scaleManager.isConnected);
+  const [batteryLevel, setBatteryLevel] = useState<number | null>(scaleManager.batteryLevel);
   const [manualWeight, setManualWeight] = useState("");
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
@@ -227,6 +228,7 @@ export default function ScanWeighScreen() {
   useEffect(() => {
     const unsubReading = scaleManager.onReading((reading: ScaleReading) => {
       setScaleConnected(true);
+      setBatteryLevel(scaleManager.batteryLevel);
       if (reading.stable && phaseRef.current === "weighing") {
         setScaleWeight(reading.weightGrams);
 
@@ -604,6 +606,13 @@ export default function ScanWeighScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Low battery warning */}
+      {scaleConnected && batteryLevel != null && batteryLevel <= 5 && (
+        <View style={styles.lowBatteryBanner}>
+          <Text style={styles.lowBatteryText}>Scale battery low ({batteryLevel}%)</Text>
+        </View>
+      )}
 
       {/* Success flash */}
       <Animated.View
@@ -1048,6 +1057,20 @@ const styles = StyleSheet.create({
   },
   scaleChipTextConnected: { color: "#2BA8A0" },
   scaleChipTextDisconnected: { color: "#dc2626" },
+  lowBatteryBanner: {
+    position: "absolute",
+    top: 100,
+    alignSelf: "center",
+    backgroundColor: "rgba(220,38,38,0.9)",
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  lowBatteryText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
 
   // Success flash
   successFlash: {

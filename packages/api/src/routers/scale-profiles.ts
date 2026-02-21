@@ -7,6 +7,7 @@ import {
   scaleProfileHeartbeatSchema,
 } from "@barstock/validators";
 import { NotificationService } from "../services/notification.service";
+import { AuditService } from "../services/audit.service";
 import { Role } from "@barstock/types";
 
 const CONNECTED_THRESHOLD_MS = 60_000; // 60 seconds
@@ -133,6 +134,16 @@ export const scaleProfilesRouter = router({
           await ctx.prisma.scaleProfile.update({
             where: { id: input.profileId },
             data: { lastBatteryAlertAt: now },
+          });
+
+          const audit = new AuditService(ctx.prisma);
+          await audit.log({
+            businessId: profile.location.businessId,
+            actorUserId: ctx.user.userId,
+            actionType: "scale.low_battery",
+            objectType: "scale_profile",
+            objectId: profile.id,
+            metadata: { batteryLevel: input.batteryLevel, scaleName: profile.name },
           });
 
           const notificationService = new NotificationService(ctx.prisma);
