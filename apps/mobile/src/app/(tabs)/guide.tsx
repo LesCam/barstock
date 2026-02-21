@@ -182,7 +182,7 @@ export default function GuideTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0B1623" },
-  filterBar: { maxHeight: 52, borderBottomWidth: 1, borderBottomColor: "#1E3550" },
+  filterBar: { minHeight: 48, borderBottomWidth: 1, borderBottomColor: "#1E3550" },
   searchBar: {
     paddingHorizontal: COLUMN_GAP,
     paddingVertical: 8,
