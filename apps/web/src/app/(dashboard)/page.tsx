@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+} from "recharts";
 
 const TIMEZONES = [
   "America/Montreal",
@@ -161,6 +164,60 @@ export default function DashboardPage() {
     },
   });
 
+  // --- KPI data queries (only when user has a location) ---
+  const locationId = user?.locationIds?.[0] as string | undefined;
+  const sevenDaysAgo = useMemo(() => new Date(Date.now() - 7 * 86400000), []);
+  const now = useMemo(() => new Date(), []);
+
+  const { data: onHand, isLoading: onHandLoading } = trpc.reports.onHand.useQuery(
+    { locationId: locationId! },
+    { enabled: !!locationId }
+  );
+  const { data: cogs, isLoading: cogsLoading } = trpc.reports.cogs.useQuery(
+    { locationId: locationId!, fromDate: sevenDaysAgo, toDate: now },
+    { enabled: !!locationId }
+  );
+  const { data: variance, isLoading: varianceLoading } = trpc.reports.variance.useQuery(
+    { locationId: locationId!, fromDate: sevenDaysAgo, toDate: now },
+    { enabled: !!locationId }
+  );
+  const { data: patterns, isLoading: patternsLoading } = trpc.reports.variancePatterns.useQuery(
+    { locationId: locationId!, sessionCount: 10 },
+    { enabled: !!locationId }
+  );
+  const { data: varianceTrend } = trpc.reports.varianceTrend.useQuery(
+    { locationId: locationId!, weeksBack: 4 },
+    { enabled: !!locationId }
+  );
+  const { data: staffData } = trpc.reports.staffAccountability.useQuery(
+    { locationId: locationId!, fromDate: sevenDaysAgo, toDate: now },
+    { enabled: !!locationId }
+  );
+
+  const shrinkageSuspects = useMemo(
+    () => patterns?.filter((p) => p.isShrinkageSuspect) ?? [],
+    [patterns]
+  );
+  const flaggedItems = useMemo(
+    () => patterns?.filter((p) => p.isShrinkageSuspect || p.trend === "worsening").slice(0, 5) ?? [],
+    [patterns]
+  );
+  const recentSessions = useMemo(
+    () =>
+      staffData?.sessions
+        ? [...staffData.sessions].sort((a, b) => new Date(b.startedTs).getTime() - new Date(a.startedTs).getTime()).slice(0, 5)
+        : [],
+    [staffData]
+  );
+  const trendChartData = useMemo(
+    () =>
+      varianceTrend?.map((d) => ({
+        ...d,
+        label: new Date(d.weekStart).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      })) ?? [],
+    [varianceTrend]
+  );
+
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!businessId || !name.trim()) return;
@@ -193,6 +250,158 @@ export default function DashboardPage() {
 
       {isAdmin && <AlertBanner />}
 
+      {/* ── KPI Summary (visible when user has a location) ── */}
+      {locationId && (
+        <>
+          {/* KPI Cards */}
+          <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Link href="/reports" className="rounded-lg border border-white/10 bg-[#16283F] p-4 transition-colors hover:border-[#E9B44C]/30">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/50">On-Hand Value</p>
+              {onHandLoading ? (
+                <div className="mt-2 h-8 w-24 animate-pulse rounded bg-white/10" />
+              ) : (
+                <>
+                  <p className="mt-1 text-2xl font-bold text-[#EAF0FF]">${(onHand?.totalValue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  <p className="mt-0.5 text-xs text-[#EAF0FF]/40">{onHand?.totalItems ?? 0} items</p>
+                </>
+              )}
+            </Link>
+
+            <Link href="/reports" className="rounded-lg border border-white/10 bg-[#16283F] p-4 transition-colors hover:border-[#E9B44C]/30">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/50">COGS (7d)</p>
+              {cogsLoading ? (
+                <div className="mt-2 h-8 w-24 animate-pulse rounded bg-white/10" />
+              ) : (
+                <p className="mt-1 text-2xl font-bold text-[#E9B44C]">${(cogs?.cogs ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              )}
+            </Link>
+
+            <Link href="/reports" className="rounded-lg border border-white/10 bg-[#16283F] p-4 transition-colors hover:border-[#E9B44C]/30">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/50">Variance Impact (7d)</p>
+              {varianceLoading ? (
+                <div className="mt-2 h-8 w-24 animate-pulse rounded bg-white/10" />
+              ) : (
+                <p className={`mt-1 text-2xl font-bold ${(variance?.totalVarianceValue ?? 0) < 0 ? "text-red-400" : "text-[#EAF0FF]"}`}>
+                  ${Math.abs(variance?.totalVarianceValue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {(variance?.totalVarianceValue ?? 0) < 0 && <span className="ml-1 text-sm font-normal text-red-400">loss</span>}
+                </p>
+              )}
+            </Link>
+
+            <Link href="/reports" className="rounded-lg border border-white/10 bg-[#16283F] p-4 transition-colors hover:border-[#E9B44C]/30">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/50">Shrinkage Suspects</p>
+              {patternsLoading ? (
+                <div className="mt-2 h-8 w-12 animate-pulse rounded bg-white/10" />
+              ) : (
+                <p className={`mt-1 text-2xl font-bold ${shrinkageSuspects.length > 0 ? "text-red-400" : "text-green-400"}`}>
+                  {shrinkageSuspects.length}
+                </p>
+              )}
+            </Link>
+          </div>
+
+          {/* Two-column: Variance Trend + Flagged Items */}
+          <div className="mb-6 grid gap-4 lg:grid-cols-2">
+            {/* Variance Trend Mini Chart */}
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-[#EAF0FF]">Variance Trend (4 weeks)</h3>
+                <Link href="/reports" className="text-xs font-medium text-[#E9B44C] hover:text-[#C8922E]">
+                  View report →
+                </Link>
+              </div>
+              {trendChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={trendChartData}>
+                    <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 11 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                    <YAxis tick={{ fill: "#EAF0FF99", fontSize: 10 }} axisLine={false} tickLine={false} width={40} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                      formatter={(value) => [typeof value === "number" ? value.toFixed(1) : value, "Total Variance"]}
+                      labelFormatter={(label) => `Week of ${label}`}
+                    />
+                    <Bar dataKey="totalVarianceUnits" fill="#E9B44C" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No trend data yet.</p>
+              )}
+            </div>
+
+            {/* Flagged Items */}
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-[#EAF0FF]">Flagged Items</h3>
+                <Link href="/reports" className="text-xs font-medium text-[#E9B44C] hover:text-[#C8922E]">
+                  View all →
+                </Link>
+              </div>
+              {flaggedItems.length > 0 ? (
+                <div className="space-y-2">
+                  {flaggedItems.map((item) => (
+                    <div
+                      key={item.inventoryItemId}
+                      className={`flex items-center justify-between rounded-md border px-3 py-2 ${
+                        item.isShrinkageSuspect
+                          ? "border-red-500/30 bg-red-500/5"
+                          : "border-yellow-500/30 bg-yellow-500/5"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-[#EAF0FF]">{item.itemName}</p>
+                        <p className="text-xs text-[#EAF0FF]/40">{item.categoryName ?? "Uncategorized"}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3 text-xs">
+                        <span className="text-red-400 font-medium">{item.avgVariance.toFixed(1)}</span>
+                        <span className={item.trend === "worsening" ? "text-red-400" : item.trend === "improving" ? "text-green-400" : "text-[#EAF0FF]/40"}>
+                          {item.trend === "worsening" ? "\u2193" : item.trend === "improving" ? "\u2191" : "\u2192"}
+                        </span>
+                        {item.isShrinkageSuspect && (
+                          <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-red-400 font-medium">Shrinkage</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No flagged items.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Sessions */}
+          {recentSessions.length > 0 && (
+            <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F]">
+              <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                <h3 className="text-sm font-semibold text-[#EAF0FF]">Recent Sessions</h3>
+                <Link href="/sessions" className="text-xs font-medium text-[#E9B44C] hover:text-[#C8922E]">
+                  View all →
+                </Link>
+              </div>
+              <div className="divide-y divide-white/5">
+                {recentSessions.map((s) => (
+                  <div key={s.sessionId} className="flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm font-medium text-[#EAF0FF]">
+                        {new Date(s.startedTs).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                      <span className="text-xs text-[#EAF0FF]/50">{s.durationMinutes}m</span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-[#EAF0FF]/60">
+                      <span>{s.totalLines} items</span>
+                      <span className={s.varianceRate > 20 ? "text-red-400" : s.varianceRate > 10 ? "text-amber-400" : ""}>
+                        {s.varianceRate.toFixed(1)}% variance
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Locations ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {showForm && (
           <form
