@@ -144,10 +144,10 @@ export default function SessionDetailScreen() {
     { enabled: !!selectedLocationId && !!selectedAreaId && !fullLocationMode }
   );
 
-  // Full location expected items (all active items)
+  // Full location expected items (always fetched — used for progress indicators)
   const { data: expectedItemsForLocation } = trpc.sessions.expectedItemsForLocation.useQuery(
     { locationId: selectedLocationId! },
-    { enabled: !!selectedLocationId && fullLocationMode }
+    { enabled: !!selectedLocationId }
   );
 
   const expectedItems = fullLocationMode ? expectedItemsForLocation : expectedItemsForArea;
@@ -382,6 +382,72 @@ export default function SessionDetailScreen() {
     return Array.from(ids);
   }, [session?.lines]);
 
+  // --- Progress maps for area/sub-area pills ---
+  const areaProgressMap = useMemo(() => {
+    const map = new Map<string, { counted: number; total: number }>();
+    if (!expectedItemsForLocation || !areas || !session?.lines) return map;
+
+    // Build subAreaId → barAreaId lookup
+    const subAreaToArea = new Map<string, string>();
+    for (const area of areas as BarArea[]) {
+      for (const sa of area.subAreas) {
+        subAreaToArea.set(sa.id, area.id);
+      }
+    }
+
+    // Count total expected per area
+    for (const item of expectedItemsForLocation as any[]) {
+      const areaId = item.subAreaId ? subAreaToArea.get(item.subAreaId) : undefined;
+      if (!areaId) continue;
+      const entry = map.get(areaId) ?? { counted: 0, total: 0 };
+      entry.total++;
+      map.set(areaId, entry);
+    }
+
+    // Count unique items counted per area
+    const countedPairs = new Set<string>();
+    for (const line of session.lines) {
+      const areaId = (line as any).subArea?.barArea?.id;
+      if (!areaId) continue;
+      const key = `${areaId}|${(line as any).inventoryItemId}`;
+      if (!countedPairs.has(key)) {
+        countedPairs.add(key);
+        const entry = map.get(areaId);
+        if (entry) entry.counted++;
+      }
+    }
+
+    return map;
+  }, [expectedItemsForLocation, areas, session?.lines]);
+
+  const subAreaProgressMap = useMemo(() => {
+    const map = new Map<string, { counted: number; total: number }>();
+    if (!expectedItemsForLocation || !session?.lines) return map;
+
+    // Count total expected per sub-area
+    for (const item of expectedItemsForLocation as any[]) {
+      if (!item.subAreaId) continue;
+      const entry = map.get(item.subAreaId) ?? { counted: 0, total: 0 };
+      entry.total++;
+      map.set(item.subAreaId, entry);
+    }
+
+    // Count unique items counted per sub-area
+    const countedPairs = new Set<string>();
+    for (const line of session.lines) {
+      const saId = (line as any).subArea?.id;
+      if (!saId) continue;
+      const key = `${saId}|${(line as any).inventoryItemId}`;
+      if (!countedPairs.has(key)) {
+        countedPairs.add(key);
+        const entry = map.get(saId);
+        if (entry) entry.counted++;
+      }
+    }
+
+    return map;
+  }, [expectedItemsForLocation, session?.lines]);
+
   // Handle close session — triggers verification flow
   async function handleCloseSession() {
     if (workedAreaIds.length === 0) {
@@ -596,25 +662,57 @@ export default function SessionDetailScreen() {
               showsHorizontalScrollIndicator={false}
               style={styles.areaPills}
             >
-              {(areas as BarArea[]).map((area) => (
-                <TouchableOpacity
-                  key={area.id}
-                  style={[
-                    styles.areaPill,
-                    selectedAreaId === area.id && styles.areaPillActive,
-                  ]}
-                  onPress={() => handleAreaSelect(area)}
-                >
-                  <Text
+              {(areas as BarArea[]).map((area) => {
+                const progress = areaProgressMap.get(area.id);
+                const pct = progress && progress.total > 0 ? (progress.counted / progress.total) * 100 : 0;
+                const isComplete = progress && progress.total > 0 && progress.counted >= progress.total;
+                return (
+                  <TouchableOpacity
+                    key={area.id}
                     style={[
-                      styles.areaPillText,
-                      selectedAreaId === area.id && styles.areaPillTextActive,
+                      styles.areaPill,
+                      selectedAreaId === area.id && styles.areaPillActive,
+                      { overflow: "hidden" as const },
                     ]}
+                    onPress={() => handleAreaSelect(area)}
                   >
-                    {area.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    {progress && progress.total > 0 && (
+                      <View
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: `${pct}%`,
+                          backgroundColor: isComplete
+                            ? "rgba(34,197,94,0.25)"
+                            : "rgba(43,168,160,0.25)",
+                        }}
+                      />
+                    )}
+                    <Text
+                      style={[
+                        styles.areaPillText,
+                        selectedAreaId === area.id && styles.areaPillTextActive,
+                        isComplete && styles.areaPillTextComplete,
+                      ]}
+                    >
+                      {area.name}
+                    </Text>
+                    {progress && progress.total > 0 && (
+                      <Text
+                        style={[
+                          styles.areaPillFraction,
+                          selectedAreaId === area.id && styles.areaPillFractionActive,
+                          isComplete && styles.areaPillFractionComplete,
+                        ]}
+                      >
+                        {progress.counted}/{progress.total}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             {selectedArea && selectedArea.subAreas.length > 0 && (
@@ -625,23 +723,53 @@ export default function SessionDetailScreen() {
               >
                 {selectedArea.subAreas.map((sa: { id: string; name: string }) => {
                   const othersHere = subAreaParticipantCounts.get(sa.id) ?? 0;
+                  const saProgress = subAreaProgressMap.get(sa.id);
+                  const saPct = saProgress && saProgress.total > 0 ? (saProgress.counted / saProgress.total) * 100 : 0;
+                  const saComplete = saProgress && saProgress.total > 0 && saProgress.counted >= saProgress.total;
                   return (
                     <TouchableOpacity
                       key={sa.id}
                       style={[
                         styles.subAreaPill,
                         selectedSubAreaId === sa.id && styles.subAreaPillActive,
+                        { overflow: "hidden" as const },
                       ]}
                       onPress={() => warnIfOccupied(sa.id, () => setSelectedSubAreaId(sa.id))}
                     >
+                      {saProgress && saProgress.total > 0 && (
+                        <View
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: `${saPct}%`,
+                            backgroundColor: saComplete
+                              ? "rgba(34,197,94,0.25)"
+                              : "rgba(43,168,160,0.25)",
+                          }}
+                        />
+                      )}
                       <Text
                         style={[
                           styles.subAreaPillText,
                           selectedSubAreaId === sa.id && styles.subAreaPillTextActive,
+                          saComplete && styles.subAreaPillTextComplete,
                         ]}
                       >
                         {sa.name}
                       </Text>
+                      {saProgress && saProgress.total > 0 && (
+                        <Text
+                          style={[
+                            styles.subAreaPillFraction,
+                            selectedSubAreaId === sa.id && styles.subAreaPillFractionActive,
+                            saComplete && styles.subAreaPillFractionComplete,
+                          ]}
+                        >
+                          {saProgress.counted}/{saProgress.total}
+                        </Text>
+                      )}
                       {othersHere > 0 && (
                         <View style={styles.subAreaBadge}>
                           <Text style={styles.subAreaBadgeText}>{othersHere}</Text>
@@ -661,6 +789,17 @@ export default function SessionDetailScreen() {
                 {fullLocationMode && selectedSubArea && selectedArea && (
                   <Text style={styles.areaBannerSub}>
                     Counting in: {selectedArea.name} — {selectedSubArea.name}
+                  </Text>
+                )}
+                {fullLocationMode && expectedItemsForLocation && (
+                  <Text style={styles.areaBannerProgress}>
+                    {(() => {
+                      let totalCounted = 0;
+                      for (const [, v] of areaProgressMap) totalCounted += v.counted;
+                      let totalExpected = 0;
+                      for (const [, v] of areaProgressMap) totalExpected += v.total;
+                      return `${totalCounted}/${totalExpected} items counted`;
+                    })()}
                   </Text>
                 )}
               </View>
@@ -705,6 +844,21 @@ export default function SessionDetailScreen() {
               <Text style={styles.actionText}>Draft Verify</Text>
             </TouchableOpacity>
           </View>
+        )}
+
+        {/* Scan & Weigh shortcut */}
+        {isOpen && (
+          <TouchableOpacity
+            style={[styles.scanWeighBtn, !areaSelected && styles.actionBtnDisabled]}
+            disabled={!areaSelected}
+            onPress={() =>
+              router.push(
+                `/session/${id}/scan-weigh?subAreaId=${selectedSubAreaId ?? ""}&areaName=${encodeURIComponent(areaLabel)}` as any
+              )
+            }
+          >
+            <Text style={styles.scanWeighBtnText}>Scan & Weigh</Text>
+          </TouchableOpacity>
         )}
 
         {/* Expected Items Checklist */}
@@ -1236,6 +1390,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderWidth: 1,
     borderColor: "#1E3550",
+    flexDirection: "row",
+    alignItems: "center",
   },
   areaPillActive: {
     backgroundColor: "#1E3550",
@@ -1243,6 +1399,15 @@ const styles = StyleSheet.create({
   },
   areaPillText: { color: "#8899AA", fontSize: 14, fontWeight: "500" },
   areaPillTextActive: { color: "#E9B44C" },
+  areaPillTextComplete: { color: "#22c55e" },
+  areaPillFraction: {
+    color: "#5A6A7A",
+    fontSize: 11,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  areaPillFractionActive: { color: "#E9B44C" },
+  areaPillFractionComplete: { color: "#22c55e" },
   subAreaPills: { flexDirection: "row", marginBottom: 8 },
   subAreaPill: {
     backgroundColor: "#0F1D2E",
@@ -1252,10 +1417,21 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderWidth: 1,
     borderColor: "#1E3550",
+    flexDirection: "row",
+    alignItems: "center",
   },
   subAreaPillActive: { borderColor: "#2BA8A0", backgroundColor: "#12293E" },
   subAreaPillText: { color: "#5A6A7A", fontSize: 13, fontWeight: "500" },
   subAreaPillTextActive: { color: "#2BA8A0" },
+  subAreaPillTextComplete: { color: "#22c55e" },
+  subAreaPillFraction: {
+    color: "#5A6A7A",
+    fontSize: 10,
+    fontWeight: "600",
+    marginLeft: 5,
+  },
+  subAreaPillFractionActive: { color: "#2BA8A0" },
+  subAreaPillFractionComplete: { color: "#22c55e" },
   subAreaBadge: {
     backgroundColor: "#2BA8A0",
     borderRadius: 8,
@@ -1279,6 +1455,7 @@ const styles = StyleSheet.create({
   },
   areaBannerText: { color: "#EAF0FF", fontSize: 14, fontWeight: "600" },
   areaBannerSub: { color: "#8899AA", fontSize: 12, marginTop: 2 },
+  areaBannerProgress: { color: "#2BA8A0", fontSize: 12, fontWeight: "600", marginTop: 4 },
 
   // Count actions
   actions: { flexDirection: "row", gap: 8, marginBottom: 12 },
@@ -1293,6 +1470,16 @@ const styles = StyleSheet.create({
   },
   actionBtnDisabled: { opacity: 0.4 },
   actionText: { fontSize: 13, fontWeight: "500", color: "#EAF0FF" },
+  scanWeighBtn: {
+    backgroundColor: "#16283F",
+    borderWidth: 1,
+    borderColor: "#2BA8A0",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  scanWeighBtnText: { fontSize: 15, fontWeight: "600", color: "#2BA8A0" },
 
   // Expected items checklist
   expectedSection: {
