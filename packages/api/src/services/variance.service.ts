@@ -576,7 +576,7 @@ export class VarianceService {
       SELECT
         u.id AS user_id,
         u.email,
-        COALESCE(u.name, u.email) AS display_name,
+        COALESCE(TRIM(CONCAT(u.first_name, ' ', u.last_name)), u.email) AS display_name,
         COUNT(DISTINCT sl.session_id) AS sessions_counted,
         COUNT(sl.id) AS lines_counted,
         COUNT(CASE WHEN sl.is_manual = true THEN 1 END) AS manual_lines,
@@ -594,7 +594,7 @@ export class VarianceService {
         AND sl.counted_by IS NOT NULL
         AND (${fromDate}::timestamptz IS NULL OR s.ended_ts >= ${fromDate}::timestamptz)
         AND (${toDate}::timestamptz IS NULL OR s.ended_ts < ${toDate}::timestamptz)
-      GROUP BY u.id, u.email, u.name
+      GROUP BY u.id, u.email, u.first_name, u.last_name
       ORDER BY lines_with_variance DESC
     `;
 
@@ -709,7 +709,7 @@ export class VarianceService {
         COUNT(sl.id) AS total_lines,
         COUNT(CASE WHEN sl.is_manual = true THEN 1 END) AS manual_lines,
         COUNT(DISTINCT adj.id) AS lines_with_variance,
-        COALESCE(cu.name, cu.email, 'Unknown') AS created_by_name,
+        COALESCE(TRIM(CONCAT(cu.first_name, ' ', cu.last_name)), cu.email, 'Unknown') AS created_by_name,
         (SELECT COUNT(*) FROM session_participants sp WHERE sp.session_id = s.id) AS participant_count
       FROM inventory_sessions s
       LEFT JOIN inventory_session_lines sl ON sl.session_id = s.id
@@ -722,7 +722,7 @@ export class VarianceService {
         AND s.ended_ts IS NOT NULL
         AND (${fromDate}::timestamptz IS NULL OR s.ended_ts >= ${fromDate}::timestamptz)
         AND (${toDate}::timestamptz IS NULL OR s.ended_ts < ${toDate}::timestamptz)
-      GROUP BY s.id, s.started_ts, s.ended_ts, cu.name, cu.email
+      GROUP BY s.id, s.started_ts, s.ended_ts, cu.first_name, cu.last_name, cu.email
       ORDER BY s.started_ts DESC
     `;
 
