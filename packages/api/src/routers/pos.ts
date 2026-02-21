@@ -1,6 +1,7 @@
 import { router, protectedProcedure, requireRole } from "../trpc";
-import { posConnectionCreateSchema, posConnectionUpdateSchema, salesLineCreateSchema } from "@barstock/validators";
+import { posConnectionCreateSchema, posConnectionUpdateSchema, salesLineCreateSchema, csvImportSchema, csvImportHistorySchema } from "@barstock/validators";
 import { z } from "zod";
+import { CSVImportService } from "../services/csv-import.service";
 
 export const posRouter = router({
   createConnection: protectedProcedure
@@ -85,5 +86,34 @@ export const posRouter = router({
         ORDER BY qty_sold_7d DESC
       `;
       return unmapped;
+    }),
+
+  /** Bulk import parsed CSV sales lines */
+  importSalesLines: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(csvImportSchema)
+    .mutation(async ({ ctx, input }) => {
+      const service = new CSVImportService(ctx.prisma);
+      return service.importSalesLines(
+        input.locationId,
+        input.sourceSystem,
+        input.lines.map((l) => ({
+          ...l,
+          rawPayloadJson: (l.rawPayloadJson as Record<string, unknown>) ?? undefined,
+        })),
+        input.fileName,
+        input.runDepletion,
+        ctx.user.userId,
+        input.templateName
+      );
+    }),
+
+  /** List past CSV import history */
+  importHistory: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(csvImportHistorySchema)
+    .query(async ({ ctx, input }) => {
+      const service = new CSVImportService(ctx.prisma);
+      return service.listImports(input.locationId, input.limit);
     }),
 });

@@ -241,6 +241,7 @@ model Location {
   recipes          Recipe[]
   parLevels        ParLevel[]
   purchaseOrders   PurchaseOrder[]
+  csvImports       CSVImport[]
 
   @@map("locations")
 }
@@ -275,6 +276,7 @@ model User {
   createdPurchaseOrders   PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
   vendorOrderers          VendorOrderer[]
   deviceTokens            DeviceToken[]
+  csvImports              CSVImport[]
 
   @@map("users")
 }
@@ -1083,6 +1085,32 @@ model DeviceToken {
 
   @@index([userId], map: "ix_device_tokens_user")
   @@map("device_tokens")
+}
+
+// ─── CSV Imports ────────────────────────────────────────────
+
+model CSVImport {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId      String        @map("location_id") @db.Uuid
+  sourceSystem    SourceSystemT @map("source_system")
+  templateName    String?       @map("template_name")
+  fileName        String        @map("file_name")
+  rowCount        Int           @map("row_count")
+  insertedCount   Int           @map("inserted_count")
+  skippedCount    Int           @map("skipped_count")
+  errorCount      Int           @map("error_count")
+  businessDateMin DateTime?     @map("business_date_min") @db.Date
+  businessDateMax DateTime?     @map("business_date_max") @db.Date
+  depletionStats  Json?         @map("depletion_stats")
+  uploadedBy      String        @map("uploaded_by") @db.Uuid
+
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz()
+
+  location Location @relation(fields: [locationId], references: [id])
+  uploader User     @relation(fields: [uploadedBy], references: [id])
+
+  @@index([locationId, createdAt(sort: Desc)], map: "ix_csv_imports_location_time")
+  @@map("csv_imports")
 }
 
 // ─── Password Reset ─────────────────────────────────────────

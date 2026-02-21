@@ -23,12 +23,20 @@ export default function POSPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-[#EAF0FF]">POS Connections</h1>
-        <Link
-          href="/pos/unmapped"
-          className="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
-        >
-          View Unmapped Items
-        </Link>
+        <div className="flex gap-3">
+          <Link
+            href="/pos/upload"
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#E9B44C]/90"
+          >
+            Upload CSV
+          </Link>
+          <Link
+            href="/pos/unmapped"
+            className="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
+          >
+            View Unmapped Items
+          </Link>
+        </div>
       </div>
 
       <section className="mb-8">
