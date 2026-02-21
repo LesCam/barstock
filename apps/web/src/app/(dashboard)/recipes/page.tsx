@@ -75,6 +75,14 @@ export default function RecipesPage() {
   // Expanded rows
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Help tooltips
+  const [showTooltip, setShowTooltip] = useState<string | null>(null);
+
+  const CATEGORY_HELP: Record<string, string> = {
+    "Tier Tracking":
+      "Split-ratio recipes for ambiguous POS buttons. When a generic button like \"Yellow Mixed\" is pressed, depletion is spread evenly across all items in that pricing tier. Quantities represent each item's share of one pour.",
+  };
+
   const createMut = trpc.recipes.create.useMutation({
     onSuccess: () => {
       utils.recipes.list.invalidate();
@@ -446,17 +454,32 @@ export default function RecipesPage() {
               All
             </button>
             {existingCategories.map((c) => (
-              <button
-                key={c}
-                onClick={() => setCategoryFilter(categoryFilter === c ? "" : c)}
-                className={`rounded-full px-3 py-1 text-xs ${
-                  categoryFilter === c
-                    ? "bg-[#E9B44C] text-[#0B1623]"
-                    : "border border-white/10 text-[#EAF0FF]/60 hover:border-[#E9B44C]/50"
-                }`}
-              >
-                {c}
-              </button>
+              <div key={c} className="relative inline-flex">
+                <button
+                  onClick={() => setCategoryFilter(categoryFilter === c ? "" : c)}
+                  className={`rounded-full px-3 py-1 text-xs ${
+                    categoryFilter === c
+                      ? "bg-[#E9B44C] text-[#0B1623]"
+                      : "border border-white/10 text-[#EAF0FF]/60 hover:border-[#E9B44C]/50"
+                  }`}
+                >
+                  {c}
+                </button>
+                {CATEGORY_HELP[c] && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowTooltip(showTooltip === c ? null : c); }}
+                    className="ml-0.5 -mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] text-[#EAF0FF]/30 hover:text-[#E9B44C]"
+                    title="More info"
+                  >
+                    i
+                  </button>
+                )}
+                {showTooltip === c && CATEGORY_HELP[c] && (
+                  <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-md border border-white/10 bg-[#0B1623] p-3 text-xs text-[#EAF0FF]/70 shadow-lg">
+                    {CATEGORY_HELP[c]}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
