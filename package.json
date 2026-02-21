@@ -10,10 +10,19 @@
     "db:generate": "pnpm --filter @barstock/database generate",
     "db:push": "pnpm --filter @barstock/database push",
     "db:studio": "pnpm --filter @barstock/database studio",
-    "db:seed": "pnpm --filter @barstock/database seed"
+    "db:seed": "pnpm --filter @barstock/database seed",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "devDependencies": {
     "turbo": "^2.3.3",
     "typescript": "^5.7.3"
-  }
+  },
+  "dependencies": {
+    "expo-haptics": "~15.0.8",
+    "expo": "~52.0.49",
+    "react": "18.3.1",
+    "react-native": "0.76.9"
+  },
+  "version": "1.0.0"
 }

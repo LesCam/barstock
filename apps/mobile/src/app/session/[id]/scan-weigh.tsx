@@ -12,11 +12,15 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
 import { useAuth, usePermission } from "@/lib/auth-context";
+import { useCountingPreferences } from "@/lib/counting-preferences";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { CreateItemFromScanModal } from "@/components/CreateItemFromScanModal";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
+
+const AUTO_SUBMIT_DELAY_MS = 2000;
 
 type Phase =
   | "scanning"
@@ -37,14 +41,16 @@ interface MatchedItem {
 }
 
 export default function ScanWeighScreen() {
-  const { id: sessionId, subAreaId, areaName } = useLocalSearchParams<{
+  const { id: sessionId, subAreaId, areaName, itemId: preselectedItemId } = useLocalSearchParams<{
     id: string;
     subAreaId?: string;
     areaName?: string;
+    itemId?: string;
   }>();
   const { selectedLocationId } = useAuth();
   const canTare = usePermission("canManageTareWeights");
   const utils = trpc.useUtils();
+  const { hapticEnabled } = useCountingPreferences();
 
   const [phase, setPhase] = useState<Phase>("scanning");
   const [matchedItem, setMatchedItem] = useState<MatchedItem | null>(null);
@@ -62,9 +68,18 @@ export default function ScanWeighScreen() {
 
   const successOpacity = useRef(new Animated.Value(0)).current;
 
+  // Auto-submit state
+  const autoSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSubmitProgress = useRef(new Animated.Value(0)).current;
+  const [autoSubmitActive, setAutoSubmitActive] = useState(false);
+  const autoSubmitWeightRef = useRef<number | null>(null);
+
   // Use refs so the scale listener closure always sees current values
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+
+  // Track whether preselected item has been loaded
+  const preselectedLoadedRef = useRef(false);
 
   // Re-sync scale connection state when screen regains focus
   // (e.g. returning from connect-scale screen)
@@ -114,6 +129,14 @@ export default function ScanWeighScreen() {
     ? (manualWeight ? parseInt(manualWeight, 10) : null)
     : scaleWeight;
 
+  // Refs for auto-submit closure access
+  const matchedItemRef = useRef(matchedItem);
+  matchedItemRef.current = matchedItem;
+  const matchedTemplateRef = useRef(matchedTemplate);
+  matchedTemplateRef.current = matchedTemplate;
+  const usingManualRef = useRef(usingManual);
+  usingManualRef.current = usingManual;
+
   const calcQuery = trpc.scale.calculateLiquid.useQuery(
     { templateId: matchedTemplate?.id ?? "", grossWeightG: grossWeightG ?? 0 },
     { enabled: !!matchedTemplate && grossWeightG != null && grossWeightG > 0 }
@@ -124,27 +147,110 @@ export default function ScanWeighScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
 
+  // Cancel auto-submit helper
+  function cancelAutoSubmit() {
+    if (autoSubmitTimerRef.current) {
+      clearTimeout(autoSubmitTimerRef.current);
+      autoSubmitTimerRef.current = null;
+    }
+    autoSubmitProgress.stopAnimation();
+    autoSubmitProgress.setValue(0);
+    setAutoSubmitActive(false);
+    autoSubmitWeightRef.current = null;
+  }
+
+  // Start auto-submit countdown
+  function startAutoSubmit(weight: number) {
+    cancelAutoSubmit();
+    autoSubmitWeightRef.current = weight;
+    setAutoSubmitActive(true);
+
+    Animated.timing(autoSubmitProgress, {
+      toValue: 1,
+      duration: AUTO_SUBMIT_DELAY_MS,
+      useNativeDriver: false,
+    }).start();
+
+    autoSubmitTimerRef.current = setTimeout(() => {
+      autoSubmitTimerRef.current = null;
+      setAutoSubmitActive(false);
+      autoSubmitProgress.setValue(0);
+      handleSubmit();
+    }, AUTO_SUBMIT_DELAY_MS);
+  }
+
   // Scale listener — subscribe once, use refs for current state
   useEffect(() => {
     const unsubReading = scaleManager.onReading((reading: ScaleReading) => {
       setScaleConnected(true);
       if (reading.stable && phaseRef.current === "weighing") {
         setScaleWeight(reading.weightGrams);
+
+        // Auto-submit: if stable, has template, not manual, weight > 0
+        if (
+          reading.weightGrams > 0 &&
+          matchedItemRef.current &&
+          matchedTemplateRef.current &&
+          !usingManualRef.current
+        ) {
+          const prevWeight = autoSubmitWeightRef.current;
+          if (prevWeight !== null && Math.abs(reading.weightGrams - prevWeight) > 5) {
+            // Weight changed significantly — reset timer
+            cancelAutoSubmit();
+          }
+          if (!autoSubmitTimerRef.current) {
+            startAutoSubmit(reading.weightGrams);
+          }
+        }
+      } else if (!reading.stable && phaseRef.current === "weighing") {
+        // Unstable — cancel auto-submit
+        cancelAutoSubmit();
       }
     });
     const unsubDisconnect = scaleManager.onDisconnect(() => {
       setScaleConnected(false);
+      cancelAutoSubmit();
     });
     return () => {
       unsubReading();
       unsubDisconnect();
+      cancelAutoSubmit();
     };
   }, []);
+
+  // Pre-select item from itemId param (tap-to-count)
+  useEffect(() => {
+    if (!preselectedItemId || preselectedLoadedRef.current) return;
+    preselectedLoadedRef.current = true;
+
+    (async () => {
+      try {
+        setPhase("looking_up");
+        const item = await utils.inventory.getById.fetch({ id: preselectedItemId });
+        if (item) {
+          const typedItem = item as MatchedItem;
+          setMatchedItem(typedItem);
+          if (typedItem.category?.countingMethod !== "weighable") {
+            setPhase("counting");
+          } else {
+            setPhase("weighing");
+          }
+        } else {
+          setPhase("scanning");
+        }
+      } catch {
+        setPhase("scanning");
+      }
+    })();
+  }, [preselectedItemId, utils]);
 
   // Handle barcode scan
   const handleBarcodeScan = useCallback(
     async (barcode: string) => {
       if (phaseRef.current !== "scanning") return;
+      if (hapticEnabled) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
       setScannedBarcode(barcode);
       setPhase("looking_up");
       setScaleWeight(null);
@@ -171,7 +277,7 @@ export default function ScanWeighScreen() {
         setPhase("not_found");
       }
     },
-    [selectedLocationId, utils]
+    [selectedLocationId, utils, hapticEnabled]
   );
 
   // Check if this item was already weighed with a similar value
@@ -195,6 +301,7 @@ export default function ScanWeighScreen() {
   async function doSubmit() {
     if (!matchedItem || grossWeightG == null || grossWeightG <= 0) return;
     setPhase("submitting");
+    cancelAutoSubmit();
 
     try {
       await addLineMutation.mutateAsync({
@@ -213,6 +320,10 @@ export default function ScanWeighScreen() {
         isManual: usingManual,
         confidenceLevel: usingManual ? "estimated" : "measured",
       });
+
+      if (hapticEnabled) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
 
       setSubmittedCount((c) => c + 1);
       setLastSubmittedName(matchedItem.name);
@@ -246,6 +357,7 @@ export default function ScanWeighScreen() {
     if (!matchedItem || grossWeightG == null || grossWeightG <= 0) return;
     const dup = checkForDuplicate();
     if (dup) {
+      cancelAutoSubmit();
       Alert.alert(
         "Possible Duplicate",
         `${matchedItem.name} was already weighed at ${dup.existingWeight.toFixed(1)}g (now ${grossWeightG.toFixed(1)}g). Submit anyway?`,
@@ -260,6 +372,7 @@ export default function ScanWeighScreen() {
   }
 
   function resetToScanning() {
+    cancelAutoSubmit();
     setPhase("scanning");
     setMatchedItem(null);
     setScannedBarcode(null);
@@ -307,6 +420,10 @@ export default function ScanWeighScreen() {
         isManual: true,
         subAreaId: subAreaId || undefined,
       });
+
+      if (hapticEnabled) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
 
       setSubmittedCount((c) => c + 1);
       setLastSubmittedName(matchedItem.name);
@@ -521,6 +638,7 @@ export default function ScanWeighScreen() {
             <TouchableOpacity
               style={styles.fullUnitsBtn}
               onPress={() => {
+                cancelAutoSubmit();
                 setUnitCount("");
                 setPhase("counting");
               }}
@@ -547,6 +665,7 @@ export default function ScanWeighScreen() {
                   <TouchableOpacity
                     style={styles.tareBtn}
                     onPress={() => {
+                      cancelAutoSubmit();
                       scaleManager.tare();
                       setScaleWeight(null);
                     }}
@@ -586,7 +705,10 @@ export default function ScanWeighScreen() {
             {scaleConnected && hasTemplate && !showManualEntry && (
               <TouchableOpacity
                 style={styles.modeToggle}
-                onPress={() => setShowManualEntry(true)}
+                onPress={() => {
+                  cancelAutoSubmit();
+                  setShowManualEntry(true);
+                }}
               >
                 <Text style={styles.modeToggleText}>Enter manually instead</Text>
               </TouchableOpacity>
@@ -607,6 +729,28 @@ export default function ScanWeighScreen() {
                   ~{calcQuery.data.liquidOz} oz ({calcQuery.data.percentRemaining}% full)
                 </Text>
               </View>
+            )}
+
+            {/* Auto-submit countdown bar */}
+            {autoSubmitActive && (
+              <TouchableOpacity
+                style={styles.autoSubmitBar}
+                onPress={cancelAutoSubmit}
+                activeOpacity={0.7}
+              >
+                <Animated.View
+                  style={[
+                    styles.autoSubmitFill,
+                    {
+                      width: autoSubmitProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["0%", "100%"],
+                      }),
+                    },
+                  ]}
+                />
+                <Text style={styles.autoSubmitText}>Auto-submitting... tap to cancel</Text>
+              </TouchableOpacity>
             )}
 
             {/* Submit */}
@@ -1032,6 +1176,29 @@ const styles = StyleSheet.create({
     color: "#EAF0FF",
     fontSize: 14,
     fontWeight: "500",
+  },
+
+  // Auto-submit countdown
+  autoSubmitBar: {
+    height: 36,
+    backgroundColor: "#16283F",
+    borderRadius: 8,
+    marginBottom: 10,
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  autoSubmitFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(43,168,160,0.4)",
+  },
+  autoSubmitText: {
+    color: "#2BA8A0",
+    fontSize: 13,
+    fontWeight: "600",
   },
 
   // Submit

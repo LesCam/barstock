@@ -8,6 +8,7 @@ import { trpc, trpcClient } from "@/lib/trpc";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { NotificationProvider } from "@/lib/notification-context";
 import { LockProvider, useLock } from "@/lib/lock-context";
+import { CountingPreferencesProvider } from "@/lib/counting-preferences";
 import LockScreen from "@/components/LockScreen";
 
 function RootNavigator() {
@@ -155,10 +156,12 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <NotificationProvider>
-            <LockProvider>
-              <RootNavigator />
-              <LockOverlay />
-            </LockProvider>
+            <CountingPreferencesProvider>
+              <LockProvider>
+                <RootNavigator />
+                <LockOverlay />
+              </LockProvider>
+            </CountingPreferencesProvider>
           </NotificationProvider>
         </AuthProvider>
       </QueryClientProvider>

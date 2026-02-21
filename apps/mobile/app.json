@@ -53,8 +53,7 @@
         "microphonePermission": "BarStock uses the microphone for voice commands.",
         "speechRecognitionPermission": "BarStock uses speech recognition for voice commands."
       }],
-      "expo-local-authentication",
-      "expo-notifications"
+      "expo-local-authentication"
     ],
     "extra": {
       "router": {},

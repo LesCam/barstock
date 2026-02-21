@@ -10,8 +10,10 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
+import { useCountingPreferences } from "@/lib/counting-preferences";
 import { VarianceReasonModal } from "@/components/VarianceReasonModal";
 import type { VarianceReason } from "@barstock/types";
 
@@ -34,6 +36,7 @@ interface UncountedItem {
 export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { selectedLocationId, user: authUser } = useAuth();
+  const { hapticEnabled, quickEmptyEnabled } = useCountingPreferences();
   const utils = trpc.useUtils();
 
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -237,23 +240,51 @@ export default function SessionDetailScreen() {
         }
       }
     }
-    const params = `subAreaId=${subAreaForItem}&areaName=${encodeURIComponent(labelForItem)}&itemId=${item.inventoryItemId}`;
+    // Navigate to scan-weigh with itemId pre-selected — skips barcode scan
+    router.push(
+      `/session/${id}/scan-weigh?subAreaId=${subAreaForItem}&areaName=${encodeURIComponent(labelForItem)}&itemId=${item.inventoryItemId}` as any
+    );
+  }
 
-    if (item.countingMethod === "weighable") {
-      Alert.alert(item.name, "How do you want to count this?", [
-        {
-          text: "Weigh Bottle",
-          onPress: () => router.push(`/session/${id}/liquor?${params}` as any),
+  // Quick empty: add line with 0 for an expected item
+  const quickEmptyMutation = trpc.sessions.addLine.useMutation({
+    onSuccess() {
+      utils.sessions.getById.invalidate({ id: id! });
+    },
+  });
+
+  function handleQuickEmpty(item: { inventoryItemId: string; name: string; countingMethod: string; subAreaId?: string }) {
+    if (!quickEmptyEnabled) return;
+    Alert.alert("Mark Empty?", `${item.name} — record as 0?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Mark Empty",
+        style: "destructive",
+        onPress: () => {
+          if (hapticEnabled) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          }
+          const saId = item.subAreaId || selectedSubAreaId || undefined;
+          if (item.countingMethod === "weighable") {
+            quickEmptyMutation.mutate({
+              sessionId: id!,
+              inventoryItemId: item.inventoryItemId,
+              grossWeightGrams: 0,
+              isManual: true,
+              subAreaId: saId,
+            });
+          } else {
+            quickEmptyMutation.mutate({
+              sessionId: id!,
+              inventoryItemId: item.inventoryItemId,
+              countUnits: 0,
+              isManual: true,
+              subAreaId: saId,
+            });
+          }
         },
-        {
-          text: "Full Unit Count",
-          onPress: () => router.push(`/session/${id}/packaged?${params}` as any),
-        },
-        { text: "Cancel", style: "cancel" },
-      ]);
-    } else {
-      router.push(`/session/${id}/packaged?${params}` as any);
-    }
+      },
+    ]);
   }
 
   const [pendingVarianceItemIds, setPendingVarianceItemIds] = useState<string[]>([]);
@@ -873,6 +904,7 @@ export default function SessionDetailScreen() {
                           key={key}
                           style={styles.expectedRow}
                           onPress={() => handleExpectedItemTap(item)}
+                          onLongPress={quickEmptyEnabled ? () => handleQuickEmpty(item) : undefined}
                         >
                           <View style={styles.expectedCheck} />
                           <View style={{ flex: 1 }}>
@@ -910,6 +942,7 @@ export default function SessionDetailScreen() {
                     key={item.inventoryItemId}
                     style={styles.expectedRow}
                     onPress={() => handleExpectedItemTap(item)}
+                    onLongPress={quickEmptyEnabled ? () => handleQuickEmpty(item) : undefined}
                   >
                     <View style={styles.expectedCheck} />
                     <View style={{ flex: 1 }}>

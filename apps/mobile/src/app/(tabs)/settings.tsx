@@ -5,6 +5,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { useVoicePreference } from "@/lib/voice-preference";
+import { useCountingPreferences } from "@/lib/counting-preferences";
 import { useLock, type UnlockMethod } from "@/lib/lock-context";
 
 export default function SettingsTab() {
@@ -13,6 +14,7 @@ export default function SettingsTab() {
   const canManageTareWeights = usePermission("canManageTareWeights");
   const canAccessScale = usePermission("canAccessScale");
   const { voiceUserEnabled, setVoiceUserEnabled } = useVoicePreference();
+  const { hapticEnabled, setHapticEnabled, quickEmptyEnabled, setQuickEmptyEnabled } = useCountingPreferences();
   const { lockPolicy, userUnlockMethod, setUserUnlockMethod } = useLock();
   const [biometricAvailable, setBiometricAvailable] = useState(false);
 
@@ -158,6 +160,28 @@ export default function SettingsTab() {
             <Text style={styles.disabledText}>Not available</Text>
           </View>
         )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Counting</Text>
+        <View style={[styles.card, styles.toggleRow]}>
+          <Text style={styles.rowText}>Haptic Feedback</Text>
+          <Switch
+            value={hapticEnabled}
+            onValueChange={setHapticEnabled}
+            trackColor={{ false: "#1E3550", true: "#E9B44C" }}
+            thumbColor="#EAF0FF"
+          />
+        </View>
+        <View style={[styles.card, styles.toggleRow, { marginTop: 8 }]}>
+          <Text style={styles.rowText}>Quick Empty (Long-Press)</Text>
+          <Switch
+            value={quickEmptyEnabled}
+            onValueChange={setQuickEmptyEnabled}
+            trackColor={{ false: "#1E3550", true: "#E9B44C" }}
+            thumbColor="#EAF0FF"
+          />
+        </View>
       </View>
 
       {(user?.highestRole === "business_admin" || user?.highestRole === "platform_admin") && (
