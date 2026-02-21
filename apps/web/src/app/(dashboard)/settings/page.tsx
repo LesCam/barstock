@@ -945,7 +945,7 @@ function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdi
               </div>
 
               {/* Threshold input */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex w-40 shrink-0 items-center justify-end gap-1.5">
                 <input
                   type="number"
                   min={0}
@@ -954,7 +954,7 @@ function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdi
                   disabled={!canEdit || !rule.enabled}
                   className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
                 />
-                <span className="text-xs text-[#EAF0FF]/40">{info.unit}</span>
+                <span className="w-16 text-xs text-[#EAF0FF]/40">{info.unit}</span>
               </div>
             </div>
           );
