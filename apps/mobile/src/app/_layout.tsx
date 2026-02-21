@@ -122,6 +122,10 @@ function RootNavigator() {
         name="audit-log"
         options={{ title: "Audit Log", headerBackTitle: "Back" }}
       />
+      <Stack.Screen
+        name="alert-settings"
+        options={{ title: "Alert Settings", headerBackTitle: "Back" }}
+      />
     </Stack>
   );
 }

@@ -169,6 +169,12 @@ export default function SettingsTab() {
           >
             <Text style={styles.rowText}>Audit Log</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.card, { marginTop: 8 }]}
+            onPress={() => router.push("/alert-settings")}
+          >
+            <Text style={styles.rowText}>Alert Settings</Text>
+          </TouchableOpacity>
         </View>
       )}
 
