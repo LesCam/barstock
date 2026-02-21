@@ -52,7 +52,7 @@ export class NotificationService {
           select: { email: true },
         });
         if (user?.email) {
-          EmailService.sendAlertEmail(
+          await EmailService.sendAlertEmail(
             user.email,
             params.title,
             params.body ?? "",
