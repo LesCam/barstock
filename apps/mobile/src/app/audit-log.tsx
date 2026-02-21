@@ -35,15 +35,16 @@ interface AuditItem {
 }
 
 function timeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  const d = new Date(date);
+  const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
   if (seconds < 60) return "just now";
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(date).toLocaleDateString();
+  if (days < 4) return `${days}d ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function actorName(actor: AuditItem["actorUser"]): string {
@@ -140,6 +141,11 @@ export default function AuditLogScreen() {
             <Text style={styles.time}>{timeAgo(item.createdAt)}</Text>
           </View>
           <Text style={styles.actor}>{actorName(item.actorUser)}</Text>
+          <Text style={styles.dateText}>
+            {new Date(item.createdAt).toLocaleString(undefined, {
+              month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+            })}
+          </Text>
           {item.objectType && (
             <Text style={styles.objectInfo}>
               {item.objectType}
@@ -189,6 +195,7 @@ export default function AuditLogScreen() {
 
       {/* Action type filter chips */}
       {actionTypes && actionTypes.length > 0 && (
+        <View style={styles.actionFilterContainer}>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -219,6 +226,7 @@ export default function AuditLogScreen() {
             </TouchableOpacity>
           )}
         />
+        </View>
       )}
 
       <FlatList
@@ -270,10 +278,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#1E3550",
   },
+  actionFilterContainer: {
+    height: 44,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1E3550",
+  },
   actionFilterRow: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingRight: 32,
     gap: 6,
+    alignItems: "center",
+    height: 44,
   },
   chip: {
     paddingHorizontal: 14,
@@ -333,6 +348,11 @@ const styles = StyleSheet.create({
     color: "#EAF0FF",
     fontSize: 14,
     marginTop: 4,
+  },
+  dateText: {
+    color: "#5A6A7A",
+    fontSize: 11,
+    marginTop: 2,
   },
   objectInfo: {
     color: "#5A6A7A",
