@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -60,69 +60,47 @@ function formatActionType(actionType: string): string {
 }
 
 export default function AuditLogScreen() {
-  const [dateFilter, setDateFilter] = useState(1); // days; 0 = all
+  const [dateFilter, setDateFilter] = useState(1);
   const [actionFilter, setActionFilter] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const [items, setItems] = useState<AuditItem[]>([]);
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [hasMore, setHasMore] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  // Stable fromDate — only recompute when dateFilter changes
+  const [fromDate, setFromDate] = useState<Date | undefined>(() =>
+    dateFilter > 0 ? new Date(Date.now() - dateFilter * 24 * 60 * 60 * 1000) : undefined
+  );
 
-  const fromDate =
-    dateFilter > 0
-      ? new Date(Date.now() - dateFilter * 24 * 60 * 60 * 1000)
-      : undefined;
+  // Update fromDate when dateFilter changes
+  useEffect(() => {
+    setFromDate(
+      dateFilter > 0 ? new Date(Date.now() - dateFilter * 24 * 60 * 60 * 1000) : undefined
+    );
+  }, [dateFilter]);
 
-  const { data: actionTypes } = trpc.audit.actionTypes.useQuery({});
+  const { data: actionTypes } = trpc.audit.actionTypes.useQuery({}, { retry: false });
 
-  const { data, isLoading, isFetching } = trpc.audit.list.useQuery({
+  const { data, isLoading, refetch, isRefetching, error } = trpc.audit.list.useQuery({
     limit: PAGE_SIZE,
-    cursor,
     fromDate,
     actionType: actionFilter ?? undefined,
+  }, {
+    retry: false,
   });
 
-  const prevCursorRef = useRef(cursor);
+  const items = (data?.items ?? []) as AuditItem[];
 
-  useEffect(() => {
-    if (!data) return;
-    const wasPaging = !!prevCursorRef.current;
-    prevCursorRef.current = cursor;
-
-    if (wasPaging) {
-      setItems((prev) => {
-        const ids = new Set(prev.map((i) => i.id));
-        const newItems = (data.items as AuditItem[]).filter(
-          (i) => !ids.has(i.id)
-        );
-        return [...prev, ...newItems];
-      });
-    } else {
-      setItems(data.items as AuditItem[]);
-    }
-    setHasMore(!!data.nextCursor);
-    setRefreshing(false);
-  }, [data]);
-
-  // Reset pagination when filters change
-  useEffect(() => {
-    setCursor(undefined);
-    setItems([]);
-    setHasMore(true);
-  }, [dateFilter, actionFilter]);
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={{ color: "#EF4444", fontSize: 14, textAlign: "center", padding: 20 }}>
+          {error.message}
+        </Text>
+      </View>
+    );
+  }
 
   const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    setCursor(undefined);
-    setItems([]);
-  }, []);
-
-  const handleLoadMore = useCallback(() => {
-    if (!hasMore || isFetching || items.length === 0) return;
-    const lastItem = items[items.length - 1];
-    setCursor(lastItem.id);
-  }, [hasMore, isFetching, items]);
+    refetch();
+  }, [refetch]);
 
   const renderMetadata = (metadata: any) => {
     if (!metadata || typeof metadata !== "object") return null;
@@ -175,26 +153,11 @@ export default function AuditLogScreen() {
     [expandedId]
   );
 
-  const renderFooter = useCallback(() => {
-    if (!hasMore) return null;
-    if (isFetching && cursor) {
-      return (
-        <View style={styles.footer}>
-          <ActivityIndicator size="small" color="#E9B44C" />
-        </View>
-      );
-    }
-    return (
-      <TouchableOpacity style={styles.loadMore} onPress={handleLoadMore}>
-        <Text style={styles.loadMoreText}>Load More</Text>
-      </TouchableOpacity>
-    );
-  }, [hasMore, isFetching, cursor, handleLoadMore]);
-
-  if (isLoading && items.length === 0) {
+  if (isLoading && !data) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#E9B44C" />
+        <Text style={{ color: "#5A6A7A", marginTop: 10 }}>Loading audit log...</Text>
       </View>
     );
   }
@@ -262,7 +225,6 @@ export default function AuditLogScreen() {
         data={items}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        ListFooterComponent={renderFooter}
         ListEmptyComponent={
           <View style={styles.center}>
             <Text style={styles.emptyText}>No audit log entries</Text>
@@ -270,7 +232,7 @@ export default function AuditLogScreen() {
         }
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            refreshing={isRefetching}
             onRefresh={handleRefresh}
             tintColor="#E9B44C"
           />
