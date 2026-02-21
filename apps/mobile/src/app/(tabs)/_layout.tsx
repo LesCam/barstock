@@ -2,6 +2,7 @@ import { View } from "react-native";
 import { Tabs } from "expo-router";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import LocationPicker from "@/components/LocationPicker";
+import { NotificationBell } from "@/components/NotificationBell";
 import { VoiceButton } from "@/components/VoiceButton";
 import { trpc } from "@/lib/trpc";
 import { VoicePreferenceProvider, useVoicePreference } from "@/lib/voice-preference";
@@ -36,6 +37,7 @@ function TabsLayout() {
           tabBarStyle: { backgroundColor: "#0B1623", borderTopColor: "#1E3550" },
           tabBarActiveTintColor: "#E9B44C",
           tabBarInactiveTintColor: "#5A6A7A",
+          headerRight: () => <NotificationBell />,
         }}
       >
         <Tabs.Screen

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { NotificationProvider } from "@/lib/notification-context";
 import { LockProvider, useLock } from "@/lib/lock-context";
 import LockScreen from "@/components/LockScreen";
 
@@ -113,6 +114,10 @@ function RootNavigator() {
         name="art/sell"
         options={{ title: "Record Sale", headerBackTitle: "Back" }}
       />
+      <Stack.Screen
+        name="notifications"
+        options={{ title: "Notifications", headerBackTitle: "Back" }}
+      />
     </Stack>
   );
 }
@@ -141,10 +146,12 @@ export default function RootLayout() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <LockProvider>
-            <RootNavigator />
-            <LockOverlay />
-          </LockProvider>
+          <NotificationProvider>
+            <LockProvider>
+              <RootNavigator />
+              <LockOverlay />
+            </LockProvider>
+          </NotificationProvider>
         </AuthProvider>
       </QueryClientProvider>
     </trpc.Provider>
