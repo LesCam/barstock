@@ -82,10 +82,29 @@ function VarianceHeatmapGrid({ data }: { data: HeatmapCell[] }) {
   );
 }
 
+/** Convert a date string + EOD time into the actual end-of-day Date.
+ *  If eodTime is at or before "12:00", the business closes after midnight,
+ *  so we add a day (e.g. "Feb 21" with EOD "04:00" → Feb 22 04:00). */
+function toEndOfDay(dateStr: string, eodTime: string): Date {
+  const [hh, mm] = eodTime.split(":").map(Number);
+  const d = new Date(dateStr);
+  if (eodTime <= "12:00" && eodTime !== "00:00") {
+    d.setDate(d.getDate() + 1);
+  }
+  d.setHours(hh, mm, 59, 999);
+  return d;
+}
+
 export default function ReportsPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const locationId = user?.locationIds?.[0];
+  const businessId = user?.businessId as string | undefined;
+
+  const { data: eodTime } = trpc.settings.endOfDayTime.useQuery(
+    { businessId: businessId! },
+    { enabled: !!businessId }
+  );
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("variance");
   const [dateRange, setDateRange] = useState({
@@ -105,11 +124,13 @@ export default function ReportsPage() {
   const [sessionSortKey, setSessionSortKey] = useState<SessionSortKey>("startedTs");
   const [sessionSortDir, setSessionSortDir] = useState<SortDir>("desc");
 
+  const effectiveEod = eodTime ?? "23:59";
+
   const { data: variance } = trpc.reports.variance.useQuery(
     {
       locationId: locationId!,
       fromDate: new Date(dateRange.from),
-      toDate: new Date(dateRange.to),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
     },
     { enabled: !!locationId && activeTab === "variance" }
   );
@@ -123,7 +144,7 @@ export default function ReportsPage() {
     {
       locationId: locationId!,
       fromDate: new Date(dateRange.from),
-      toDate: new Date(dateRange.to),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
     },
     { enabled: !!locationId && activeTab === "cogs" }
   );
@@ -132,7 +153,7 @@ export default function ReportsPage() {
     {
       locationId: locationId!,
       fromDate: new Date(dateRange.from),
-      toDate: new Date(dateRange.to),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
     },
     { enabled: !!locationId && activeTab === "usage" }
   );
@@ -154,7 +175,7 @@ export default function ReportsPage() {
     {
       locationId: locationId!,
       fromDate: new Date(dateRange.from),
-      toDate: new Date(dateRange.to),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
     },
     { enabled: !!locationId && activeTab === "variance" }
   );
@@ -163,7 +184,7 @@ export default function ReportsPage() {
     {
       locationId: locationId!,
       fromDate: new Date(dateRange.from),
-      toDate: new Date(dateRange.to),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
     },
     { enabled: !!locationId && activeTab === "variance" }
   );
@@ -172,7 +193,7 @@ export default function ReportsPage() {
     {
       locationId: locationId!,
       fromDate: new Date(dateRange.from),
-      toDate: new Date(dateRange.to),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
     },
     { enabled: !!locationId && activeTab === "staff" }
   );
@@ -433,13 +454,13 @@ export default function ReportsPage() {
           type="date"
           value={dateRange.from}
           onChange={(e) => setDateRange((d) => ({ ...d, from: e.target.value }))}
-          className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+          className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] [color-scheme:dark]"
         />
         <input
           type="date"
           value={dateRange.to}
           onChange={(e) => setDateRange((d) => ({ ...d, to: e.target.value }))}
-          className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+          className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] [color-scheme:dark]"
         />
       </div>
 

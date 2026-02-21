@@ -6,6 +6,7 @@ export interface BusinessSettingsData {
   autoLock: AutoLockPolicy;
   alertRules: AlertRules;
   lastAlertEvaluation?: string;
+  endOfDayTime: string;
 }
 
 const DEFAULT_SETTINGS: BusinessSettingsData = {
@@ -37,6 +38,7 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     parReorderAlert: { enabled: false, threshold: 3 },
   },
   lastAlertEvaluation: undefined,
+  endOfDayTime: "23:59",
 };
 
 export class SettingsService {
@@ -64,6 +66,7 @@ export class SettingsService {
         ...stored.alertRules,
       },
       lastAlertEvaluation: stored.lastAlertEvaluation,
+      endOfDayTime: stored.endOfDayTime ?? DEFAULT_SETTINGS.endOfDayTime,
     };
   }
 
@@ -74,6 +77,7 @@ export class SettingsService {
       autoLock?: Partial<AutoLockPolicy>;
       alertRules?: Partial<AlertRules>;
       lastAlertEvaluation?: string;
+      endOfDayTime?: string;
     }
   ): Promise<BusinessSettingsData> {
     const current = await this.getSettings(businessId);
@@ -91,6 +95,7 @@ export class SettingsService {
         ...patch.alertRules,
       },
       lastAlertEvaluation: patch.lastAlertEvaluation ?? current.lastAlertEvaluation,
+      endOfDayTime: patch.endOfDayTime ?? current.endOfDayTime,
     };
 
     await this.prisma.businessSettings.upsert({

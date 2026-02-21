@@ -59,6 +59,7 @@ export default function SettingsPage() {
       </div>
 
       <BusinessProfileSection businessId={businessId} canEdit={canEdit} />
+      <EndOfDaySection businessId={businessId} canEdit={canEdit} />
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
       <AutoLockPolicySection businessId={businessId} canEdit={canEdit} />
       <AlertRulesSection businessId={businessId} canEdit={canEdit} />
@@ -333,6 +334,76 @@ function BusinessProfileSection({ businessId, canEdit }: { businessId: string; c
             })()}
           </div>
         </dl>
+      )}
+    </div>
+  );
+}
+
+function EndOfDaySection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {
+  const { data: settings } = trpc.settings.get.useQuery({ businessId });
+  const utils = trpc.useUtils();
+
+  const [localTime, setLocalTime] = useState("");
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (settings?.endOfDayTime) {
+      setLocalTime(settings.endOfDayTime);
+      setDirty(false);
+    }
+  }, [settings]);
+
+  const updateMutation = trpc.settings.update.useMutation({
+    onSuccess: () => {
+      utils.settings.get.invalidate({ businessId });
+      utils.settings.endOfDayTime.invalidate({ businessId });
+      setDirty(false);
+    },
+  });
+
+  function handleSave() {
+    if (!localTime || !/^\d{2}:\d{2}$/.test(localTime)) return;
+    updateMutation.mutate({ businessId, endOfDayTime: localTime });
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">End of Business Day</h2>
+        {canEdit && dirty && (
+          <button
+            onClick={handleSave}
+            disabled={updateMutation.isPending}
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+          >
+            {updateMutation.isPending ? "Saving..." : "Save"}
+          </button>
+        )}
+      </div>
+
+      <p className="mb-4 text-sm text-[#EAF0FF]/50">
+        Set the time your business day ends. Reports will include data up to this time.
+        For bars that close after midnight, set to your closing time (e.g. 04:00).
+      </p>
+
+      <div className="flex items-center gap-3">
+        <label className="text-sm text-[#EAF0FF]/80">End of day time</label>
+        <input
+          type="time"
+          value={localTime}
+          onChange={(e) => { setLocalTime(e.target.value); setDirty(true); }}
+          disabled={!canEdit}
+          className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] [color-scheme:dark] disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        {localTime && localTime <= "12:00" && localTime !== "00:00" && (
+          <span className="text-xs text-[#EAF0FF]/40">
+            (next day — e.g. &quot;Feb 21&quot; ends Feb 22 at {localTime})
+          </span>
+        )}
+      </div>
+
+      {updateMutation.error && (
+        <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
       )}
     </div>
   );

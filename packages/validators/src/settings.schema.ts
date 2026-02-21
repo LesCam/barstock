@@ -48,6 +48,7 @@ export const settingsUpdateSchema = z.object({
   autoLock: autoLockPolicySchema.partial().optional(),
   alertRules: alertRulesSchema.partial().optional(),
   lastAlertEvaluation: z.string().datetime().optional(),
+  endOfDayTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
 });
 
 export const settingsGetSchema = z.object({

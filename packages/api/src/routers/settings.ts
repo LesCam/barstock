@@ -32,6 +32,15 @@ export const settingsRouter = router({
       return settings.alertRules;
     }),
 
+  endOfDayTime: protectedProcedure
+    .use(requireBusinessAccess())
+    .input(settingsGetSchema)
+    .query(async ({ ctx, input }) => {
+      const service = new SettingsService(ctx.prisma);
+      const settings = await service.getSettings(input.businessId);
+      return settings.endOfDayTime;
+    }),
+
   get: protectedProcedure
     .use(requireRole("business_admin"))
     .use(requireBusinessAccess())
@@ -53,6 +62,7 @@ export const settingsRouter = router({
         capabilities: input.capabilities,
         autoLock: input.autoLock,
         alertRules: input.alertRules,
+        endOfDayTime: input.endOfDayTime,
       });
 
       await auditService.log({
