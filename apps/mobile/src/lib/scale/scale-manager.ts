@@ -193,6 +193,7 @@ export class ScaleManager {
 
     if (this.scaleType === "skale2") {
       await this.sendSkaleCommand(device, SKALE_CMD_UNIT_GRAMS);
+      await this.sendSkaleCommand(device, SKALE_CMD_LED_ON);
       this.monitorSkale2(device, deviceId);
       this.startKeepalive();
     } else {
