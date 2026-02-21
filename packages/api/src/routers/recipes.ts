@@ -3,8 +3,11 @@ import {
   recipeCreateSchema,
   recipeUpdateSchema,
   recipeListSchema,
+  recipeParseCSVSchema,
+  recipeBulkCreateSchema,
 } from "@barstock/validators";
 import { RecipeService } from "../services/recipe.service";
+import { RecipeImportService } from "../services/recipe-import.service";
 import { AuditService } from "../services/audit.service";
 import { z } from "zod";
 
@@ -69,6 +72,38 @@ export const recipesRouter = router({
     .query(({ ctx, input }) => {
       const svc = new RecipeService(ctx.prisma);
       return svc.getById(input.id);
+    }),
+
+  parseCSV: protectedProcedure
+    .use(requireRole("manager"))
+    .input(recipeParseCSVSchema)
+    .mutation(async ({ ctx, input }) => {
+      const svc = new RecipeImportService(ctx.prisma);
+      return svc.parseAndMatch(input.locationId, input.csvText);
+    }),
+
+  bulkCreate: protectedProcedure
+    .use(requireRole("manager"))
+    .input(recipeBulkCreateSchema)
+    .mutation(async ({ ctx, input }) => {
+      const svc = new RecipeImportService(ctx.prisma);
+      const result = await svc.bulkCreate(input, ctx.user.businessId);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "recipe.bulk_imported",
+        objectType: "recipe",
+        objectId: input.locationId,
+        metadata: {
+          recipesCreated: result.recipesCreated,
+          recipesSkipped: result.recipesSkipped,
+          itemsCreated: result.itemsCreated,
+        },
+      });
+
+      return result;
     }),
 
   delete: protectedProcedure

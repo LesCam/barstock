@@ -105,6 +105,32 @@ export type POSMappingCreateInput = z.infer<typeof posMappingCreateSchema>;
 export type POSMappingUpdateInput = z.infer<typeof posMappingUpdateSchema>;
 export type ImportRequestInput = z.infer<typeof importRequestSchema>;
 export type DepletionRequestInput = z.infer<typeof depletionRequestSchema>;
+// ─── Bulk POS Mapping Schemas ──────────────────────────────
+
+export const posSuggestMappingsSchema = z.object({
+  locationId: z.string().uuid(),
+  posItemNames: z.array(z.string().min(1)).min(1),
+});
+
+const bulkMappingItemSchema = z.object({
+  posItemId: z.string().min(1),
+  posItemName: z.string().min(1),
+  mode: z.nativeEnum(MappingMode),
+  inventoryItemId: z.string().uuid().optional(),
+  recipeId: z.string().uuid().optional(),
+  pourProfileId: z.string().uuid().optional(),
+});
+
+export const posBulkMappingSchema = z.object({
+  locationId: z.string().uuid(),
+  sourceSystem: z.nativeEnum(SourceSystem),
+  mappings: z.array(bulkMappingItemSchema).min(1),
+});
+
+// ─── Types ─────────────────────────────────────────────────
+
 export type CSVSalesLineInput = z.infer<typeof csvSalesLineSchema>;
 export type CSVImportInput = z.infer<typeof csvImportSchema>;
 export type CSVImportHistoryInput = z.infer<typeof csvImportHistorySchema>;
+export type POSSuggestMappingsInput = z.infer<typeof posSuggestMappingsSchema>;
+export type POSBulkMappingInput = z.infer<typeof posBulkMappingSchema>;

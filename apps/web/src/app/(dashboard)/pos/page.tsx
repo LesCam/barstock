@@ -25,6 +25,12 @@ export default function POSPage() {
         <h1 className="text-2xl font-bold text-[#EAF0FF]">POS Connections</h1>
         <div className="flex gap-3">
           <Link
+            href="/pos/bulk-map"
+            className="rounded-md border border-[#E9B44C] px-4 py-2 text-sm font-medium text-[#E9B44C] hover:bg-[#E9B44C]/10"
+          >
+            Bulk Map
+          </Link>
+          <Link
             href="/pos/upload"
             className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#E9B44C]/90"
           >

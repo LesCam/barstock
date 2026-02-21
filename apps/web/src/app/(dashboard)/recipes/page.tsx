@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { UOM } from "@barstock/types";
 
 const UOM_LABELS: Record<string, string> = {
@@ -319,12 +320,20 @@ export default function RecipesPage() {
             Define cocktail and drink recipes for multi-ingredient POS depletion.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate((v) => !v)}
-          className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
-        >
-          {showCreate ? "Cancel" : "New Recipe"}
-        </button>
+        <div className="flex gap-3">
+          <Link
+            href="/recipes/import"
+            className="rounded-md border border-[#E9B44C] px-4 py-2 text-sm font-medium text-[#E9B44C] hover:bg-[#E9B44C]/10"
+          >
+            Import CSV
+          </Link>
+          <button
+            onClick={() => setShowCreate((v) => !v)}
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
+          >
+            {showCreate ? "Cancel" : "New Recipe"}
+          </button>
+        </div>
       </div>
 
       {showCreate && (
