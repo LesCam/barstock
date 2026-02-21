@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export function NotificationBell() {
   const router = useRouter();
@@ -120,6 +121,13 @@ export function NotificationBell() {
               ))
             )}
           </div>
+          <Link
+            href="/notifications"
+            onClick={() => setOpen(false)}
+            className="block border-t border-white/10 px-4 py-2.5 text-center text-xs font-medium text-[#E9B44C] hover:bg-white/5"
+          >
+            View all
+          </Link>
         </div>
       )}
     </div>

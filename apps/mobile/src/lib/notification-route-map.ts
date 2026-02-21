@@ -21,6 +21,10 @@ export function mapNotificationRoute(linkUrl: string | null | undefined): string
   if (path === "/inventory") return "/(tabs)/inventory";
   if (path === "/settings") return "/(tabs)/settings";
   if (path === "/audit") return "/audit-log";
+  if (path === "/reports") return "/(tabs)";
+  if (path === "/draft") return "/(tabs)";
+  if (path === "/par") return "/shopping-list";
+  if (path === "/staff") return "/(tabs)/settings";
 
   return null;
 }
