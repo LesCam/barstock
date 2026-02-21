@@ -75,6 +75,49 @@ export interface VarianceReport {
   totalVarianceValue: number;
 }
 
+export interface StaffAccountabilityScore {
+  userId: string;
+  email: string;
+  displayName: string;
+  sessionsCounted: number;
+  linesCounted: number;
+  linesWithVariance: number;
+  manualLines: number;
+  totalVarianceMagnitude: number;
+  accuracyRate: number;
+  avgVarianceMagnitude: number;
+  manualEntryRate: number;
+  trend: "improving" | "stable" | "worsening";
+}
+
+export interface SessionMetric {
+  sessionId: string;
+  startedTs: string;
+  endedTs: string;
+  durationMinutes: number;
+  totalLines: number;
+  manualLines: number;
+  linesWithVariance: number;
+  itemsPerHour: number;
+  manualEntryRate: number;
+  varianceRate: number;
+  createdByName: string;
+  participantCount: number;
+}
+
+export interface StaffAccountabilityResult {
+  staff: StaffAccountabilityScore[];
+  sessions: SessionMetric[];
+  summary: {
+    totalStaff: number;
+    avgAccuracyRate: number;
+    avgManualEntryRate: number;
+    totalSessions: number;
+    avgItemsPerHour: number;
+    avgSessionDurationMinutes: number;
+  };
+}
+
 export class VarianceService {
   constructor(private prisma: ExtendedPrismaClient) {}
 
@@ -510,5 +553,221 @@ export class VarianceService {
     });
 
     return { reasons, totalAdjustments, withReason, withoutReason };
+  }
+
+  async getStaffAccountability(
+    locationId: string,
+    fromDate?: Date,
+    toDate?: Date
+  ): Promise<StaffAccountabilityResult> {
+    // Query A — Staff scores
+    const staffRows = await this.prisma.$queryRaw<
+      Array<{
+        user_id: string;
+        email: string;
+        display_name: string;
+        sessions_counted: bigint;
+        lines_counted: bigint;
+        manual_lines: bigint;
+        lines_with_variance: bigint;
+        total_variance_magnitude: number | null;
+      }>
+    >`
+      SELECT
+        u.id AS user_id,
+        u.email,
+        COALESCE(u.name, u.email) AS display_name,
+        COUNT(DISTINCT sl.session_id) AS sessions_counted,
+        COUNT(sl.id) AS lines_counted,
+        COUNT(CASE WHEN sl.is_manual = true THEN 1 END) AS manual_lines,
+        COUNT(DISTINCT adj.id) AS lines_with_variance,
+        COALESCE(SUM(ABS(adj.quantity_delta)), 0) AS total_variance_magnitude
+      FROM inventory_session_lines sl
+      JOIN users u ON u.id = sl.counted_by
+      JOIN inventory_sessions s ON s.id = sl.session_id
+      LEFT JOIN consumption_events adj
+        ON adj.inventory_item_id = sl.inventory_item_id
+        AND adj.event_type = 'inventory_count_adjustment'
+        AND adj.event_ts BETWEEN s.started_ts AND s.ended_ts
+      WHERE s.location_id = ${locationId}::uuid
+        AND s.ended_ts IS NOT NULL
+        AND sl.counted_by IS NOT NULL
+        AND (${fromDate}::timestamptz IS NULL OR s.ended_ts >= ${fromDate}::timestamptz)
+        AND (${toDate}::timestamptz IS NULL OR s.ended_ts < ${toDate}::timestamptz)
+      GROUP BY u.id, u.email, u.name
+      ORDER BY lines_with_variance DESC
+    `;
+
+    // Query B — Per-staff trend (per-session variance rates)
+    const trendRows = await this.prisma.$queryRaw<
+      Array<{
+        user_id: string;
+        session_id: string;
+        started_ts: Date;
+        session_lines: bigint;
+        session_variance_lines: bigint;
+      }>
+    >`
+      SELECT
+        u.id AS user_id,
+        s.id AS session_id,
+        s.started_ts,
+        COUNT(sl.id) AS session_lines,
+        COUNT(DISTINCT adj.id) AS session_variance_lines
+      FROM inventory_session_lines sl
+      JOIN users u ON u.id = sl.counted_by
+      JOIN inventory_sessions s ON s.id = sl.session_id
+      LEFT JOIN consumption_events adj
+        ON adj.inventory_item_id = sl.inventory_item_id
+        AND adj.event_type = 'inventory_count_adjustment'
+        AND adj.event_ts BETWEEN s.started_ts AND s.ended_ts
+      WHERE s.location_id = ${locationId}::uuid
+        AND s.ended_ts IS NOT NULL
+        AND sl.counted_by IS NOT NULL
+        AND (${fromDate}::timestamptz IS NULL OR s.ended_ts >= ${fromDate}::timestamptz)
+        AND (${toDate}::timestamptz IS NULL OR s.ended_ts < ${toDate}::timestamptz)
+      GROUP BY u.id, s.id, s.started_ts
+      ORDER BY u.id, s.started_ts
+    `;
+
+    // Compute trends per user
+    const userTrends = new Map<string, "improving" | "stable" | "worsening">();
+    const userSessions = new Map<string, Array<{ lines: number; varianceLines: number }>>();
+    for (const row of trendRows) {
+      const uid = row.user_id;
+      if (!userSessions.has(uid)) userSessions.set(uid, []);
+      userSessions.get(uid)!.push({
+        lines: Number(row.session_lines),
+        varianceLines: Number(row.session_variance_lines),
+      });
+    }
+    for (const [uid, sessions] of userSessions) {
+      if (sessions.length < 2) {
+        userTrends.set(uid, "stable");
+        continue;
+      }
+      const mid = Math.floor(sessions.length / 2);
+      const firstHalf = sessions.slice(0, mid);
+      const secondHalf = sessions.slice(mid);
+      const avgRate = (arr: typeof sessions) => {
+        const totalLines = arr.reduce((s, x) => s + x.lines, 0);
+        const totalVariance = arr.reduce((s, x) => s + x.varianceLines, 0);
+        return totalLines > 0 ? (totalVariance / totalLines) * 100 : 0;
+      };
+      const firstRate = avgRate(firstHalf);
+      const secondRate = avgRate(secondHalf);
+      const diff = secondRate - firstRate;
+      if (diff > 5) {
+        userTrends.set(uid, "worsening");
+      } else if (diff < -5) {
+        userTrends.set(uid, "improving");
+      } else {
+        userTrends.set(uid, "stable");
+      }
+    }
+
+    // Build staff scores
+    const staff: StaffAccountabilityScore[] = staffRows.map((r) => {
+      const linesCounted = Number(r.lines_counted);
+      const linesWithVariance = Number(r.lines_with_variance);
+      const manualLines = Number(r.manual_lines);
+      const totalVarianceMagnitude = Number(r.total_variance_magnitude ?? 0);
+      const linesWithout = linesCounted - linesWithVariance;
+      return {
+        userId: r.user_id,
+        email: r.email,
+        displayName: r.display_name,
+        sessionsCounted: Number(r.sessions_counted),
+        linesCounted,
+        linesWithVariance,
+        manualLines,
+        totalVarianceMagnitude,
+        accuracyRate: linesCounted > 0 ? (linesWithout / linesCounted) * 100 : 0,
+        avgVarianceMagnitude: linesWithVariance > 0 ? totalVarianceMagnitude / linesWithVariance : 0,
+        manualEntryRate: linesCounted > 0 ? (manualLines / linesCounted) * 100 : 0,
+        trend: userTrends.get(r.user_id) ?? "stable",
+      };
+    });
+
+    // Query C — Session metrics
+    const sessionRows = await this.prisma.$queryRaw<
+      Array<{
+        session_id: string;
+        started_ts: Date;
+        ended_ts: Date;
+        total_lines: bigint;
+        manual_lines: bigint;
+        lines_with_variance: bigint;
+        created_by_name: string;
+        participant_count: bigint;
+      }>
+    >`
+      SELECT
+        s.id AS session_id,
+        s.started_ts,
+        s.ended_ts,
+        COUNT(sl.id) AS total_lines,
+        COUNT(CASE WHEN sl.is_manual = true THEN 1 END) AS manual_lines,
+        COUNT(DISTINCT adj.id) AS lines_with_variance,
+        COALESCE(cu.name, cu.email, 'Unknown') AS created_by_name,
+        (SELECT COUNT(*) FROM session_participants sp WHERE sp.session_id = s.id) AS participant_count
+      FROM inventory_sessions s
+      LEFT JOIN inventory_session_lines sl ON sl.session_id = s.id
+      LEFT JOIN consumption_events adj
+        ON adj.inventory_item_id = sl.inventory_item_id
+        AND adj.event_type = 'inventory_count_adjustment'
+        AND adj.event_ts BETWEEN s.started_ts AND s.ended_ts
+      LEFT JOIN users cu ON cu.id = s.created_by
+      WHERE s.location_id = ${locationId}::uuid
+        AND s.ended_ts IS NOT NULL
+        AND (${fromDate}::timestamptz IS NULL OR s.ended_ts >= ${fromDate}::timestamptz)
+        AND (${toDate}::timestamptz IS NULL OR s.ended_ts < ${toDate}::timestamptz)
+      GROUP BY s.id, s.started_ts, s.ended_ts, cu.name, cu.email
+      ORDER BY s.started_ts DESC
+    `;
+
+    const sessions: SessionMetric[] = sessionRows.map((r) => {
+      const totalLines = Number(r.total_lines);
+      const manualLines = Number(r.manual_lines);
+      const linesWithVariance = Number(r.lines_with_variance);
+      const durationMs = r.ended_ts.getTime() - r.started_ts.getTime();
+      const durationMinutes = Math.max(durationMs / 60000, 0);
+      const durationHours = durationMinutes / 60;
+      return {
+        sessionId: r.session_id,
+        startedTs: r.started_ts.toISOString(),
+        endedTs: r.ended_ts.toISOString(),
+        durationMinutes: Math.round(durationMinutes),
+        totalLines,
+        manualLines,
+        linesWithVariance,
+        itemsPerHour: durationHours > 0 ? Math.round(totalLines / durationHours) : 0,
+        manualEntryRate: totalLines > 0 ? (manualLines / totalLines) * 100 : 0,
+        varianceRate: totalLines > 0 ? (linesWithVariance / totalLines) * 100 : 0,
+        createdByName: r.created_by_name,
+        participantCount: Number(r.participant_count),
+      };
+    });
+
+    // Summary
+    const totalStaff = staff.length;
+    const avgAccuracyRate = totalStaff > 0 ? staff.reduce((s, x) => s + x.accuracyRate, 0) / totalStaff : 0;
+    const avgManualEntryRate = totalStaff > 0 ? staff.reduce((s, x) => s + x.manualEntryRate, 0) / totalStaff : 0;
+    const totalSessions = sessions.length;
+    const avgItemsPerHour = totalSessions > 0 ? sessions.reduce((s, x) => s + x.itemsPerHour, 0) / totalSessions : 0;
+    const avgSessionDurationMinutes = totalSessions > 0 ? sessions.reduce((s, x) => s + x.durationMinutes, 0) / totalSessions : 0;
+
+    return {
+      staff,
+      sessions,
+      summary: {
+        totalStaff,
+        avgAccuracyRate,
+        avgManualEntryRate,
+        totalSessions,
+        avgItemsPerHour: Math.round(avgItemsPerHour),
+        avgSessionDurationMinutes: Math.round(avgSessionDurationMinutes),
+      },
+    };
   }
 }

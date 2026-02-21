@@ -8,10 +8,12 @@ import {
   PieChart, Pie, Cell,
 } from "recharts";
 
-type ActiveTab = "variance" | "cogs" | "usage" | "patterns";
+type ActiveTab = "variance" | "cogs" | "usage" | "patterns" | "staff";
 type VarianceSortKey = "itemName" | "categoryName" | "variance" | "variancePercent" | "valueImpact";
 type UsageSortKey = "name" | "categoryName" | "quantityUsed" | "unitCost" | "totalCost";
 type PatternSortKey = "itemName" | "categoryName" | "sessionsAppeared" | "avgVariance" | "totalEstimatedLoss" | "trend";
+type StaffSortKey = "displayName" | "sessionsCounted" | "linesCounted" | "accuracyRate" | "avgVarianceMagnitude" | "manualEntryRate" | "trend";
+type SessionSortKey = "startedTs" | "durationMinutes" | "totalLines" | "itemsPerHour" | "varianceRate" | "manualEntryRate" | "participantCount";
 type SortDir = "asc" | "desc";
 type HeatmapCell = { dayOfWeek: number; hour: number; totalVariance: number; eventCount: number };
 
@@ -98,6 +100,10 @@ export default function ReportsPage() {
   const [patternSortDir, setPatternSortDir] = useState<SortDir>("asc");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [sessionCount, setSessionCount] = useState(10);
+  const [staffSortKey, setStaffSortKey] = useState<StaffSortKey>("accuracyRate");
+  const [staffSortDir, setStaffSortDir] = useState<SortDir>("asc");
+  const [sessionSortKey, setSessionSortKey] = useState<SessionSortKey>("startedTs");
+  const [sessionSortDir, setSessionSortDir] = useState<SortDir>("desc");
 
   const { data: variance } = trpc.reports.variance.useQuery(
     {
@@ -160,6 +166,15 @@ export default function ReportsPage() {
       toDate: new Date(dateRange.to),
     },
     { enabled: !!locationId && activeTab === "variance" }
+  );
+
+  const { data: staffData } = trpc.reports.staffAccountability.useQuery(
+    {
+      locationId: locationId!,
+      fromDate: new Date(dateRange.from),
+      toDate: new Date(dateRange.to),
+    },
+    { enabled: !!locationId && activeTab === "staff" }
   );
 
   // --- Variance sorting ---
@@ -311,11 +326,101 @@ export default function ReportsPage() {
     );
   }
 
+  // --- Staff sorting ---
+  function toggleStaffSort(key: StaffSortKey) {
+    if (staffSortKey === key) {
+      setStaffSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setStaffSortKey(key);
+      setStaffSortDir("asc");
+    }
+  }
+
+  const sortedStaff = useMemo(() => {
+    if (!staffData?.staff) return [];
+    return [...staffData.staff].sort((a, b) => {
+      if (staffSortKey === "trend") {
+        const order = { improving: 0, stable: 1, worsening: 2 };
+        const cmp = order[a.trend] - order[b.trend];
+        return staffSortDir === "asc" ? cmp : -cmp;
+      }
+      const aVal = a[staffSortKey];
+      const bVal = b[staffSortKey];
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        const cmp = aVal.toLowerCase().localeCompare(bVal.toLowerCase());
+        return staffSortDir === "asc" ? cmp : -cmp;
+      }
+      const aNum = (aVal as number) ?? 0;
+      const bNum = (bVal as number) ?? 0;
+      return staffSortDir === "asc" ? aNum - bNum : bNum - aNum;
+    });
+  }, [staffData, staffSortKey, staffSortDir]);
+
+  function StaffSortHeader({ label, field, className }: { label: string; field: StaffSortKey; className?: string }) {
+    const active = staffSortKey === field;
+    return (
+      <th
+        className={`cursor-pointer select-none px-4 py-3 hover:text-[#EAF0FF]/80 ${className ?? ""}`}
+        onClick={() => toggleStaffSort(field)}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}
+          <span className={`text-xs ${active ? "text-[#E9B44C]" : "text-[#EAF0FF]/30"}`}>
+            {active ? (staffSortDir === "asc" ? "\u25B2" : "\u25BC") : "\u25B2"}
+          </span>
+        </span>
+      </th>
+    );
+  }
+
+  // --- Session sorting ---
+  function toggleSessionSort(key: SessionSortKey) {
+    if (sessionSortKey === key) {
+      setSessionSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSessionSortKey(key);
+      setSessionSortDir("asc");
+    }
+  }
+
+  const sortedSessions = useMemo(() => {
+    if (!staffData?.sessions) return [];
+    return [...staffData.sessions].sort((a, b) => {
+      const aVal = a[sessionSortKey];
+      const bVal = b[sessionSortKey];
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        const cmp = aVal.localeCompare(bVal);
+        return sessionSortDir === "asc" ? cmp : -cmp;
+      }
+      const aNum = (aVal as number) ?? 0;
+      const bNum = (bVal as number) ?? 0;
+      return sessionSortDir === "asc" ? aNum - bNum : bNum - aNum;
+    });
+  }, [staffData, sessionSortKey, sessionSortDir]);
+
+  function SessionSortHeader({ label, field, className }: { label: string; field: SessionSortKey; className?: string }) {
+    const active = sessionSortKey === field;
+    return (
+      <th
+        className={`cursor-pointer select-none px-4 py-3 hover:text-[#EAF0FF]/80 ${className ?? ""}`}
+        onClick={() => toggleSessionSort(field)}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}
+          <span className={`text-xs ${active ? "text-[#E9B44C]" : "text-[#EAF0FF]/30"}`}>
+            {active ? (sessionSortDir === "asc" ? "\u25B2" : "\u25BC") : "\u25B2"}
+          </span>
+        </span>
+      </th>
+    );
+  }
+
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: "variance", label: "Variance" },
     { key: "cogs", label: "COGS" },
     { key: "usage", label: "Usage" },
     { key: "patterns", label: "Patterns" },
+    { key: "staff", label: "Staff" },
   ];
 
   return (
@@ -724,6 +829,137 @@ export default function ReportsPage() {
                   <tr>
                     <td colSpan={6} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                       {filter ? "No items match your search." : "No usage data for this period."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ── Staff tab ── */}
+      {activeTab === "staff" && (
+        <section>
+          {/* Staff summary cards */}
+          <div className="mb-6 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Staff Counted</p>
+              <p className="text-2xl font-bold">{staffData?.summary.totalStaff ?? 0}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Avg Accuracy</p>
+              <p className={`text-2xl font-bold ${
+                (staffData?.summary.avgAccuracyRate ?? 0) >= 95 ? "text-green-400" :
+                (staffData?.summary.avgAccuracyRate ?? 0) >= 85 ? "text-amber-400" : "text-red-400"
+              }`}>
+                {(staffData?.summary.avgAccuracyRate ?? 0).toFixed(1)}%
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Avg Manual Rate</p>
+              <p className="text-2xl font-bold">{(staffData?.summary.avgManualEntryRate ?? 0).toFixed(1)}%</p>
+            </div>
+          </div>
+
+          {/* Staff accountability table */}
+          <h2 className="mb-3 text-lg font-semibold">Staff Accountability</h2>
+          <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                <tr>
+                  <StaffSortHeader label="Staff" field="displayName" />
+                  <StaffSortHeader label="Sessions" field="sessionsCounted" />
+                  <StaffSortHeader label="Lines" field="linesCounted" />
+                  <StaffSortHeader label="Accuracy %" field="accuracyRate" />
+                  <StaffSortHeader label="Avg Variance" field="avgVarianceMagnitude" />
+                  <StaffSortHeader label="Manual %" field="manualEntryRate" />
+                  <StaffSortHeader label="Trend" field="trend" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {sortedStaff.map((s) => (
+                  <tr key={s.userId} className="hover:bg-[#0B1623]/60">
+                    <td className="px-4 py-3 font-medium">{s.displayName}</td>
+                    <td className="px-4 py-3">{s.sessionsCounted}</td>
+                    <td className="px-4 py-3">{s.linesCounted}</td>
+                    <td className={`px-4 py-3 font-medium ${
+                      s.accuracyRate >= 95 ? "text-green-400" :
+                      s.accuracyRate >= 85 ? "text-amber-400" : "text-red-400"
+                    }`}>
+                      {s.accuracyRate.toFixed(1)}%
+                    </td>
+                    <td className="px-4 py-3">{s.avgVarianceMagnitude.toFixed(1)}</td>
+                    <td className="px-4 py-3">{s.manualEntryRate.toFixed(1)}%</td>
+                    <td className="px-4 py-3">
+                      {s.trend === "worsening" && <span className="text-red-400" title="Worsening">&#x2193;</span>}
+                      {s.trend === "improving" && <span className="text-green-400" title="Improving">&#x2191;</span>}
+                      {s.trend === "stable" && <span className="text-[#EAF0FF]/40" title="Stable">&#x2192;</span>}
+                    </td>
+                  </tr>
+                ))}
+                {sortedStaff.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                      No staff data for this period.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Session summary cards */}
+          <div className="mt-8 mb-6 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Sessions</p>
+              <p className="text-2xl font-bold">{staffData?.summary.totalSessions ?? 0}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Avg Duration</p>
+              <p className="text-2xl font-bold">{staffData?.summary.avgSessionDurationMinutes ?? 0}m</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Avg Items/Hr</p>
+              <p className="text-2xl font-bold">{staffData?.summary.avgItemsPerHour ?? 0}</p>
+            </div>
+          </div>
+
+          {/* Session metrics table */}
+          <h2 className="mb-3 text-lg font-semibold">Session Metrics</h2>
+          <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                <tr>
+                  <SessionSortHeader label="Date" field="startedTs" />
+                  <SessionSortHeader label="Duration" field="durationMinutes" />
+                  <SessionSortHeader label="Items" field="totalLines" />
+                  <SessionSortHeader label="Items/Hr" field="itemsPerHour" />
+                  <SessionSortHeader label="Variance %" field="varianceRate" />
+                  <SessionSortHeader label="Manual %" field="manualEntryRate" />
+                  <SessionSortHeader label="Participants" field="participantCount" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {sortedSessions.map((s) => (
+                  <tr key={s.sessionId} className="hover:bg-[#0B1623]/60">
+                    <td className="px-4 py-3 font-medium">
+                      {new Date(s.startedTs).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </td>
+                    <td className="px-4 py-3">{s.durationMinutes}m</td>
+                    <td className="px-4 py-3">{s.totalLines}</td>
+                    <td className="px-4 py-3">{s.itemsPerHour}</td>
+                    <td className={`px-4 py-3 ${s.varianceRate > 20 ? "text-red-400" : s.varianceRate > 10 ? "text-amber-400" : ""}`}>
+                      {s.varianceRate.toFixed(1)}%
+                    </td>
+                    <td className="px-4 py-3">{s.manualEntryRate.toFixed(1)}%</td>
+                    <td className="px-4 py-3">{s.participantCount}</td>
+                  </tr>
+                ))}
+                {sortedSessions.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                      No session data for this period.
                     </td>
                   </tr>
                 )}

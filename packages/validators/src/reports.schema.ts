@@ -65,3 +65,9 @@ export const varianceReasonDistributionQuerySchema = z.object({
   fromDate: z.coerce.date(),
   toDate: z.coerce.date(),
 });
+
+export const staffAccountabilityQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+});

@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 
@@ -72,5 +72,12 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new VarianceService(ctx.prisma);
       return svc.getVarianceReasonDistribution(input.locationId, input.fromDate, input.toDate);
+    }),
+
+  staffAccountability: protectedProcedure
+    .input(staffAccountabilityQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new VarianceService(ctx.prisma);
+      return svc.getStaffAccountability(input.locationId, input.fromDate, input.toDate);
     }),
 });
