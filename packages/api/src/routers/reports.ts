@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 
@@ -79,5 +79,42 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new VarianceService(ctx.prisma);
       return svc.getStaffAccountability(input.locationId, input.fromDate, input.toDate);
+    }),
+
+  usageOverTime: protectedProcedure
+    .input(usageOverTimeQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getUsageOverTime(
+        input.locationId,
+        input.fromDate,
+        input.toDate,
+        input.granularity,
+        input.categoryId
+      );
+    }),
+
+  recipeAnalytics: protectedProcedure
+    .input(recipeAnalyticsQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getRecipeAnalytics(
+        input.locationId,
+        input.fromDate,
+        input.toDate,
+        input.granularity
+      );
+    }),
+
+  recipeDetail: protectedProcedure
+    .input(recipeDetailQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getRecipeDetail(
+        input.locationId,
+        input.recipeId,
+        input.fromDate,
+        input.toDate
+      );
     }),
 });

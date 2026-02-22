@@ -370,6 +370,524 @@ export class ReportService {
     });
   }
 
+  async getUsageOverTime(
+    locationId: string,
+    fromDate: Date,
+    toDate: Date,
+    granularity: "day" | "week" | "month" = "day",
+    categoryId?: string
+  ) {
+    const categoryFilter = categoryId
+      ? Prisma.sql`AND i.category_id = ${categoryId}::uuid`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        bucket: Date;
+        item_id: string;
+        item_name: string;
+        category_name: string | null;
+        total_qty: number | null;
+        total_cost: number | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        date_trunc(${granularity}, ce.event_ts) AS bucket,
+        ce.inventory_item_id AS item_id,
+        i.name AS item_name,
+        c.name AS category_name,
+        SUM(ABS(ce.quantity_delta)) AS total_qty,
+        SUM(ABS(ce.quantity_delta) * COALESCE(ph.unit_cost, 0)) AS total_cost
+      FROM consumption_events ce
+      JOIN inventory_items i ON i.id = ce.inventory_item_id
+      LEFT JOIN inventory_item_categories c ON c.id = i.category_id
+      LEFT JOIN LATERAL (
+        SELECT ph2.unit_cost
+        FROM price_history ph2
+        WHERE ph2.inventory_item_id = ce.inventory_item_id
+          AND ph2.effective_from_ts <= ce.event_ts
+          AND (ph2.effective_to_ts IS NULL OR ph2.effective_to_ts > ce.event_ts)
+        ORDER BY ph2.effective_from_ts DESC
+        LIMIT 1
+      ) ph ON true
+      WHERE ce.location_id = ${locationId}::uuid
+        AND ce.event_type IN ('pos_sale', 'tap_flow')
+        AND ce.event_ts >= ${fromDate}
+        AND ce.event_ts < ${toDate}
+        AND ce.reversal_of_event_id IS NULL
+        ${categoryFilter}
+      GROUP BY bucket, ce.inventory_item_id, i.name, c.name
+      ORDER BY bucket
+    `);
+
+    // Aggregate totals per bucket
+    const bucketMap = new Map<string, { period: string; totalQty: number; totalCost: number }>();
+    // Track per-item totals for ranking
+    const itemTotals = new Map<string, { itemId: string; itemName: string; categoryName: string | null; totalQty: number }>();
+    // Per-item per-bucket data
+    const itemBucketMap = new Map<string, Map<string, { qty: number; cost: number }>>();
+
+    for (const row of rows) {
+      const period = row.bucket.toISOString();
+      const qty = Number(row.total_qty ?? 0);
+      const cost = Number(row.total_cost ?? 0);
+
+      // Aggregate bucket totals
+      const existing = bucketMap.get(period);
+      if (existing) {
+        existing.totalQty += qty;
+        existing.totalCost += cost;
+      } else {
+        bucketMap.set(period, { period, totalQty: qty, totalCost: cost });
+      }
+
+      // Track item totals
+      const itemTotal = itemTotals.get(row.item_id);
+      if (itemTotal) {
+        itemTotal.totalQty += qty;
+      } else {
+        itemTotals.set(row.item_id, {
+          itemId: row.item_id,
+          itemName: row.item_name,
+          categoryName: row.category_name,
+          totalQty: qty,
+        });
+      }
+
+      // Per-item per-bucket
+      if (!itemBucketMap.has(row.item_id)) {
+        itemBucketMap.set(row.item_id, new Map());
+      }
+      const bucketData = itemBucketMap.get(row.item_id)!;
+      const eb = bucketData.get(period);
+      if (eb) {
+        eb.qty += qty;
+        eb.cost += cost;
+      } else {
+        bucketData.set(period, { qty, cost });
+      }
+    }
+
+    const buckets = Array.from(bucketMap.values()).sort(
+      (a, b) => new Date(a.period).getTime() - new Date(b.period).getTime()
+    );
+    const allPeriods = buckets.map((b) => b.period);
+
+    // Top 10 items by total quantity
+    const ranked = Array.from(itemTotals.values()).sort((a, b) => b.totalQty - a.totalQty);
+    const top10Ids = new Set(ranked.slice(0, 10).map((r) => r.itemId));
+
+    const itemSeries = ranked.slice(0, 10).map((item) => {
+      const bucketData = itemBucketMap.get(item.itemId)!;
+      return {
+        itemId: item.itemId,
+        itemName: item.itemName,
+        categoryName: item.categoryName,
+        dataPoints: allPeriods.map((p) => {
+          const d = bucketData.get(p);
+          return { period: p, qty: d?.qty ?? 0, cost: d?.cost ?? 0 };
+        }),
+      };
+    });
+
+    // "Other" series for remaining items
+    if (ranked.length > 10) {
+      const otherDataPoints = allPeriods.map((p) => {
+        let qty = 0;
+        let cost = 0;
+        for (const [itemId, bucketData] of itemBucketMap) {
+          if (top10Ids.has(itemId)) continue;
+          const d = bucketData.get(p);
+          if (d) {
+            qty += d.qty;
+            cost += d.cost;
+          }
+        }
+        return { period: p, qty, cost };
+      });
+      itemSeries.push({
+        itemId: "__other__",
+        itemName: "Other",
+        categoryName: null,
+        dataPoints: otherDataPoints,
+      });
+    }
+
+    return { buckets, itemSeries };
+  }
+
+  async getRecipeAnalytics(
+    locationId: string,
+    fromDate: Date,
+    toDate: Date,
+    granularity: "day" | "week" | "month" = "day"
+  ) {
+    // Query A: Per-recipe, per-ingredient summary
+    // Query B: Time-bucketed trend data
+    const [summaryRows, trendRows] = await Promise.all([
+      this.prisma.$queryRaw<
+        Array<{
+          recipe_id: string;
+          recipe_name: string;
+          recipe_category: string | null;
+          inventory_item_id: string;
+          ingredient_name: string;
+          servings: string;
+          total_qty: string;
+          total_cost: string;
+        }>
+      >(Prisma.sql`
+        WITH recipe_events AS (
+          SELECT
+            ce.id AS event_id,
+            ce.sales_line_id,
+            ce.inventory_item_id,
+            ce.quantity_delta,
+            ce.event_ts,
+            pim.recipe_id
+          FROM consumption_events ce
+          JOIN sales_lines sl ON sl.id = ce.sales_line_id
+          JOIN pos_item_mappings pim
+            ON pim.location_id = ce.location_id
+            AND pim.source_system = sl.source_system
+            AND pim.pos_item_id = sl.pos_item_id
+            AND pim.mode = 'recipe'
+            AND pim.active = true
+            AND pim.effective_from_ts <= ce.event_ts
+            AND (pim.effective_to_ts IS NULL OR pim.effective_to_ts > ce.event_ts)
+          WHERE ce.location_id = ${locationId}::uuid
+            AND ce.event_type = 'pos_sale'
+            AND ce.event_ts >= ${fromDate}
+            AND ce.event_ts < ${toDate}
+            AND ce.reversal_of_event_id IS NULL
+        )
+        SELECT
+          r.id AS recipe_id,
+          r.name AS recipe_name,
+          r.category AS recipe_category,
+          re.inventory_item_id,
+          i.name AS ingredient_name,
+          COUNT(DISTINCT re.sales_line_id)::text AS servings,
+          SUM(ABS(re.quantity_delta))::text AS total_qty,
+          SUM(ABS(re.quantity_delta) * COALESCE(ph.unit_cost, 0))::text AS total_cost
+        FROM recipe_events re
+        JOIN recipes r ON r.id = re.recipe_id
+        JOIN inventory_items i ON i.id = re.inventory_item_id
+        LEFT JOIN LATERAL (
+          SELECT ph2.unit_cost
+          FROM price_history ph2
+          WHERE ph2.inventory_item_id = re.inventory_item_id
+            AND ph2.effective_from_ts <= re.event_ts
+            AND (ph2.effective_to_ts IS NULL OR ph2.effective_to_ts > re.event_ts)
+          ORDER BY ph2.effective_from_ts DESC
+          LIMIT 1
+        ) ph ON true
+        GROUP BY r.id, r.name, r.category, re.inventory_item_id, i.name
+        ORDER BY r.name, i.name
+      `),
+
+      this.prisma.$queryRaw<
+        Array<{
+          bucket: Date;
+          recipe_id: string;
+          recipe_name: string;
+          servings: string;
+          cost: string;
+        }>
+      >(Prisma.sql`
+        WITH recipe_events AS (
+          SELECT
+            ce.id AS event_id,
+            ce.sales_line_id,
+            ce.quantity_delta,
+            ce.event_ts,
+            pim.recipe_id
+          FROM consumption_events ce
+          JOIN sales_lines sl ON sl.id = ce.sales_line_id
+          JOIN pos_item_mappings pim
+            ON pim.location_id = ce.location_id
+            AND pim.source_system = sl.source_system
+            AND pim.pos_item_id = sl.pos_item_id
+            AND pim.mode = 'recipe'
+            AND pim.active = true
+            AND pim.effective_from_ts <= ce.event_ts
+            AND (pim.effective_to_ts IS NULL OR pim.effective_to_ts > ce.event_ts)
+          WHERE ce.location_id = ${locationId}::uuid
+            AND ce.event_type = 'pos_sale'
+            AND ce.event_ts >= ${fromDate}
+            AND ce.event_ts < ${toDate}
+            AND ce.reversal_of_event_id IS NULL
+        )
+        SELECT
+          date_trunc(${granularity}, re.event_ts) AS bucket,
+          r.id AS recipe_id,
+          r.name AS recipe_name,
+          COUNT(DISTINCT re.sales_line_id)::text AS servings,
+          SUM(ABS(re.quantity_delta) * COALESCE(ph.unit_cost, 0))::text AS cost
+        FROM recipe_events re
+        JOIN recipes r ON r.id = re.recipe_id
+        LEFT JOIN LATERAL (
+          SELECT ph2.unit_cost
+          FROM price_history ph2
+          WHERE ph2.inventory_item_id = re.inventory_item_id
+            AND ph2.effective_from_ts <= re.event_ts
+            AND (ph2.effective_to_ts IS NULL OR ph2.effective_to_ts > re.event_ts)
+          ORDER BY ph2.effective_from_ts DESC
+          LIMIT 1
+        ) ph ON true
+        GROUP BY bucket, r.id, r.name
+        ORDER BY bucket
+      `),
+    ]);
+
+    // Post-process summary: aggregate per-recipe totals from ingredient rows
+    const recipeMap = new Map<
+      string,
+      {
+        recipeId: string;
+        recipeName: string;
+        recipeCategory: string | null;
+        totalServings: number;
+        totalCost: number;
+      }
+    >();
+
+    const ingredientCostMap = new Map<
+      string,
+      { inventoryItemId: string; ingredientName: string; totalCost: number; totalQty: number }
+    >();
+
+    for (const row of summaryRows) {
+      const cost = Number(row.total_cost);
+      const qty = Number(row.total_qty);
+      const servings = Number(row.servings);
+
+      // Aggregate per recipe
+      const existing = recipeMap.get(row.recipe_id);
+      if (existing) {
+        existing.totalCost += cost;
+        // Servings is per-ingredient COUNT(DISTINCT sales_line_id), same across ingredients for a recipe
+        // Use max to avoid double-counting
+        if (servings > existing.totalServings) {
+          existing.totalServings = servings;
+        }
+      } else {
+        recipeMap.set(row.recipe_id, {
+          recipeId: row.recipe_id,
+          recipeName: row.recipe_name,
+          recipeCategory: row.recipe_category,
+          totalServings: servings,
+          totalCost: cost,
+        });
+      }
+
+      // Aggregate top ingredients by cost
+      const ingExisting = ingredientCostMap.get(row.inventory_item_id);
+      if (ingExisting) {
+        ingExisting.totalCost += cost;
+        ingExisting.totalQty += qty;
+      } else {
+        ingredientCostMap.set(row.inventory_item_id, {
+          inventoryItemId: row.inventory_item_id,
+          ingredientName: row.ingredient_name,
+          totalCost: cost,
+          totalQty: qty,
+        });
+      }
+    }
+
+    const recipes = Array.from(recipeMap.values());
+    const totalRecipeCost = recipes.reduce((s, r) => s + r.totalCost, 0);
+    const totalServings = recipes.reduce((s, r) => s + r.totalServings, 0);
+
+    const recipesWithPct = recipes
+      .map((r) => ({
+        ...r,
+        avgCostPerServing: r.totalServings > 0 ? r.totalCost / r.totalServings : 0,
+        pctOfTotalCost: totalRecipeCost > 0 ? (r.totalCost / totalRecipeCost) * 100 : 0,
+      }))
+      .sort((a, b) => b.totalCost - a.totalCost);
+
+    const topIngredients = Array.from(ingredientCostMap.values())
+      .sort((a, b) => b.totalCost - a.totalCost)
+      .slice(0, 10);
+
+    // Post-process trend: aggregate totals + per-recipe series
+    const bucketMap = new Map<string, { period: string; totalServings: number; totalCost: number }>();
+    const recipeTrendMap = new Map<string, { recipeId: string; recipeName: string; bucketData: Map<string, { servings: number; cost: number }> }>();
+    const recipeTrendTotals = new Map<string, number>();
+
+    for (const row of trendRows) {
+      const period = row.bucket.toISOString();
+      const servings = Number(row.servings);
+      const cost = Number(row.cost);
+
+      const existing = bucketMap.get(period);
+      if (existing) {
+        existing.totalServings += servings;
+        existing.totalCost += cost;
+      } else {
+        bucketMap.set(period, { period, totalServings: servings, totalCost: cost });
+      }
+
+      if (!recipeTrendMap.has(row.recipe_id)) {
+        recipeTrendMap.set(row.recipe_id, {
+          recipeId: row.recipe_id,
+          recipeName: row.recipe_name,
+          bucketData: new Map(),
+        });
+      }
+      recipeTrendMap.get(row.recipe_id)!.bucketData.set(period, { servings, cost });
+      recipeTrendTotals.set(
+        row.recipe_id,
+        (recipeTrendTotals.get(row.recipe_id) ?? 0) + cost
+      );
+    }
+
+    const trendBuckets = Array.from(bucketMap.values()).sort(
+      (a, b) => new Date(a.period).getTime() - new Date(b.period).getTime()
+    );
+    const allPeriods = trendBuckets.map((b) => b.period);
+
+    // Top 8 recipes by trend cost + "Other"
+    const rankedRecipes = Array.from(recipeTrendTotals.entries())
+      .sort((a, b) => b[1] - a[1]);
+    const top8Ids = new Set(rankedRecipes.slice(0, 8).map(([id]) => id));
+
+    const recipeSeries = rankedRecipes.slice(0, 8).map(([id]) => {
+      const entry = recipeTrendMap.get(id)!;
+      return {
+        recipeId: entry.recipeId,
+        recipeName: entry.recipeName,
+        dataPoints: allPeriods.map((p) => {
+          const d = entry.bucketData.get(p);
+          return { period: p, servings: d?.servings ?? 0, cost: d?.cost ?? 0 };
+        }),
+      };
+    });
+
+    if (rankedRecipes.length > 8) {
+      const otherDataPoints = allPeriods.map((p) => {
+        let servings = 0;
+        let cost = 0;
+        for (const [id, entry] of recipeTrendMap) {
+          if (top8Ids.has(id)) continue;
+          const d = entry.bucketData.get(p);
+          if (d) {
+            servings += d.servings;
+            cost += d.cost;
+          }
+        }
+        return { period: p, servings, cost };
+      });
+      recipeSeries.push({
+        recipeId: "__other__",
+        recipeName: "Other",
+        dataPoints: otherDataPoints,
+      });
+    }
+
+    return {
+      totalRecipesUsed: recipes.length,
+      totalServings,
+      totalRecipeCost,
+      avgCostPerServing: totalServings > 0 ? totalRecipeCost / totalServings : 0,
+      recipes: recipesWithPct,
+      topIngredients,
+      trendBuckets,
+      recipeSeries,
+    };
+  }
+
+  async getRecipeDetail(
+    locationId: string,
+    recipeId: string,
+    fromDate: Date,
+    toDate: Date
+  ) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        inventory_item_id: string;
+        ingredient_name: string;
+        uom: string;
+        quantity_per_serving: string | null;
+        total_qty: string;
+        total_cost: string;
+        servings: string;
+      }>
+    >(Prisma.sql`
+      WITH recipe_events AS (
+        SELECT
+          ce.id AS event_id,
+          ce.sales_line_id,
+          ce.inventory_item_id,
+          ce.quantity_delta,
+          ce.event_ts
+        FROM consumption_events ce
+        JOIN sales_lines sl ON sl.id = ce.sales_line_id
+        JOIN pos_item_mappings pim
+          ON pim.location_id = ce.location_id
+          AND pim.source_system = sl.source_system
+          AND pim.pos_item_id = sl.pos_item_id
+          AND pim.mode = 'recipe'
+          AND pim.recipe_id = ${recipeId}::uuid
+          AND pim.active = true
+          AND pim.effective_from_ts <= ce.event_ts
+          AND (pim.effective_to_ts IS NULL OR pim.effective_to_ts > ce.event_ts)
+        WHERE ce.location_id = ${locationId}::uuid
+          AND ce.event_type = 'pos_sale'
+          AND ce.event_ts >= ${fromDate}
+          AND ce.event_ts < ${toDate}
+          AND ce.reversal_of_event_id IS NULL
+      )
+      SELECT
+        re.inventory_item_id,
+        i.name AS ingredient_name,
+        ri.uom,
+        ri.quantity::text AS quantity_per_serving,
+        SUM(ABS(re.quantity_delta))::text AS total_qty,
+        SUM(ABS(re.quantity_delta) * COALESCE(ph.unit_cost, 0))::text AS total_cost,
+        COUNT(DISTINCT re.sales_line_id)::text AS servings
+      FROM recipe_events re
+      JOIN inventory_items i ON i.id = re.inventory_item_id
+      LEFT JOIN recipe_ingredients ri
+        ON ri.recipe_id = ${recipeId}::uuid
+        AND ri.inventory_item_id = re.inventory_item_id
+      LEFT JOIN LATERAL (
+        SELECT ph2.unit_cost
+        FROM price_history ph2
+        WHERE ph2.inventory_item_id = re.inventory_item_id
+          AND ph2.effective_from_ts <= re.event_ts
+          AND (ph2.effective_to_ts IS NULL OR ph2.effective_to_ts > re.event_ts)
+        ORDER BY ph2.effective_from_ts DESC
+        LIMIT 1
+      ) ph ON true
+      GROUP BY re.inventory_item_id, i.name, ri.uom, ri.quantity
+      ORDER BY total_cost DESC
+    `);
+
+    const totalRecipeCost = rows.reduce((s, r) => s + Number(r.total_cost), 0);
+
+    return {
+      ingredients: rows.map((row) => {
+        const totalCost = Number(row.total_cost);
+        const totalQty = Number(row.total_qty);
+        const servings = Number(row.servings);
+        return {
+          inventoryItemId: row.inventory_item_id,
+          ingredientName: row.ingredient_name,
+          uom: row.uom ?? "units",
+          quantityPerServing: row.quantity_per_serving != null ? Number(row.quantity_per_serving) : null,
+          totalQty,
+          unitCost: totalQty > 0 ? totalCost / totalQty : 0,
+          totalCost,
+          pctOfRecipeCost: totalRecipeCost > 0 ? (totalCost / totalRecipeCost) * 100 : 0,
+          servings,
+        };
+      }),
+    };
+  }
+
   async getBusinessRollup(businessId: string, asOfDate?: Date) {
     const locations = await this.prisma.location.findMany({
       where: { businessId },

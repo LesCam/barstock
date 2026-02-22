@@ -5,15 +5,16 @@ import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, AreaChart, Area, Legend,
 } from "recharts";
 
-type ActiveTab = "variance" | "cogs" | "usage" | "patterns" | "staff";
+type ActiveTab = "variance" | "cogs" | "usage" | "patterns" | "staff" | "recipes";
 type VarianceSortKey = "itemName" | "categoryName" | "variance" | "variancePercent" | "valueImpact";
 type UsageSortKey = "name" | "categoryName" | "quantityUsed" | "unitCost" | "totalCost";
 type PatternSortKey = "itemName" | "categoryName" | "sessionsAppeared" | "avgVariance" | "totalEstimatedLoss" | "trend";
 type StaffSortKey = "displayName" | "sessionsCounted" | "linesCounted" | "accuracyRate" | "avgVarianceMagnitude" | "manualEntryRate" | "trend";
 type SessionSortKey = "startedTs" | "durationMinutes" | "totalLines" | "itemsPerHour" | "varianceRate" | "manualEntryRate" | "participantCount";
+type RecipeSortKey = "recipeName" | "recipeCategory" | "totalServings" | "totalCost" | "avgCostPerServing" | "pctOfTotalCost";
 type SortDir = "asc" | "desc";
 type HeatmapCell = { dayOfWeek: number; hour: number; totalVariance: number; eventCount: number };
 
@@ -124,6 +125,11 @@ export default function ReportsPage() {
   const [staffSortDir, setStaffSortDir] = useState<SortDir>("asc");
   const [sessionSortKey, setSessionSortKey] = useState<SessionSortKey>("startedTs");
   const [sessionSortDir, setSessionSortDir] = useState<SortDir>("desc");
+  const [recipeSortKey, setRecipeSortKey] = useState<RecipeSortKey>("totalCost");
+  const [recipeSortDir, setRecipeSortDir] = useState<SortDir>("desc");
+  const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
+  const [recipeGranularity, setRecipeGranularity] = useState<"day" | "week" | "month">("day");
+  const [recipeGranularityOverride, setRecipeGranularityOverride] = useState(false);
 
   const effectiveEod = eodTime ?? "23:59";
 
@@ -197,6 +203,63 @@ export default function ReportsPage() {
       toDate: toEndOfDay(dateRange.to, effectiveEod),
     },
     { enabled: !!locationId && activeTab === "staff" }
+  );
+
+  // --- Usage Over Time ---
+  const [granularity, setGranularity] = useState<"day" | "week" | "month">("day");
+  const [granularityOverride, setGranularityOverride] = useState(false);
+  const [usageCategoryFilter, setUsageCategoryFilter] = useState<string>("");
+
+  // Auto-detect granularity when date range changes
+  const smartGranularity = useMemo(() => {
+    const from = new Date(dateRange.from);
+    const to = new Date(dateRange.to);
+    const days = Math.ceil((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
+    if (days <= 14) return "day" as const;
+    if (days <= 90) return "week" as const;
+    return "month" as const;
+  }, [dateRange.from, dateRange.to]);
+
+  // Apply smart default unless user has manually overridden
+  const effectiveGranularity = granularityOverride ? granularity : smartGranularity;
+
+  const { data: usageOverTime } = trpc.reports.usageOverTime.useQuery(
+    {
+      locationId: locationId!,
+      fromDate: new Date(dateRange.from),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
+      granularity: effectiveGranularity,
+      categoryId: usageCategoryFilter || undefined,
+    },
+    { enabled: !!locationId && activeTab === "usage" }
+  );
+
+  const { data: categories } = trpc.itemCategories.list.useQuery(
+    { businessId: businessId!, activeOnly: true },
+    { enabled: !!businessId && activeTab === "usage" }
+  );
+
+  // --- Recipe Analytics ---
+  const effectiveRecipeGranularity = recipeGranularityOverride ? recipeGranularity : smartGranularity;
+
+  const { data: recipeAnalytics } = trpc.reports.recipeAnalytics.useQuery(
+    {
+      locationId: locationId!,
+      fromDate: new Date(dateRange.from),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
+      granularity: effectiveRecipeGranularity,
+    },
+    { enabled: !!locationId && activeTab === "recipes" }
+  );
+
+  const { data: recipeDetail } = trpc.reports.recipeDetail.useQuery(
+    {
+      locationId: locationId!,
+      recipeId: expandedRecipeId!,
+      fromDate: new Date(dateRange.from),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
+    },
+    { enabled: !!locationId && !!expandedRecipeId && activeTab === "recipes" }
   );
 
   // --- Variance sorting ---
@@ -437,12 +500,153 @@ export default function ReportsPage() {
     );
   }
 
+  // --- Recipe sorting ---
+  function toggleRecipeSort(key: RecipeSortKey) {
+    if (recipeSortKey === key) {
+      setRecipeSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setRecipeSortKey(key);
+      setRecipeSortDir("desc");
+    }
+  }
+
+  const sortedRecipes = useMemo(() => {
+    if (!recipeAnalytics?.recipes) return [];
+    const lc = filter.toLowerCase();
+    const filtered = recipeAnalytics.recipes.filter(
+      (r) =>
+        r.recipeName.toLowerCase().includes(lc) ||
+        (r.recipeCategory ?? "").toLowerCase().includes(lc)
+    );
+    return [...filtered].sort((a, b) => {
+      const aVal = a[recipeSortKey];
+      const bVal = b[recipeSortKey];
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        const cmp = aVal.toLowerCase().localeCompare(bVal.toLowerCase());
+        return recipeSortDir === "asc" ? cmp : -cmp;
+      }
+      const aNum = (aVal as number) ?? 0;
+      const bNum = (bVal as number) ?? 0;
+      return recipeSortDir === "asc" ? aNum - bNum : bNum - aNum;
+    });
+  }, [recipeAnalytics, filter, recipeSortKey, recipeSortDir]);
+
+  function RecipeSortHeader({ label, field, className }: { label: string; field: RecipeSortKey; className?: string }) {
+    const active = recipeSortKey === field;
+    return (
+      <th
+        className={`cursor-pointer select-none px-4 py-3 hover:text-[#EAF0FF]/80 ${className ?? ""}`}
+        onClick={() => toggleRecipeSort(field)}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}
+          <span className={`text-xs ${active ? "text-[#E9B44C]" : "text-[#EAF0FF]/30"}`}>
+            {active ? (recipeSortDir === "asc" ? "\u25B2" : "\u25BC") : "\u25B2"}
+          </span>
+        </span>
+      </th>
+    );
+  }
+
+  // --- Recipe chart data ---
+  const recipeCostChartData = useMemo(() => {
+    if (!recipeAnalytics?.trendBuckets) return [];
+    return recipeAnalytics.trendBuckets.map((b) => {
+      const d = new Date(b.period);
+      let label: string;
+      if (effectiveRecipeGranularity === "day") {
+        label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      } else if (effectiveRecipeGranularity === "week") {
+        label = `Wk ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+      } else {
+        label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      }
+      return { ...b, label };
+    });
+  }, [recipeAnalytics, effectiveRecipeGranularity]);
+
+  const recipeAreaChartData = useMemo(() => {
+    if (!recipeAnalytics?.trendBuckets || !recipeAnalytics?.recipeSeries) return [];
+    return recipeAnalytics.trendBuckets.map((b, i) => {
+      const d = new Date(b.period);
+      let label: string;
+      if (effectiveRecipeGranularity === "day") {
+        label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      } else if (effectiveRecipeGranularity === "week") {
+        label = `Wk ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+      } else {
+        label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      }
+      const point: Record<string, string | number> = { label };
+      for (const series of recipeAnalytics.recipeSeries) {
+        point[series.recipeName] = series.dataPoints[i]?.cost ?? 0;
+      }
+      return point;
+    });
+  }, [recipeAnalytics, effectiveRecipeGranularity]);
+
+  const topRecipesByBarChart = useMemo(() => {
+    if (!recipeAnalytics?.recipes) return [];
+    return recipeAnalytics.recipes.slice(0, 10).map((r) => ({
+      name: r.recipeName.length > 20 ? r.recipeName.slice(0, 18) + "..." : r.recipeName,
+      cost: r.totalCost,
+    }));
+  }, [recipeAnalytics]);
+
+  const topIngredientsPieData = useMemo(() => {
+    if (!recipeAnalytics?.topIngredients) return [];
+    return recipeAnalytics.topIngredients.map((ing) => ({
+      name: ing.ingredientName.length > 20 ? ing.ingredientName.slice(0, 18) + "..." : ing.ingredientName,
+      value: ing.totalCost,
+    }));
+  }, [recipeAnalytics]);
+
+  // --- Usage Over Time chart data ---
+  const AREA_COLORS = ["#E9B44C", "#4CAF50", "#2196F3", "#FF5722", "#9C27B0", "#00BCD4", "#FF9800", "#607D8B", "#E91E63", "#8BC34A", "#795548"];
+
+  const usageChartData = useMemo(() => {
+    if (!usageOverTime?.buckets) return [];
+    return usageOverTime.buckets.map((b) => {
+      const d = new Date(b.period);
+      let label: string;
+      if (effectiveGranularity === "day") {
+        label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      } else if (effectiveGranularity === "week") {
+        label = `Wk ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+      } else {
+        label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      }
+      return { ...b, label };
+    });
+  }, [usageOverTime, effectiveGranularity]);
+
+  const areaChartData = useMemo(() => {
+    if (!usageOverTime?.buckets || !usageOverTime?.itemSeries) return [];
+    return usageOverTime.buckets.map((b, i) => {
+      const d = new Date(b.period);
+      let label: string;
+      if (effectiveGranularity === "day") {
+        label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      } else if (effectiveGranularity === "week") {
+        label = `Wk ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+      } else {
+        label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      }
+      const point: Record<string, string | number> = { label };
+      for (const series of usageOverTime.itemSeries) {
+        point[series.itemName] = series.dataPoints[i]?.cost ?? 0;
+      }
+      return point;
+    });
+  }, [usageOverTime, effectiveGranularity]);
+
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: "variance", label: "Variance" },
     { key: "cogs", label: "COGS" },
     { key: "usage", label: "Usage" },
     { key: "patterns", label: "Patterns" },
     { key: "staff", label: "Staff" },
+    { key: "recipes", label: "Recipes" },
   ];
 
   return (
@@ -816,6 +1020,89 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* Usage Over Time Charts */}
+          <div className="mb-8">
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <h3 className="text-base font-semibold">Usage Over Time</h3>
+              <div className="flex items-center gap-1 rounded-lg bg-[#0B1623] p-0.5">
+                {(["day", "week", "month"] as const).map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => { setGranularity(g); setGranularityOverride(true); }}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                      effectiveGranularity === g
+                        ? "bg-[#16283F] text-[#E9B44C]"
+                        : "text-[#EAF0FF]/60 hover:text-[#EAF0FF]/80"
+                    }`}
+                  >
+                    {g.charAt(0).toUpperCase() + g.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <select
+                value={usageCategoryFilter}
+                onChange={(e) => setUsageCategoryFilter(e.target.value)}
+                className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-xs text-[#EAF0FF]"
+              >
+                <option value="">All Categories</option>
+                {(categories ?? []).map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Total Usage Trend (Bar Chart) */}
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              {usageChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={usageChartData}>
+                    <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                    <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                      formatter={(value) => [`$${Number(value ?? 0).toFixed(2)}`, "Cost"]}
+                      labelFormatter={(label) => label}
+                    />
+                    <Bar dataKey="totalCost" fill="#E9B44C" radius={[4, 4, 0, 0]} name="Total Cost" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No usage data for this period.</p>
+              )}
+            </div>
+
+            {/* Top Items Breakdown (Stacked Area Chart) */}
+            {areaChartData.length > 0 && usageOverTime?.itemSeries && usageOverTime.itemSeries.length > 0 && (
+              <div className="mt-4">
+                <h4 className="mb-2 text-sm font-semibold text-[#EAF0FF]/80">Top Items Breakdown</h4>
+                <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                  <ResponsiveContainer width="100%" height={320}>
+                    <AreaChart data={areaChartData}>
+                      <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                      <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                        formatter={(value, name) => [`$${Number(value ?? 0).toFixed(2)}`, name]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11, color: "#EAF0FF" }} />
+                      {usageOverTime.itemSeries.map((series, i) => (
+                        <Area
+                          key={series.itemId}
+                          type="monotone"
+                          dataKey={series.itemName}
+                          stackId="1"
+                          fill={AREA_COLORS[i % AREA_COLORS.length]}
+                          stroke={AREA_COLORS[i % AREA_COLORS.length]}
+                          fillOpacity={0.6}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+
           <input
             type="text"
             placeholder="Search items..."
@@ -1095,6 +1382,255 @@ export default function ReportsPage() {
                   <tr>
                     <td colSpan={7} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                       {filter ? "No items match your search." : "Not enough session data for pattern analysis."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ── Recipes tab ── */}
+      {activeTab === "recipes" && (
+        <section>
+          <h2 className="mb-4 text-lg font-semibold">Recipe Analytics</h2>
+
+          {/* Stat cards */}
+          <div className="mb-6 grid gap-4 sm:grid-cols-4">
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Recipes Used</p>
+              <p className="text-2xl font-bold">{recipeAnalytics?.totalRecipesUsed ?? 0}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Total Servings</p>
+              <p className="text-2xl font-bold">{recipeAnalytics?.totalServings ?? 0}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <p className="text-sm text-[#EAF0FF]/60">Total Recipe Cost</p>
+              <p className="text-2xl font-bold">${(recipeAnalytics?.totalRecipeCost ?? 0).toFixed(2)}</p>
+            </div>
+            <div className="rounded-lg border border-[#E9B44C]/30 bg-[#16283F] p-4">
+              <p className="text-sm text-[#E9B44C]">Avg Cost/Serving</p>
+              <p className="text-2xl font-bold text-[#E9B44C]">${(recipeAnalytics?.avgCostPerServing ?? 0).toFixed(2)}</p>
+            </div>
+          </div>
+
+          {/* Granularity selector */}
+          <div className="mb-4 flex items-center gap-3">
+            <h3 className="text-base font-semibold">Recipe Cost Trend</h3>
+            <div className="flex items-center gap-1 rounded-lg bg-[#0B1623] p-0.5">
+              {(["day", "week", "month"] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => { setRecipeGranularity(g); setRecipeGranularityOverride(true); }}
+                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    effectiveRecipeGranularity === g
+                      ? "bg-[#16283F] text-[#E9B44C]"
+                      : "text-[#EAF0FF]/60 hover:text-[#EAF0FF]/80"
+                  }`}
+                >
+                  {g.charAt(0).toUpperCase() + g.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Recipe Cost Trend — BarChart */}
+          <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+            {recipeCostChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={recipeCostChartData}>
+                  <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                  <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                    formatter={(value) => [`$${Number(value ?? 0).toFixed(2)}`, "Cost"]}
+                  />
+                  <Bar dataKey="totalCost" fill="#E9B44C" radius={[4, 4, 0, 0]} name="Total Cost" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No recipe cost data for this period.</p>
+            )}
+          </div>
+
+          {/* Top Recipes Breakdown — Stacked AreaChart */}
+          {recipeAreaChartData.length > 0 && recipeAnalytics?.recipeSeries && recipeAnalytics.recipeSeries.length > 0 && (
+            <div className="mt-4">
+              <h4 className="mb-2 text-sm font-semibold text-[#EAF0FF]/80">Top Recipes Breakdown</h4>
+              <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                <ResponsiveContainer width="100%" height={320}>
+                  <AreaChart data={recipeAreaChartData}>
+                    <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                    <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                      formatter={(value, name) => [`$${Number(value ?? 0).toFixed(2)}`, name]}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, color: "#EAF0FF" }} />
+                    {recipeAnalytics.recipeSeries.map((series, i) => (
+                      <Area
+                        key={series.recipeId}
+                        type="monotone"
+                        dataKey={series.recipeName}
+                        stackId="1"
+                        fill={AREA_COLORS[i % AREA_COLORS.length]}
+                        stroke={AREA_COLORS[i % AREA_COLORS.length]}
+                        fillOpacity={0.6}
+                      />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Side-by-side: Top Recipes Bar + Top Ingredients Pie */}
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            {/* Horizontal Bar — Top 10 recipes by cost */}
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-[#EAF0FF]/80">Top Recipes by Cost</h4>
+              <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                {topRecipesByBarChart.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={topRecipesByBarChart} layout="vertical">
+                      <XAxis type="number" tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                      <YAxis type="category" dataKey="name" width={140} tick={{ fill: "#EAF0FF", fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                        formatter={(value) => [`$${Number(value ?? 0).toFixed(2)}`, "Total Cost"]}
+                      />
+                      <Bar dataKey="cost" fill="#E9B44C" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No recipe data.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Pie — Top 10 ingredients by cost */}
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-[#EAF0FF]/80">Top Ingredients by Cost</h4>
+              <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                {topIngredientsPieData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={topIngredientsPieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                      >
+                        {topIngredientsPieData.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                        formatter={(value) => [`$${Number(value ?? 0).toFixed(2)}`, "Cost"]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No ingredient data.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Search filter */}
+          <input
+            type="text"
+            placeholder="Search recipes..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="mt-6 mb-4 w-full max-w-sm rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+          />
+
+          {/* Sortable recipe table with expandable rows */}
+          <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                <tr>
+                  <th className="w-8 px-2 py-3" />
+                  <RecipeSortHeader label="Recipe" field="recipeName" />
+                  <RecipeSortHeader label="Category" field="recipeCategory" />
+                  <RecipeSortHeader label="Servings" field="totalServings" />
+                  <RecipeSortHeader label="Total Cost" field="totalCost" />
+                  <RecipeSortHeader label="Avg Cost/Serving" field="avgCostPerServing" />
+                  <RecipeSortHeader label="% of Total" field="pctOfTotalCost" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {sortedRecipes.map((recipe) => (
+                  <>
+                    <tr
+                      key={recipe.recipeId}
+                      className="cursor-pointer hover:bg-[#0B1623]/60"
+                      onClick={() => setExpandedRecipeId(expandedRecipeId === recipe.recipeId ? null : recipe.recipeId)}
+                    >
+                      <td className="px-2 py-3 text-center text-[#EAF0FF]/40">
+                        {expandedRecipeId === recipe.recipeId ? "\u25BC" : "\u25B6"}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{recipe.recipeName}</td>
+                      <td className="px-4 py-3">{recipe.recipeCategory ?? "—"}</td>
+                      <td className="px-4 py-3">{recipe.totalServings}</td>
+                      <td className="px-4 py-3">${recipe.totalCost.toFixed(2)}</td>
+                      <td className="px-4 py-3">${recipe.avgCostPerServing.toFixed(2)}</td>
+                      <td className="px-4 py-3">{recipe.pctOfTotalCost.toFixed(1)}%</td>
+                    </tr>
+                    {expandedRecipeId === recipe.recipeId && (
+                      <tr key={`${recipe.recipeId}-detail`}>
+                        <td colSpan={7} className="bg-[#0B1623]/40 px-6 py-3">
+                          {recipeDetail ? (
+                            recipeDetail.ingredients.length > 0 ? (
+                              <table className="w-full text-left text-xs">
+                                <thead className="text-[#EAF0FF]/50">
+                                  <tr>
+                                    <th className="px-3 py-2">Ingredient</th>
+                                    <th className="px-3 py-2">Qty/Serving</th>
+                                    <th className="px-3 py-2">UOM</th>
+                                    <th className="px-3 py-2">Total Qty</th>
+                                    <th className="px-3 py-2">Unit Cost</th>
+                                    <th className="px-3 py-2">Total Cost</th>
+                                    <th className="px-3 py-2">% of Recipe</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                  {recipeDetail.ingredients.map((ing) => (
+                                    <tr key={ing.inventoryItemId} className="text-[#EAF0FF]/80">
+                                      <td className="px-3 py-2 font-medium">{ing.ingredientName}</td>
+                                      <td className="px-3 py-2">{ing.quantityPerServing != null ? ing.quantityPerServing.toFixed(2) : "—"}</td>
+                                      <td className="px-3 py-2">{ing.uom}</td>
+                                      <td className="px-3 py-2">{ing.totalQty.toFixed(2)}</td>
+                                      <td className="px-3 py-2">${ing.unitCost.toFixed(2)}</td>
+                                      <td className="px-3 py-2">${ing.totalCost.toFixed(2)}</td>
+                                      <td className="px-3 py-2">{ing.pctOfRecipeCost.toFixed(1)}%</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : (
+                              <p className="py-3 text-center text-xs text-[#EAF0FF]/40">No ingredient data for this recipe in the selected period.</p>
+                            )
+                          ) : (
+                            <p className="py-3 text-center text-xs text-[#EAF0FF]/40">Loading ingredient breakdown...</p>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                ))}
+                {sortedRecipes.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                      {filter ? "No recipes match your search." : "No recipe depletion data for this period."}
                     </td>
                   </tr>
                 )}

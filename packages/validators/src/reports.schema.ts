@@ -71,3 +71,30 @@ export const staffAccountabilityQuerySchema = z.object({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
 });
+
+export const usageOverTimeQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+  granularity: z.enum(["day", "week", "month"]).default("day"),
+  categoryId: z.string().uuid().optional(),
+});
+
+export type UsageOverTimeQueryInput = z.infer<typeof usageOverTimeQuerySchema>;
+
+export const recipeAnalyticsQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+  granularity: z.enum(["day", "week", "month"]).default("day"),
+});
+
+export const recipeDetailQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  recipeId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+});
+
+export type RecipeAnalyticsQueryInput = z.infer<typeof recipeAnalyticsQuerySchema>;
+export type RecipeDetailQueryInput = z.infer<typeof recipeDetailQuerySchema>;
