@@ -251,6 +251,124 @@ export class SessionService {
     };
   }
 
+  /**
+   * Claim a sub-area for exclusive counting within a session.
+   * Only one active participant can claim a given sub-area at a time.
+   * Idle participants (>2min) can be taken over.
+   */
+  async claimSubArea(
+    sessionId: string,
+    subAreaId: string,
+    userId: string
+  ): Promise<{ takenOver?: { userId: string; displayName: string } }> {
+    const session = await this.prisma.inventorySession.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    if (session.endedTs) throw new Error("Cannot claim area in a closed session");
+
+    // Check if another participant already has this sub-area
+    const existingClaim = await this.prisma.sessionParticipant.findFirst({
+      where: {
+        sessionId,
+        currentSubAreaId: subAreaId,
+        userId: { not: userId },
+      },
+      include: {
+        user: { select: { id: true, email: true, firstName: true } },
+      },
+    });
+
+    let takenOver: { userId: string; displayName: string } | undefined;
+
+    if (existingClaim) {
+      const idleMs =
+        Date.now() - new Date(existingClaim.lastActiveAt).getTime();
+      const isIdle = idleMs > 2 * 60 * 1000;
+
+      if (!isIdle) {
+        const name =
+          existingClaim.user.firstName ||
+          existingClaim.user.email.split("@")[0];
+        throw new Error(`Area already claimed by ${name}`);
+      }
+
+      // Auto-release idle user's claim
+      await this.prisma.sessionParticipant.update({
+        where: {
+          sessionId_userId: {
+            sessionId,
+            userId: existingClaim.userId,
+          },
+        },
+        data: { currentSubAreaId: null },
+      });
+
+      takenOver = {
+        userId: existingClaim.userId,
+        displayName:
+          existingClaim.user.firstName ||
+          existingClaim.user.email.split("@")[0],
+      };
+    }
+
+    // Set claim
+    await this.prisma.sessionParticipant.update({
+      where: {
+        sessionId_userId: { sessionId, userId },
+      },
+      data: {
+        currentSubAreaId: subAreaId,
+        lastActiveAt: new Date(),
+      },
+    });
+
+    return { takenOver };
+  }
+
+  /**
+   * Release a previously claimed sub-area.
+   */
+  async releaseSubArea(sessionId: string, userId: string): Promise<void> {
+    await this.prisma.sessionParticipant.update({
+      where: {
+        sessionId_userId: { sessionId, userId },
+      },
+      data: { currentSubAreaId: null },
+    });
+  }
+
+  /**
+   * Check sub-area exclusivity for heartbeat updates.
+   * Returns the name of the active claimer if someone else holds the area.
+   */
+  async checkSubAreaExclusivity(
+    sessionId: string,
+    subAreaId: string,
+    userId: string
+  ): Promise<string | null> {
+    const existingClaim = await this.prisma.sessionParticipant.findFirst({
+      where: {
+        sessionId,
+        currentSubAreaId: subAreaId,
+        userId: { not: userId },
+      },
+      include: {
+        user: { select: { firstName: true, email: true } },
+      },
+    });
+
+    if (!existingClaim) return null;
+
+    const idleMs =
+      Date.now() - new Date(existingClaim.lastActiveAt).getTime();
+    if (idleMs > 2 * 60 * 1000) return null; // Idle — allow
+
+    return (
+      existingClaim.user.firstName ||
+      existingClaim.user.email.split("@")[0]
+    );
+  }
+
   async calculateTheoreticalOnHand(
     itemId: string,
     asOf: Date

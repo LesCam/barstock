@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useRef, useMemo } from "react";
+import { use, useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
@@ -88,16 +88,16 @@ export default function SessionDetailPage({
   const { selectedLocationId: locationId } = useLocation();
   const utils = trpc.useUtils();
 
-  // --- Data fetching ---
+  // --- Data fetching (SSE handles live updates; 60s fallback poll) ---
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
     { id },
-    { refetchInterval: 15_000 }
+    { refetchInterval: 60_000 }
   );
 
-  // Poll participants every 15s for open sessions
+  // Poll participants (60s fallback; SSE triggers invalidation)
   const { data: participants } = trpc.sessions.listParticipants.useQuery(
     { sessionId: id },
-    { refetchInterval: 15_000 }
+    { refetchInterval: 60_000 }
   );
 
   const { data: inventoryItems } = trpc.inventory.list.useQuery(
@@ -151,6 +151,54 @@ export default function SessionDetailPage({
     Array<{ inventoryItemId: string; name: string; subAreaName: string; categoryName: string | null }>
   >([]);
 
+  // --- Duplicate warning state ---
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+
+  // --- SSE listener for real-time session updates ---
+  useEffect(() => {
+    if (!session || session.endedTs) return;
+    const es = new EventSource(`/api/sessions/${id}/stream`);
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "heartbeat") return;
+        if (data.type === "line_added" || data.type === "line_deleted") {
+          utils.sessions.getById.invalidate({ id });
+          utils.sessions.previewClose.invalidate({ sessionId: id });
+        }
+        if (data.type === "participant_joined" || data.type === "participant_left" ||
+            data.type === "area_claimed" || data.type === "area_released") {
+          utils.sessions.listParticipants.invalidate({ sessionId: id });
+        }
+        if (data.type === "session_closed") {
+          utils.sessions.getById.invalidate({ id });
+          utils.sessions.list.invalidate();
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    };
+    return () => es.close();
+  }, [id, session?.endedTs, utils]);
+
+  // --- Claim/Release mutations ---
+  const claimSubAreaMut = trpc.sessions.claimSubArea.useMutation({
+    onSuccess: (result) => {
+      utils.sessions.listParticipants.invalidate({ sessionId: id });
+      if (result.takenOver) {
+        setDuplicateWarning(`Took over area from ${result.takenOver.displayName} (idle)`);
+        setTimeout(() => setDuplicateWarning(null), 4000);
+      }
+    },
+  });
+
+  const releaseSubAreaMut = trpc.sessions.releaseSubArea.useMutation({
+    onSuccess: () => {
+      utils.sessions.listParticipants.invalidate({ sessionId: id });
+      setSelectedSubAreaId("");
+    },
+  });
+
   // --- Mutations ---
   const updateLineMut = trpc.sessions.updateLine.useMutation({
     onSuccess: () => utils.sessions.getById.invalidate({ id }),
@@ -161,8 +209,13 @@ export default function SessionDetailPage({
   });
 
   const addLineMut = trpc.sessions.addLine.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
       utils.sessions.getById.invalidate({ id });
+      // Check for duplicate warning
+      if ((result as any).warning) {
+        setDuplicateWarning((result as any).warning);
+        setTimeout(() => setDuplicateWarning(null), 5000);
+      }
       setSelectedItemId("");
       setCountInput("");
       setItemSearch("");
@@ -202,6 +255,22 @@ export default function SessionDetailPage({
         (item.category?.name ?? "").toLowerCase().includes(search)
     );
   }, [inventoryItems, itemSearch]);
+
+  // --- Detect duplicate items (counted by multiple users) ---
+  const duplicateItemIds = useMemo(() => {
+    if (!session?.lines) return new Set<string>();
+    const itemUserMap = new Map<string, Set<string>>();
+    for (const line of session.lines) {
+      const users = itemUserMap.get(line.inventoryItemId) ?? new Set();
+      if (line.countedBy) users.add(line.countedBy);
+      itemUserMap.set(line.inventoryItemId, users);
+    }
+    const dupes = new Set<string>();
+    for (const [itemId, users] of itemUserMap) {
+      if (users.size > 1) dupes.add(itemId);
+    }
+    return dupes;
+  }, [session?.lines]);
 
   // --- Item name lookup for variance dialog ---
   function getItemName(itemId: string): string {
@@ -352,6 +421,13 @@ export default function SessionDetailPage({
         </div>
       )}
 
+      {/* Duplicate / takeover warning banner */}
+      {duplicateWarning && (
+        <div className="mb-4 rounded-lg border border-[#E9B44C]/30 bg-[#E9B44C]/10 p-3 text-sm text-[#E9B44C]">
+          {duplicateWarning}
+        </div>
+      )}
+
       {/* Close result banner */}
       {closeResult && (
         <div className="mb-4 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-300">
@@ -404,7 +480,14 @@ export default function SessionDetailPage({
                 return (
                 <tr key={line.id} className="hover:bg-white/5">
                   <td className="px-4 py-3">
-                    <div>{line.inventoryItem.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      {line.inventoryItem.name}
+                      {duplicateItemIds.has(line.inventoryItemId) && (
+                        <span className="rounded bg-[#E9B44C]/20 px-1.5 py-0.5 text-[10px] font-medium text-[#E9B44C]" title="Counted by multiple users">
+                          2x
+                        </span>
+                      )}
+                    </div>
                     {hintParts.length > 0 && (
                       <div className="mt-0.5 text-xs text-[#EAF0FF]/30">
                         {hintParts.join(" · ")}
@@ -534,23 +617,68 @@ export default function SessionDetailPage({
               )}
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Area</label>
-              <select
-                value={selectedSubAreaId}
-                onChange={(e) => setSelectedSubAreaId(e.target.value)}
-                className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-2 text-sm text-[#EAF0FF]"
-              >
-                <option value="">No area</option>
-                {barAreas?.map((area) => (
-                  <optgroup key={area.id} label={area.name}>
-                    {area.subAreas.map((sa: { id: string; name: string }) => (
-                      <option key={sa.id} value={sa.id}>
-                        {sa.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Area (Claim to Count)</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedSubAreaId}
+                  onChange={(e) => {
+                    const newId = e.target.value;
+                    if (newId) {
+                      claimSubAreaMut.mutate(
+                        { sessionId: id, subAreaId: newId },
+                        {
+                          onSuccess: () => setSelectedSubAreaId(newId),
+                          onError: (err) => {
+                            setDuplicateWarning(err.message);
+                            setTimeout(() => setDuplicateWarning(null), 4000);
+                          },
+                        }
+                      );
+                    } else {
+                      // Release current claim
+                      if (selectedSubAreaId) {
+                        releaseSubAreaMut.mutate({ sessionId: id });
+                      }
+                      setSelectedSubAreaId("");
+                    }
+                  }}
+                  className="rounded-md border border-white/10 bg-[#0B1623] px-2 py-2 text-sm text-[#EAF0FF]"
+                >
+                  <option value="">No area</option>
+                  {barAreas?.map((area) => (
+                    <optgroup key={area.id} label={area.name}>
+                      {area.subAreas.map((sa: { id: string; name: string }) => {
+                        const claimer = participants?.find(
+                          (p) => p.subArea?.id === sa.id && p.userId !== user?.id
+                        );
+                        const isIdle = claimer
+                          ? Date.now() - new Date(claimer.lastActiveAt).getTime() > 2 * 60 * 1000
+                          : false;
+                        return (
+                          <option key={sa.id} value={sa.id}>
+                            {sa.name}
+                            {claimer
+                              ? ` [${claimer.user.firstName || claimer.user.email.split("@")[0]}${isIdle ? " - idle" : ""}]`
+                              : ""}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  ))}
+                </select>
+                {selectedSubAreaId && (
+                  <button
+                    type="button"
+                    onClick={() => releaseSubAreaMut.mutate({ sessionId: id })}
+                    className="rounded border border-white/10 px-2 py-1.5 text-xs text-[#EAF0FF]/60 hover:bg-white/5"
+                  >
+                    Release
+                  </button>
+                )}
+              </div>
+              {claimSubAreaMut.error && (
+                <p className="mt-1 text-xs text-red-400">{claimSubAreaMut.error.message}</p>
+              )}
             </div>
             <div>
               <label className="mb-1 flex items-center gap-2 text-xs text-[#EAF0FF]/60">

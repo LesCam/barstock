@@ -110,12 +110,12 @@ export default function SessionDetailScreen() {
     };
   }, [sendHeartbeat]);
 
-  // Poll participants every 15s
+  // Poll participants every 10s (faster for claim visibility)
   const { data: participants } = trpc.sessions.listParticipants.useQuery(
     { sessionId: id! },
     {
       enabled: !!session && !session.endedTs,
-      refetchInterval: 15_000,
+      refetchInterval: 10_000,
     }
   );
 
@@ -248,8 +248,11 @@ export default function SessionDetailScreen() {
 
   // Quick empty: add line with 0 for an expected item
   const quickEmptyMutation = trpc.sessions.addLine.useMutation({
-    onSuccess() {
+    onSuccess(result) {
       utils.sessions.getById.invalidate({ id: id! });
+      if ((result as any).warning) {
+        Alert.alert("Already Counted", (result as any).warning);
+      }
     },
   });
 
@@ -350,34 +353,37 @@ export default function SessionDetailScreen() {
     }
   }
 
-  // Warn if another participant is already in this sub-area
-  function warnIfOccupied(subAreaId: string, onProceed: () => void) {
-    const othersHere = (participants ?? []).filter(
-      (p) => p.userId !== authUser?.userId && p.subArea?.id === subAreaId
-    );
-    if (othersHere.length > 0) {
-      const names = othersHere
-        .map((p) => p.user.firstName || p.user.email.split("@")[0])
-        .join(", ");
-      Alert.alert(
-        "Area In Use",
-        `${names} ${othersHere.length === 1 ? "is" : "are"} already counting here. Continue anyway?`,
-        [
-          { text: "Pick Another", style: "cancel" },
-          { text: "Continue", onPress: onProceed },
-        ]
-      );
-    } else {
-      onProceed();
-    }
+  // --- Claim/Release mutations ---
+  const claimSubAreaMut = trpc.sessions.claimSubArea.useMutation({
+    onSuccess: (result, variables) => {
+      setSelectedSubAreaId(variables.subAreaId);
+      utils.sessions.listParticipants.invalidate({ sessionId: id! });
+      if (result.takenOver) {
+        Alert.alert("Area Claimed", `Took over from ${result.takenOver.displayName} (idle)`);
+      }
+    },
+    onError: (err) => {
+      Alert.alert("Area Claimed", err.message);
+    },
+  });
+
+  const releaseSubAreaMut = trpc.sessions.releaseSubArea.useMutation({
+    onSuccess: () => {
+      setSelectedSubAreaId(null);
+      utils.sessions.listParticipants.invalidate({ sessionId: id! });
+    },
+  });
+
+  // Claim a sub-area (replaces warnIfOccupied)
+  function claimArea(subAreaId: string) {
+    claimSubAreaMut.mutate({ sessionId: id!, subAreaId });
   }
 
-  // When area changes, auto-select first sub-area
+  // When area changes, auto-select first sub-area via claim
   function handleAreaSelect(area: BarArea) {
     setSelectedAreaId(area.id);
     if (area.subAreas.length > 0) {
-      const firstSa = area.subAreas[0].id;
-      warnIfOccupied(firstSa, () => setSelectedSubAreaId(firstSa));
+      claimArea(area.subAreas[0].id);
     } else {
       setSelectedSubAreaId(null);
     }
@@ -765,7 +771,7 @@ export default function SessionDetailScreen() {
                         selectedSubAreaId === sa.id && styles.subAreaPillActive,
                         { overflow: "hidden" as const },
                       ]}
-                      onPress={() => warnIfOccupied(sa.id, () => setSelectedSubAreaId(sa.id))}
+                      onPress={() => claimArea(sa.id)}
                     >
                       {saProgress && saProgress.total > 0 && (
                         <View
@@ -814,9 +820,19 @@ export default function SessionDetailScreen() {
 
             {areaSelected && (
               <View style={styles.areaBanner}>
-                <Text style={styles.areaBannerText}>
-                  {fullLocationMode ? "Full Audit" : areaLabel}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={styles.areaBannerText}>
+                    {fullLocationMode ? "Full Audit" : areaLabel}
+                  </Text>
+                  {!fullLocationMode && selectedSubAreaId && (
+                    <TouchableOpacity
+                      onPress={() => releaseSubAreaMut.mutate({ sessionId: id! })}
+                      style={styles.releaseBtn}
+                    >
+                      <Text style={styles.releaseBtnText}>Release</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
                 {fullLocationMode && selectedSubArea && selectedArea && (
                   <Text style={styles.areaBannerSub}>
                     Counting in: {selectedArea.name} — {selectedSubArea.name}
@@ -1471,6 +1487,13 @@ const styles = StyleSheet.create({
   areaBannerText: { color: "#EAF0FF", fontSize: 14, fontWeight: "600" },
   areaBannerSub: { color: "#8899AA", fontSize: 12, marginTop: 2 },
   areaBannerProgress: { color: "#2BA8A0", fontSize: 12, fontWeight: "600", marginTop: 4 },
+  releaseBtn: {
+    backgroundColor: "#1E3550",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  releaseBtnText: { color: "#8899AA", fontSize: 11, fontWeight: "600" },
 
   // Count actions
   actions: { flexDirection: "row", gap: 10, marginBottom: 12 },

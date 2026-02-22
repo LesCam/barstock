@@ -1,8 +1,9 @@
 import { router, protectedProcedure, checkLocationRole } from "../trpc";
-import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema, sessionJoinSchema, sessionHeartbeatSchema } from "@barstock/validators";
+import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema, sessionJoinSchema, sessionHeartbeatSchema, claimSubAreaSchema, releaseSubAreaSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
 import { AuditService } from "../services/audit.service";
 import { AlertService } from "../services/alert.service";
+import { sessionEmitter } from "../lib/session-emitter";
 import { Role } from "@barstock/types";
 import type { VarianceReason } from "@barstock/types";
 import { z } from "zod";
@@ -98,11 +99,49 @@ export const sessionsRouter = router({
 
   addLine: protectedProcedure
     .input(sessionLineCreateSchema)
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.inventorySessionLine.create({
+    .mutation(async ({ ctx, input }) => {
+      // Check for duplicate: same item counted by a different user in this session
+      let warning: string | undefined;
+      const existing = await ctx.prisma.inventorySessionLine.findFirst({
+        where: {
+          sessionId: input.sessionId,
+          inventoryItemId: input.inventoryItemId,
+          countedBy: { not: ctx.user.userId },
+        },
+        include: {
+          countedByUser: { select: { firstName: true, email: true } },
+        },
+      });
+      if (existing?.countedByUser) {
+        const name =
+          existing.countedByUser.firstName ||
+          existing.countedByUser.email.split("@")[0];
+        warning = `Already counted by ${name}`;
+      }
+
+      const line = await ctx.prisma.inventorySessionLine.create({
         data: { ...input, countedBy: ctx.user.userId },
-      })
-    ),
+        include: {
+          inventoryItem: { select: { name: true } },
+        },
+      });
+
+      try {
+        sessionEmitter.notifySession(input.sessionId, {
+          type: "line_added",
+          payload: {
+            lineId: line.id,
+            itemName: line.inventoryItem.name,
+            countedBy: ctx.user.userId,
+            subAreaId: input.subAreaId ?? null,
+          },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+
+      return { ...line, warning };
+    }),
 
   updateLine: protectedProcedure
     .input(z.object({
@@ -120,9 +159,20 @@ export const sessionsRouter = router({
 
   deleteLine: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.inventorySessionLine.delete({ where: { id: input.id } })
-    ),
+    .mutation(async ({ ctx, input }) => {
+      const line = await ctx.prisma.inventorySessionLine.delete({
+        where: { id: input.id },
+      });
+      try {
+        sessionEmitter.notifySession(line.sessionId, {
+          type: "line_deleted",
+          payload: { lineId: line.id, itemId: line.inventoryItemId },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+      return line;
+    }),
 
   join: protectedProcedure
     .input(sessionJoinSchema)
@@ -133,7 +183,7 @@ export const sessionsRouter = router({
       });
       if (session.endedTs) throw new Error("Cannot join a closed session");
 
-      return ctx.prisma.sessionParticipant.upsert({
+      const participant = await ctx.prisma.sessionParticipant.upsert({
         where: {
           sessionId_userId: {
             sessionId: input.sessionId,
@@ -142,12 +192,60 @@ export const sessionsRouter = router({
         },
         update: { lastActiveAt: new Date() },
         create: { sessionId: input.sessionId, userId: ctx.user.userId },
+        include: {
+          user: { select: { firstName: true, email: true } },
+        },
       });
+
+      try {
+        const displayName =
+          participant.user.firstName ||
+          participant.user.email.split("@")[0];
+        sessionEmitter.notifySession(input.sessionId, {
+          type: "participant_joined",
+          payload: { userId: ctx.user.userId, displayName },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+
+      return participant;
     }),
 
   heartbeat: protectedProcedure
     .input(sessionHeartbeatSchema)
     .mutation(async ({ ctx, input }) => {
+      // If changing sub-area, check exclusivity
+      if (input.currentSubAreaId) {
+        const svc = new SessionService(ctx.prisma);
+        const claimer = await svc.checkSubAreaExclusivity(
+          input.sessionId,
+          input.currentSubAreaId,
+          ctx.user.userId
+        );
+        if (claimer) {
+          // Don't change sub-area — just update lastActiveAt
+          try {
+            return await ctx.prisma.sessionParticipant.update({
+              where: {
+                sessionId_userId: {
+                  sessionId: input.sessionId,
+                  userId: ctx.user.userId,
+                },
+              },
+              data: { lastActiveAt: new Date() },
+            });
+          } catch {
+            return ctx.prisma.sessionParticipant.create({
+              data: {
+                sessionId: input.sessionId,
+                userId: ctx.user.userId,
+              },
+            });
+          }
+        }
+      }
+
       try {
         return await ctx.prisma.sessionParticipant.update({
           where: {
@@ -249,7 +347,94 @@ export const sessionsRouter = router({
         }
       }
 
+      try {
+        sessionEmitter.notifySession(input.sessionId, {
+          type: "session_closed",
+          payload: { closedBy: ctx.user.userId },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+
       return result;
+    }),
+
+  claimSubArea: protectedProcedure
+    .input(claimSubAreaSchema)
+    .mutation(async ({ ctx, input }) => {
+      const svc = new SessionService(ctx.prisma);
+      const result = await svc.claimSubArea(
+        input.sessionId,
+        input.subAreaId,
+        ctx.user.userId
+      );
+
+      // Look up sub-area name and user display name for SSE payload
+      const [subArea, user] = await Promise.all([
+        ctx.prisma.subArea.findUnique({
+          where: { id: input.subAreaId },
+          select: { name: true },
+        }),
+        ctx.prisma.user.findUnique({
+          where: { id: ctx.user.userId },
+          select: { firstName: true, email: true },
+        }),
+      ]);
+
+      const displayName =
+        user?.firstName || user?.email.split("@")[0] || "Unknown";
+
+      try {
+        sessionEmitter.notifySession(input.sessionId, {
+          type: "area_claimed",
+          payload: {
+            userId: ctx.user.userId,
+            displayName,
+            subAreaId: input.subAreaId,
+            subAreaName: subArea?.name ?? "Unknown",
+          },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+
+      return {
+        claimed: true,
+        subAreaId: input.subAreaId,
+        takenOver: result.takenOver,
+      };
+    }),
+
+  releaseSubArea: protectedProcedure
+    .input(releaseSubAreaSchema)
+    .mutation(async ({ ctx, input }) => {
+      // Get current sub-area before releasing
+      const participant = await ctx.prisma.sessionParticipant.findUnique({
+        where: {
+          sessionId_userId: {
+            sessionId: input.sessionId,
+            userId: ctx.user.userId,
+          },
+        },
+        select: { currentSubAreaId: true },
+      });
+
+      const svc = new SessionService(ctx.prisma);
+      await svc.releaseSubArea(input.sessionId, ctx.user.userId);
+
+      try {
+        sessionEmitter.notifySession(input.sessionId, {
+          type: "area_released",
+          payload: {
+            userId: ctx.user.userId,
+            subAreaId: participant?.currentSubAreaId ?? null,
+          },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+
+      return { released: true };
     }),
 
   expectedItemsForArea: protectedProcedure

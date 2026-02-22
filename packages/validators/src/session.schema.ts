@@ -58,5 +58,16 @@ export type SessionLineCreateInput = z.infer<typeof sessionLineCreateSchema>;
 export type SessionCloseInput = z.infer<typeof sessionCloseSchema>;
 export type ExpectedItemsForAreaInput = z.infer<typeof expectedItemsForAreaSchema>;
 export type ItemCountHintsInput = z.infer<typeof itemCountHintsSchema>;
+export const claimSubAreaSchema = z.object({
+  sessionId: z.string().uuid(),
+  subAreaId: z.string().uuid(),
+});
+
+export const releaseSubAreaSchema = z.object({
+  sessionId: z.string().uuid(),
+});
+
 export type SessionJoinInput = z.infer<typeof sessionJoinSchema>;
 export type SessionHeartbeatInput = z.infer<typeof sessionHeartbeatSchema>;
+export type ClaimSubAreaInput = z.infer<typeof claimSubAreaSchema>;
+export type ReleaseSubAreaInput = z.infer<typeof releaseSubAreaSchema>;
