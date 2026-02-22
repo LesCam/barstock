@@ -15,3 +15,12 @@
   --shadow-card: 0 20px 60px rgba(0,0,0,0.55);
   --font-primary: Inter, SF Pro, system-ui, sans-serif;
 }
+
+@media print {
+  html, body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

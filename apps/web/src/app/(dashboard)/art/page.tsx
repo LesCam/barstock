@@ -41,6 +41,12 @@ export default function ArtGalleryPage() {
             + Artwork
           </Link>
           <Link
+            href="/art/labels"
+            className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
+          >
+            Print Labels
+          </Link>
+          <Link
             href="/art/artists"
             className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/80 hover:bg-[#16283F]/60"
           >
