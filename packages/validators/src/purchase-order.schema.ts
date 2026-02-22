@@ -35,7 +35,13 @@ export const purchaseOrderCloseSchema = z.object({
   purchaseOrderId: z.string().uuid(),
 });
 
+export const orderTrendsQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  monthsBack: z.number().int().min(1).max(24).default(6),
+});
+
 export type PurchaseOrderCreateInput = z.infer<typeof purchaseOrderCreateSchema>;
 export type PurchaseOrderPickupInput = z.infer<typeof purchaseOrderPickupSchema>;
 export type PurchaseOrderListInput = z.infer<typeof purchaseOrderListSchema>;
 export type PurchaseOrderCloseInput = z.infer<typeof purchaseOrderCloseSchema>;
+export type OrderTrendsQueryInput = z.infer<typeof orderTrendsQuerySchema>;

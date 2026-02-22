@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import { HelpLink } from "@/components/help-link";
+import { downloadCsv } from "@/lib/download-csv";
 
 const ADMIN_ROLES = ["platform_admin", "business_admin", "manager"];
 
@@ -1081,18 +1082,4 @@ function OrderView({
       </div>
     </>
   );
-}
-
-function downloadCsv(headers: string[], rows: string[][], filename: string) {
-  const csvContent = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }

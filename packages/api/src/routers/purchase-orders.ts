@@ -4,6 +4,7 @@ import {
   purchaseOrderPickupSchema,
   purchaseOrderListSchema,
   purchaseOrderCloseSchema,
+  orderTrendsQuerySchema,
 } from "@barstock/validators";
 import { PurchaseOrderService } from "../services/purchase-order.service";
 import { AuditService } from "../services/audit.service";
@@ -95,5 +96,12 @@ export const purchaseOrdersRouter = router({
     .query(({ ctx, input }) => {
       const svc = new PurchaseOrderService(ctx.prisma);
       return svc.generateTextOrder(input.id);
+    }),
+
+  orderTrends: protectedProcedure
+    .input(orderTrendsQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new PurchaseOrderService(ctx.prisma);
+      return svc.getOrderTrends(input);
     }),
 });

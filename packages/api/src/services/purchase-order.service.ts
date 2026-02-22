@@ -5,6 +5,7 @@ import type {
   PurchaseOrderPickupInput,
   PurchaseOrderListInput,
   PurchaseOrderCloseInput,
+  OrderTrendsQueryInput,
 } from "@barstock/validators";
 
 export class PurchaseOrderService {
@@ -216,5 +217,109 @@ export class PurchaseOrderService {
     }
 
     return parts.join("\n");
+  }
+
+  async getOrderTrends(input: OrderTrendsQueryInput) {
+    const { locationId, monthsBack } = input;
+    const since = new Date();
+    since.setMonth(since.getMonth() - monthsBack);
+
+    // Monthly spend
+    const monthlySpend = await this.prisma.$queryRaw<
+      { month: Date; total_spend: number; order_count: number }[]
+    >`
+      SELECT
+        date_trunc('month', po.created_at) AS month,
+        COALESCE(SUM(pol.ordered_qty * ii.unit_cost), 0)::float AS total_spend,
+        COUNT(DISTINCT po.id)::int AS order_count
+      FROM purchase_orders po
+      JOIN purchase_order_lines pol ON pol.purchase_order_id = po.id
+      JOIN inventory_items ii ON ii.id = pol.inventory_item_id
+      WHERE po.location_id = ${locationId}::uuid
+        AND po.created_at >= ${since}
+      GROUP BY date_trunc('month', po.created_at)
+      ORDER BY month
+    `;
+
+    // By vendor
+    const byVendor = await this.prisma.$queryRaw<
+      { vendor_id: string; vendor_name: string; order_count: number; total_spend: number; last_order: Date }[]
+    >`
+      SELECT
+        v.id AS vendor_id,
+        v.name AS vendor_name,
+        COUNT(DISTINCT po.id)::int AS order_count,
+        COALESCE(SUM(pol.ordered_qty * ii.unit_cost), 0)::float AS total_spend,
+        MAX(po.created_at) AS last_order
+      FROM purchase_orders po
+      JOIN vendors v ON v.id = po.vendor_id
+      JOIN purchase_order_lines pol ON pol.purchase_order_id = po.id
+      JOIN inventory_items ii ON ii.id = pol.inventory_item_id
+      WHERE po.location_id = ${locationId}::uuid
+        AND po.created_at >= ${since}
+      GROUP BY v.id, v.name
+      ORDER BY total_spend DESC
+      LIMIT 20
+    `;
+
+    // Top ordered items
+    const topItems = await this.prisma.$queryRaw<
+      { item_id: string; item_name: string; total_ordered: number; times_ordered: number }[]
+    >`
+      SELECT
+        ii.id AS item_id,
+        ii.name AS item_name,
+        SUM(pol.ordered_qty)::float AS total_ordered,
+        COUNT(DISTINCT po.id)::int AS times_ordered
+      FROM purchase_orders po
+      JOIN purchase_order_lines pol ON pol.purchase_order_id = po.id
+      JOIN inventory_items ii ON ii.id = pol.inventory_item_id
+      WHERE po.location_id = ${locationId}::uuid
+        AND po.created_at >= ${since}
+      GROUP BY ii.id, ii.name
+      ORDER BY total_ordered DESC
+      LIMIT 20
+    `;
+
+    // Avg fulfillment time (closed orders only)
+    const fulfillment = await this.prisma.$queryRaw<
+      { avg_days: number | null }[]
+    >`
+      SELECT
+        AVG(EXTRACT(EPOCH FROM (closed_at - created_at)) / 86400)::float AS avg_days
+      FROM purchase_orders
+      WHERE location_id = ${locationId}::uuid
+        AND created_at >= ${since}
+        AND status = 'closed'
+        AND closed_at IS NOT NULL
+    `;
+
+    const totalSpend = monthlySpend.reduce((sum, m) => sum + m.total_spend, 0);
+    const totalOrders = monthlySpend.reduce((sum, m) => sum + m.order_count, 0);
+
+    return {
+      totalSpend,
+      totalOrders,
+      avgFulfillmentDays: fulfillment[0]?.avg_days ?? null,
+      topVendor: byVendor[0]?.vendor_name ?? null,
+      monthlySpend: monthlySpend.map((m) => ({
+        month: m.month.toISOString(),
+        totalSpend: m.total_spend,
+        orderCount: m.order_count,
+      })),
+      byVendor: byVendor.map((v) => ({
+        vendorId: v.vendor_id,
+        vendorName: v.vendor_name,
+        orderCount: v.order_count,
+        totalSpend: v.total_spend,
+        lastOrder: v.last_order.toISOString(),
+      })),
+      topItems: topItems.map((i) => ({
+        itemId: i.item_id,
+        itemName: i.item_name,
+        totalOrdered: i.total_ordered,
+        timesOrdered: i.times_ordered,
+      })),
+    };
   }
 }

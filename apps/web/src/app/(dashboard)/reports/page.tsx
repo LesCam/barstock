@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { HelpLink } from "@/components/help-link";
+import { downloadCsv } from "@/lib/download-csv";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend,
@@ -790,6 +791,106 @@ export default function ReportsPage() {
     { key: "pourCost", label: "Pour Cost" },
   ];
 
+  const exportCurrentTab = useCallback(() => {
+    const dateSuffix = `${dateRange.from}_${dateRange.to}`;
+    switch (activeTab) {
+      case "variance": {
+        const headers = ["Item", "Category", "Theoretical", "Actual", "Variance", "Variance %", "Value Impact"];
+        const rows = sortedVarianceItems.map((item) => [
+          item.itemName,
+          item.categoryName ?? "",
+          item.theoretical.toFixed(1),
+          item.actual.toFixed(1),
+          item.variance.toFixed(1),
+          `${item.variancePercent.toFixed(1)}%`,
+          item.valueImpact != null ? item.valueImpact.toFixed(2) : "",
+        ]);
+        downloadCsv(headers, rows, `variance-${dateSuffix}.csv`);
+        break;
+      }
+      case "cogs": {
+        const headers = ["Item", "Qty Received", "UOM", "Unit Cost", "Total Cost"];
+        const rows = (cogs?.purchases ?? []).map((p) => [
+          p.itemName,
+          p.quantityReceived.toFixed(1),
+          p.uom,
+          p.unitCost != null ? p.unitCost.toFixed(2) : "",
+          p.totalCost != null ? p.totalCost.toFixed(2) : "",
+        ]);
+        downloadCsv(headers, rows, `cogs-${dateSuffix}.csv`);
+        break;
+      }
+      case "usage": {
+        const headers = ["Item", "Category", "Qty Used", "UOM", "Unit Cost", "Total Cost"];
+        const rows = sortedUsageItems.map((item) => [
+          item.name,
+          item.categoryName ?? "",
+          item.quantityUsed.toFixed(1),
+          item.uom,
+          item.unitCost != null ? item.unitCost.toFixed(2) : "",
+          item.totalCost != null ? item.totalCost.toFixed(2) : "",
+        ]);
+        downloadCsv(headers, rows, `usage-${dateSuffix}.csv`);
+        break;
+      }
+      case "patterns": {
+        const headers = ["Item", "Category", "Sessions Appeared", "Sessions w/ Variance", "Avg Variance", "Trend", "Est. Loss", "Shrinkage Suspect"];
+        const rows = sortedPatternItems.map((item) => [
+          item.itemName,
+          item.categoryName ?? "",
+          String(item.sessionsAppeared),
+          String(item.sessionsWithVariance),
+          item.avgVariance.toFixed(1),
+          item.trend,
+          item.totalEstimatedLoss.toFixed(1),
+          item.isShrinkageSuspect ? "Yes" : "No",
+        ]);
+        downloadCsv(headers, rows, `patterns-${dateSuffix}.csv`);
+        break;
+      }
+      case "staff": {
+        const headers = ["Staff", "Sessions", "Lines", "Accuracy %", "Avg Variance", "Manual %", "Trend"];
+        const rows = sortedStaff.map((s) => [
+          s.displayName,
+          String(s.sessionsCounted),
+          String(s.linesCounted),
+          s.accuracyRate.toFixed(1),
+          s.avgVarianceMagnitude.toFixed(1),
+          s.manualEntryRate.toFixed(1),
+          s.trend,
+        ]);
+        downloadCsv(headers, rows, `staff-${dateSuffix}.csv`);
+        break;
+      }
+      case "recipes": {
+        const headers = ["Recipe", "Category", "Servings", "Total Cost", "Avg Cost/Serving", "% of Total"];
+        const rows = sortedRecipes.map((r) => [
+          r.recipeName,
+          r.recipeCategory ?? "",
+          String(r.totalServings),
+          r.totalCost.toFixed(2),
+          r.avgCostPerServing.toFixed(2),
+          `${r.pctOfTotalCost.toFixed(1)}%`,
+        ]);
+        downloadCsv(headers, rows, `recipes-${dateSuffix}.csv`);
+        break;
+      }
+      case "pourCost": {
+        const headers = ["POS Item", "Recipe", "Qty Sold", "Avg Price", "Ingredient Cost", "Pour Cost %"];
+        const rows = (pourCostData?.items ?? []).map((item) => [
+          item.posItemName,
+          item.recipeName ?? item.mappingMode ?? "",
+          item.totalSold.toFixed(1),
+          item.avgSalePrice != null ? item.avgSalePrice.toFixed(2) : "",
+          item.totalIngredientCost.toFixed(2),
+          item.pourCostPct != null ? `${item.pourCostPct.toFixed(1)}%` : "",
+        ]);
+        downloadCsv(headers, rows, `pour-cost-${dateSuffix}.csv`);
+        break;
+      }
+    }
+  }, [activeTab, dateRange, sortedVarianceItems, cogs, sortedUsageItems, sortedPatternItems, sortedStaff, sortedRecipes, pourCostData]);
+
   return (
     <div>
       <div className="mb-6 flex items-center gap-2">
@@ -831,20 +932,28 @@ export default function ReportsPage() {
       </section>
 
       {/* Tab navigation */}
-      <div className="mb-6 flex gap-1 rounded-lg bg-[#0B1623] p-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => { setActiveTab(tab.key); setFilter(""); }}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === tab.key
-                ? "bg-[#16283F] text-[#E9B44C]"
-                : "text-[#EAF0FF]/60 hover:text-[#EAF0FF]/80"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-6 flex items-center gap-3">
+        <div className="flex gap-1 rounded-lg bg-[#0B1623] p-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => { setActiveTab(tab.key); setFilter(""); }}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === tab.key
+                  ? "bg-[#16283F] text-[#E9B44C]"
+                  : "text-[#EAF0FF]/60 hover:text-[#EAF0FF]/80"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={exportCurrentTab}
+          className="ml-auto rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF]/80 hover:bg-white/5"
+        >
+          Download CSV
+        </button>
       </div>
 
       {/* ── Variance tab ── */}

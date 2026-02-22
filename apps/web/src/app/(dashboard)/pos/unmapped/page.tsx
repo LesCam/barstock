@@ -13,6 +13,19 @@ const MODE_OPTIONS = [
   { value: MappingMode.recipe, label: "Recipe" },
 ] as const;
 
+type SuggestionOverride = {
+  accepted: boolean;
+  targetId?: string;
+  targetType?: "inventoryItem" | "recipe";
+  mode?: string;
+};
+
+function confidenceBadge(confidence: number) {
+  if (confidence > 0.7) return { label: "High", className: "bg-green-500/20 text-green-400 border-green-500/30" };
+  if (confidence > 0.4) return { label: "Medium", className: "bg-amber-500/20 text-amber-400 border-amber-500/30" };
+  return { label: "Low", className: "bg-red-500/20 text-red-400 border-red-500/30" };
+}
+
 export default function UnmappedPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
@@ -27,6 +40,11 @@ export default function UnmappedPage() {
   const [tapLineId, setTapLineId] = useState("");
   const [recipeId, setRecipeId] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // Bulk suggestion state
+  const [suggestions, setSuggestions] = useState<any[] | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, SuggestionOverride>>({});
+  const [bulkFeedback, setBulkFeedback] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -65,6 +83,39 @@ export default function UnmappedPage() {
       resetForm();
     },
     onError: (err) => setError(err.message),
+  });
+
+  const suggestMutation = trpc.mappings.suggestMappings.useMutation({
+    onSuccess: (data) => {
+      setSuggestions(data);
+      // Pre-check high confidence items
+      const initial: Record<string, SuggestionOverride> = {};
+      for (const s of data) {
+        if (s.suggestedTarget) {
+          initial[s.posItemName] = {
+            accepted: s.confidence > 0.7,
+            targetId: s.suggestedTarget.id,
+            targetType: s.suggestedTarget.type,
+            mode: s.suggestedMode,
+          };
+        } else {
+          initial[s.posItemName] = { accepted: false };
+        }
+      }
+      setOverrides(initial);
+      setBulkFeedback(null);
+    },
+  });
+
+  const bulkCreateMutation = trpc.mappings.bulkCreate.useMutation({
+    onSuccess: (result) => {
+      setBulkFeedback(`Created ${result.created} mappings, ${result.skipped} skipped${result.errors?.length ? `, ${result.errors.length} errors` : ""}`);
+      utils.pos.unmapped.invalidate();
+      // Clear suggestions for items that were successfully created
+      setSuggestions(null);
+      setOverrides({});
+    },
+    onError: (err) => setBulkFeedback(`Error: ${err.message}`),
   });
 
   function resetForm() {
@@ -115,6 +166,74 @@ export default function UnmappedPage() {
     });
   }
 
+  function handleSmartMapAll() {
+    if (!unmapped || unmapped.length === 0) return;
+    const names = unmapped.map((item) => item.pos_item_name);
+    suggestMutation.mutate({ locationId: locationId!, posItemNames: names });
+  }
+
+  function handleBulkAccept() {
+    if (!unmapped || !suggestions) return;
+    const accepted = Object.entries(overrides).filter(([, v]) => v.accepted && v.targetId);
+    if (accepted.length === 0) {
+      setBulkFeedback("No suggestions selected.");
+      return;
+    }
+
+    // Determine source system from the first unmapped item (they should all be the same in practice)
+    const sourceSystem = unmapped[0]?.source_system ?? "other";
+
+    const mappings = accepted
+      .map(([posItemName, override]) => {
+        const item = unmapped.find((u) => u.pos_item_name === posItemName);
+        if (!item) return null;
+        return {
+          posItemId: item.pos_item_id,
+          posItemName: item.pos_item_name,
+          mode: (override.mode ?? MappingMode.packaged_unit) as any,
+          ...(override.targetType === "recipe"
+            ? { recipeId: override.targetId }
+            : { inventoryItemId: override.targetId }),
+        };
+      })
+      .filter(Boolean) as any[];
+
+    if (mappings.length === 0) return;
+
+    bulkCreateMutation.mutate({
+      locationId: locationId!,
+      sourceSystem: sourceSystem as any,
+      mappings,
+    });
+  }
+
+  function toggleSuggestionAccepted(posItemName: string) {
+    setOverrides((prev) => ({
+      ...prev,
+      [posItemName]: {
+        ...prev[posItemName],
+        accepted: !prev[posItemName]?.accepted,
+      },
+    }));
+  }
+
+  function changeSuggestionTarget(posItemName: string, altId: string, altType: "inventoryItem" | "recipe", altName: string) {
+    const suggestion = suggestions?.find((s) => s.posItemName === posItemName);
+    if (!suggestion) return;
+    // Determine mode from type
+    const newMode = altType === "recipe" ? MappingMode.recipe : MappingMode.packaged_unit;
+    setOverrides((prev) => ({
+      ...prev,
+      [posItemName]: {
+        ...prev[posItemName],
+        accepted: true,
+        targetId: altId,
+        targetType: altType,
+        mode: newMode,
+      },
+    }));
+  }
+
   const filteredUnmapped = useMemo(() => {
     if (!unmapped) return [];
     if (!search.trim()) return unmapped;
@@ -135,6 +254,18 @@ export default function UnmappedPage() {
     );
   }, [inventoryItems, inventorySearch]);
 
+  // Build a lookup from posItemName to suggestion
+  const suggestionMap = useMemo(() => {
+    if (!suggestions) return new Map<string, any>();
+    const map = new Map<string, any>();
+    for (const s of suggestions) {
+      map.set(s.posItemName, s);
+    }
+    return map;
+  }, [suggestions]);
+
+  const acceptedCount = Object.values(overrides).filter((v) => v.accepted && v.targetId).length;
+
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
@@ -153,7 +284,7 @@ export default function UnmappedPage() {
         </div>
       ) : (
         <>
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
             <input
               type="text"
               placeholder="Search unmapped items..."
@@ -161,17 +292,60 @@ export default function UnmappedPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full max-w-sm rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
             />
+            {!suggestions && (
+              <button
+                onClick={handleSmartMapAll}
+                disabled={suggestMutation.isPending}
+                className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+              >
+                {suggestMutation.isPending ? "Analyzing..." : "Smart Map All"}
+              </button>
+            )}
+            {suggestions && (
+              <>
+                <button
+                  onClick={handleBulkAccept}
+                  disabled={bulkCreateMutation.isPending || acceptedCount === 0}
+                  className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {bulkCreateMutation.isPending ? "Creating..." : `Accept Selected (${acceptedCount})`}
+                </button>
+                <button
+                  onClick={() => { setSuggestions(null); setOverrides({}); setBulkFeedback(null); }}
+                  className="rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF]/70 hover:bg-white/5"
+                >
+                  Clear Suggestions
+                </button>
+              </>
+            )}
           </div>
+
+          {bulkFeedback && (
+            <div className={`mb-4 rounded-lg border p-3 text-sm ${bulkFeedback.startsWith("Error") ? "border-red-500/30 bg-red-500/10 text-red-400" : "border-green-500/30 bg-green-500/10 text-green-400"}`}>
+              {bulkFeedback}
+            </div>
+          )}
 
           <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
                 <tr>
+                  {suggestions && <th className="w-10 px-3 py-3" />}
                   <th className="px-4 py-3">POS Item</th>
                   <th className="px-4 py-3">Source</th>
                   <th className="px-4 py-3">Qty Sold (7d)</th>
-                  <th className="px-4 py-3">First Seen</th>
-                  <th className="px-4 py-3">Last Seen</th>
+                  {suggestions ? (
+                    <>
+                      <th className="px-4 py-3">Suggested Target</th>
+                      <th className="px-4 py-3">Mode</th>
+                      <th className="px-4 py-3">Confidence</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-4 py-3">First Seen</th>
+                      <th className="px-4 py-3">Last Seen</th>
+                    </>
+                  )}
                   <th className="px-4 py-3">Action</th>
                 </tr>
               </thead>
@@ -179,9 +353,23 @@ export default function UnmappedPage() {
                 {filteredUnmapped.map((item) => {
                   const key = `${item.source_system}-${item.pos_item_id}`;
                   const isOpen = mappingItemKey === key;
+                  const suggestion = suggestionMap.get(item.pos_item_name);
+                  const override = overrides[item.pos_item_name];
+                  const currentTarget = override?.targetId
+                    ? (() => {
+                        // Find the name from suggestion data
+                        if (suggestion?.suggestedTarget?.id === override.targetId) {
+                          return suggestion.suggestedTarget;
+                        }
+                        const alt = suggestion?.alternatives?.find((a: any) => a.id === override.targetId);
+                        if (alt) return { id: alt.id, name: alt.name, type: alt.type };
+                        return suggestion?.suggestedTarget;
+                      })()
+                    : suggestion?.suggestedTarget;
+
                   return (
                     <tr key={key} className="hover:bg-[#16283F]/60">
-                      <td className="px-4 py-3" colSpan={isOpen ? 6 : undefined}>
+                      <td className="px-4 py-3" colSpan={isOpen ? (suggestions ? 8 : 7) : undefined}>
                         {isOpen ? (
                           <div>
                             <div className="mb-3 flex items-center gap-2">
@@ -335,10 +523,79 @@ export default function UnmappedPage() {
                       </td>
                       {!isOpen && (
                         <>
+                          {suggestions && (
+                            <td className="px-3 py-3 text-center">
+                              {suggestion?.suggestedTarget && (
+                                <input
+                                  type="checkbox"
+                                  checked={override?.accepted ?? false}
+                                  onChange={() => toggleSuggestionAccepted(item.pos_item_name)}
+                                  className="h-4 w-4 rounded border-white/20 bg-[#0B1623] text-[#E9B44C] focus:ring-[#E9B44C]"
+                                />
+                              )}
+                            </td>
+                          )}
+                          {/* POS Item name is already in the first td above */}
                           <td className="px-4 py-3 capitalize">{item.source_system}</td>
                           <td className="px-4 py-3 font-medium">{item.qty_sold_7d}</td>
-                          <td className="px-4 py-3 text-xs">{new Date(item.first_seen).toLocaleDateString()}</td>
-                          <td className="px-4 py-3 text-xs">{new Date(item.last_seen).toLocaleDateString()}</td>
+                          {suggestions ? (
+                            <>
+                              <td className="px-4 py-3">
+                                {currentTarget ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[#EAF0FF]">{currentTarget.name}</span>
+                                    {suggestion?.alternatives?.length > 0 && (
+                                      <select
+                                        value={override?.targetId ?? suggestion?.suggestedTarget?.id ?? ""}
+                                        onChange={(e) => {
+                                          const alt = suggestion.alternatives.find((a: any) => a.id === e.target.value);
+                                          if (alt) {
+                                            changeSuggestionTarget(item.pos_item_name, alt.id, alt.type, alt.name);
+                                          } else if (e.target.value === suggestion.suggestedTarget?.id) {
+                                            changeSuggestionTarget(item.pos_item_name, suggestion.suggestedTarget.id, suggestion.suggestedTarget.type, suggestion.suggestedTarget.name);
+                                          }
+                                        }}
+                                        className="rounded border border-white/10 bg-[#0B1623] px-1 py-0.5 text-xs text-[#EAF0FF]"
+                                      >
+                                        {suggestion.suggestedTarget && (
+                                          <option value={suggestion.suggestedTarget.id}>
+                                            {suggestion.suggestedTarget.name}
+                                          </option>
+                                        )}
+                                        {suggestion.alternatives.map((alt: any) => (
+                                          <option key={alt.id} value={alt.id}>
+                                            {alt.name} ({(alt.score * 100).toFixed(0)}%)
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-[#EAF0FF]/40">No match found</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="rounded bg-white/5 px-2 py-0.5 text-xs capitalize text-[#EAF0FF]/70">
+                                  {override?.mode ?? suggestion?.suggestedMode ?? "—"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {suggestion ? (() => {
+                                  const badge = confidenceBadge(suggestion.confidence);
+                                  return (
+                                    <span className={`rounded border px-2 py-0.5 text-xs font-medium ${badge.className}`}>
+                                      {badge.label} ({(suggestion.confidence * 100).toFixed(0)}%)
+                                    </span>
+                                  );
+                                })() : "—"}
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-4 py-3 text-xs">{new Date(item.first_seen).toLocaleDateString()}</td>
+                              <td className="px-4 py-3 text-xs">{new Date(item.last_seen).toLocaleDateString()}</td>
+                            </>
+                          )}
                           <td className="px-4 py-3">
                             <button
                               onClick={() => openMapping(key)}
