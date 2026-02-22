@@ -1,8 +1,12 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { View, Text, TouchableOpacity, ScrollView, Switch, Modal, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import * as Crypto from "expo-crypto";
+import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
 import { useAuth, usePermission } from "@/lib/auth-context";
+import { useNetwork } from "@/lib/network-context";
+import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 import { ScaleConnector } from "@/components/ScaleConnector";
@@ -28,7 +32,8 @@ export default function LiquorWeighScreen() {
     areaName?: string;
     itemId?: string;
   }>();
-  const { selectedLocationId } = useAuth();
+  const { selectedLocationId, user: authUser } = useAuth();
+  const { isOnline } = useNetwork();
   const utils = trpc.useUtils();
 
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
@@ -127,15 +132,61 @@ export default function LiquorWeighScreen() {
   async function handleSubmit() {
     if (!selectedItem || grossWeightG == null || grossWeightG <= 0) return;
 
+    const mutationInput = {
+      sessionId: sessionId!,
+      inventoryItemId: selectedItem.id,
+      grossWeightGrams: grossWeightG,
+      isManual: useManual,
+      subAreaId: subAreaId || undefined,
+    };
+
+    if (!isOnline) {
+      const tempId = Crypto.randomUUID();
+      await enqueue("sessions.addLine", mutationInput, tempId);
+      // Optimistic cache update
+      utils.sessions.getById.setData({ id: sessionId! }, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          lines: [...old.lines, {
+            id: tempId,
+            sessionId,
+            inventoryItemId: selectedItem.id,
+            grossWeightGrams: grossWeightG,
+            countUnits: null,
+            percentRemaining: null,
+            isManual: useManual,
+            subAreaId: subAreaId || null,
+            countedBy: authUser?.userId ?? null,
+            createdAt: new Date().toISOString(),
+            inventoryItem: {
+              name: selectedItem.name,
+              barcode: selectedItem.barcode,
+              baseUom: selectedItem.baseUom,
+              category: selectedItem.category ?? null,
+            },
+            subArea: null,
+            countedByUser: authUser ? {
+              email: authUser.email,
+              firstName: authUser.email.split("@")[0],
+            } : null,
+            _pendingSync: true,
+          }],
+        };
+      });
+      // Skip recordMeasurement (analytics-only, can be lost)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSubmittedCount((c) => c + 1);
+      setSelectedItem(null);
+      setScaleWeight(null);
+      setManualWeight("");
+      setUseManual(false);
+      return;
+    }
+
     try {
       // Add session line
-      await addLineMutation.mutateAsync({
-        sessionId: sessionId!,
-        inventoryItemId: selectedItem.id,
-        grossWeightGrams: grossWeightG,
-        isManual: useManual,
-        subAreaId: subAreaId || undefined,
-      });
+      await addLineMutation.mutateAsync(mutationInput);
 
       // Record measurement for tracking
       await recordMeasurementMutation.mutateAsync({
@@ -161,14 +212,57 @@ export default function LiquorWeighScreen() {
   async function handleManualCountSubmit() {
     // Fallback: just count units when no template exists
     if (!selectedItem || !manualWeight) return;
-    try {
-      await addLineMutation.mutateAsync({
-        sessionId: sessionId!,
-        inventoryItemId: selectedItem.id,
-        countUnits: parseInt(manualWeight, 10),
-        isManual: true,
-        subAreaId: subAreaId || undefined,
+
+    const mutationInput = {
+      sessionId: sessionId!,
+      inventoryItemId: selectedItem.id,
+      countUnits: parseInt(manualWeight, 10),
+      isManual: true,
+      subAreaId: subAreaId || undefined,
+    };
+
+    if (!isOnline) {
+      const tempId = Crypto.randomUUID();
+      await enqueue("sessions.addLine", mutationInput, tempId);
+      utils.sessions.getById.setData({ id: sessionId! }, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          lines: [...old.lines, {
+            id: tempId,
+            sessionId,
+            inventoryItemId: selectedItem.id,
+            grossWeightGrams: null,
+            countUnits: parseInt(manualWeight, 10),
+            percentRemaining: null,
+            isManual: true,
+            subAreaId: subAreaId || null,
+            countedBy: authUser?.userId ?? null,
+            createdAt: new Date().toISOString(),
+            inventoryItem: {
+              name: selectedItem.name,
+              barcode: selectedItem.barcode,
+              baseUom: selectedItem.baseUom,
+              category: selectedItem.category ?? null,
+            },
+            subArea: null,
+            countedByUser: authUser ? {
+              email: authUser.email,
+              firstName: authUser.email.split("@")[0],
+            } : null,
+            _pendingSync: true,
+          }],
+        };
       });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSubmittedCount((c) => c + 1);
+      setSelectedItem(null);
+      setManualWeight("");
+      return;
+    }
+
+    try {
+      await addLineMutation.mutateAsync(mutationInput);
       setSubmittedCount((c) => c + 1);
       setSelectedItem(null);
       setManualWeight("");

@@ -13,6 +13,8 @@ import {
 import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
+import { useNetwork } from "@/lib/network-context";
+import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 
@@ -43,6 +45,7 @@ interface LoggedTransfer {
 
 export default function TransferScreen() {
   const { selectedLocationId } = useAuth();
+  const { isOnline } = useNetwork();
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [fromSubAreaId, setFromSubAreaId] = useState<string | null>(null);
@@ -131,19 +134,41 @@ export default function TransferScreen() {
   const fromLabel = subAreaOptions.find((o) => o.id === fromSubAreaId)?.label ?? "Select";
   const toLabel = subAreaOptions.find((o) => o.id === toSubAreaId)?.label ?? "Select";
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!fromSubAreaId || !toSubAreaId || !selectedItem || !quantity) return;
     if (fromSubAreaId === toSubAreaId) {
       Alert.alert("Same Area", "Source and destination must be different.");
       return;
     }
-    transferMutation.mutate({
+
+    const mutationInput = {
       locationId: selectedLocationId!,
       inventoryItemId: selectedItem.id,
       fromSubAreaId,
       toSubAreaId,
       quantity: parseInt(quantity, 10),
-    });
+    };
+
+    if (!isOnline) {
+      await enqueue("transfers.create", mutationInput);
+      setLoggedTransfers((prev) => [
+        ...prev,
+        {
+          id: String(Date.now()),
+          itemName: selectedItem.name,
+          from: fromLabel,
+          to: toLabel,
+          quantity: parseInt(quantity, 10),
+          uom: selectedItem.baseUom,
+        },
+      ]);
+      Alert.alert("Queued for Sync", "Transfer queued. It will sync when you're back online.");
+      setSelectedItem(null);
+      setQuantity("");
+      return;
+    }
+
+    transferMutation.mutate(mutationInput);
   }
 
   function handleDone() {

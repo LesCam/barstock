@@ -6,7 +6,7 @@ const STORAGE_KEY = "@barstock/offlineQueue";
 
 export interface QueueEntry {
   id: string;
-  mutation: "sessions.addLine" | "sessions.updateLine" | "sessions.deleteLine";
+  mutation: "sessions.addLine" | "sessions.updateLine" | "sessions.deleteLine" | "receiving.receive" | "transfers.create";
   input: Record<string, unknown>;
   tempId?: string;
   createdAt: string;
@@ -101,6 +101,12 @@ async function executeMutation(
       break;
     case "sessions.deleteLine":
       await client.sessions.deleteLine.mutate(input);
+      break;
+    case "receiving.receive":
+      await client.receiving.receive.mutate(input);
+      break;
+    case "transfers.create":
+      await client.transfers.create.mutate(input);
       break;
   }
 }

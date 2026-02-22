@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import * as Crypto from "expo-crypto";
+import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
+import { useNetwork } from "@/lib/network-context";
+import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 
@@ -25,7 +29,8 @@ export default function PackagedCountScreen() {
     areaName?: string;
     itemId?: string;
   }>();
-  const { selectedLocationId } = useAuth();
+  const { selectedLocationId, user: authUser } = useAuth();
+  const { isOnline } = useNetwork();
   const utils = trpc.useUtils();
 
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
@@ -68,15 +73,60 @@ export default function PackagedCountScreen() {
   const multiplier = countType === "full_pack" && packSize ? packSize : 1;
   const countUnits = quantity ? parseInt(quantity, 10) * multiplier : 0;
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!selectedItem || quantity === "") return;
-    addLineMutation.mutate({
+
+    const mutationInput = {
       sessionId: sessionId!,
       inventoryItemId: selectedItem.id,
       countUnits,
       isManual: false,
       subAreaId: subAreaId || undefined,
-    });
+    };
+
+    if (!isOnline) {
+      const tempId = Crypto.randomUUID();
+      await enqueue("sessions.addLine", mutationInput, tempId);
+      // Optimistic cache update
+      utils.sessions.getById.setData({ id: sessionId! }, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          lines: [...old.lines, {
+            id: tempId,
+            sessionId,
+            inventoryItemId: selectedItem.id,
+            grossWeightGrams: null,
+            countUnits,
+            percentRemaining: null,
+            isManual: false,
+            subAreaId: subAreaId || null,
+            countedBy: authUser?.userId ?? null,
+            createdAt: new Date().toISOString(),
+            inventoryItem: {
+              name: selectedItem.name,
+              barcode: selectedItem.barcode,
+              baseUom: selectedItem.baseUom,
+              category: selectedItem.category ?? null,
+            },
+            subArea: null,
+            countedByUser: authUser ? {
+              email: authUser.email,
+              firstName: authUser.email.split("@")[0],
+            } : null,
+            _pendingSync: true,
+          }],
+        };
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSubmittedCount((c) => c + 1);
+      setSelectedItem(null);
+      setCountType("individual");
+      setQuantity("");
+      return;
+    }
+
+    addLineMutation.mutate(mutationInput);
   }
 
   return (

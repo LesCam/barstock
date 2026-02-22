@@ -102,6 +102,14 @@ export default function SessionDetailScreen() {
     { refetchOnMount: "always", refetchInterval: 60_000 }
   );
 
+  // --- Cache warming: prefetch data needed for offline counting ---
+  useEffect(() => {
+    if (!selectedLocationId || !session || session.endedTs) return;
+    utils.inventory.list.prefetch({ locationId: selectedLocationId });
+    utils.areas.listBarAreas.prefetch({ locationId: selectedLocationId });
+    utils.scale.listTemplates.prefetch({ locationId: selectedLocationId });
+  }, [selectedLocationId, session?.id, session?.endedTs]);
+
   // --- Session timer ---
   useEffect(() => {
     if (!session || session.endedTs) return;

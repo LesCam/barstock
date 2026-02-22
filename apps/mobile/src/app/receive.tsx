@@ -13,6 +13,8 @@ import {
 import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
+import { useNetwork } from "@/lib/network-context";
+import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 
@@ -33,6 +35,7 @@ interface Vendor {
 
 export default function ReceiveStockScreen() {
   const { selectedLocationId, user } = useAuth();
+  const { isOnline } = useNetwork();
   const businessId = user?.businessId;
 
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -178,15 +181,29 @@ export default function ReceiveStockScreen() {
   const multiplier = countType === "pack" && packSize ? packSize : 1;
   const totalUnits = quantity ? parseInt(quantity, 10) * multiplier : 0;
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!selectedItem || !quantity || totalUnits <= 0 || !selectedLocationId) return;
-    receiveMutation.mutate({
+
+    const mutationInput = {
       locationId: selectedLocationId,
       inventoryItemId: selectedItem.id,
       quantity: totalUnits,
       vendorId: selectedVendor?.id,
       notes: notes.trim() || undefined,
-    });
+    };
+
+    if (!isOnline) {
+      await enqueue("receiving.receive", mutationInput);
+      setLoggedCount((c) => c + 1);
+      Alert.alert("Queued for Sync", "Stock receipt queued. It will sync when you're back online.");
+      setSelectedItem(null);
+      setCountType("individual");
+      setQuantity("");
+      setNotes("");
+      return;
+    }
+
+    receiveMutation.mutate(mutationInput);
   }
 
   function handleDone() {
