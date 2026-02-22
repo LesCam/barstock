@@ -209,6 +209,7 @@ model Business {
   artSales         ArtSale[]
   vendors          Vendor[]
   itemCategories   InventoryItemCategory[]
+  staffInvites     StaffInvite[]
 
   @@map("businesses")
 }
@@ -288,6 +289,7 @@ model User {
   vendorOrderers          VendorOrderer[]
   deviceTokens            DeviceToken[]
   csvImports              CSVImport[]
+  sentStaffInvites        StaffInvite[] @relation("InvitedByUser")
 
   @@map("users")
 }
@@ -1177,4 +1179,30 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("password_reset_tokens")
+}
+
+// ─── Staff Invites ──────────────────────────────────────────
+
+model StaffInvite {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId  String    @map("business_id") @db.Uuid
+  email       String
+  role        RoleT
+  locationIds String[]  @map("location_ids") @db.Uuid
+  firstName   String?   @map("first_name")
+  lastName    String?   @map("last_name")
+  phone       String?
+  token       String    @unique
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz()
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz()
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz()
+  invitedBy   String    @map("invited_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  business      Business @relation(fields: [businessId], references: [id])
+  invitedByUser User     @relation("InvitedByUser", fields: [invitedBy], references: [id])
+
+  @@index([businessId], map: "ix_staff_invites_business")
+  @@index([email, businessId], map: "ix_staff_invites_email_business")
+  @@map("staff_invites")
 }

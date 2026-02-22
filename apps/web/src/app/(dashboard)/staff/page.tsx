@@ -45,9 +45,174 @@ function formatRole(role: string): string {
     .join(" ");
 }
 
-// ── Invite Staff Form ─────────────────────────────────────────
+// ── Send Invite Form ──────────────────────────────────────────
 
-function InviteStaffForm({
+function SendInviteForm({
+  businessId,
+  locations,
+  onSuccess,
+}: {
+  businessId: string;
+  locations: { id: string; name: string }[];
+  onSuccess: () => void;
+}) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [role, setRole] = useState<string>("staff");
+  const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>(
+    locations[0] ? [locations[0].id] : []
+  );
+  const [successMsg, setSuccessMsg] = useState("");
+
+  const sendInviteMutation = trpc.auth.sendInvite.useMutation({
+    onSuccess: (data) => {
+      setSuccessMsg(`Invite sent to ${data.email}`);
+      setFirstName("");
+      setLastName("");
+      setEmail("");
+      setPhone("");
+      setRole("staff");
+      setSelectedLocationIds(locations[0] ? [locations[0].id] : []);
+      onSuccess();
+    },
+  });
+
+  function toggleLocation(locId: string) {
+    setSelectedLocationIds((prev) =>
+      prev.includes(locId) ? prev.filter((id) => id !== locId) : [...prev, locId]
+    );
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSuccessMsg("");
+    if (!email || selectedLocationIds.length === 0) return;
+    sendInviteMutation.mutate({
+      email,
+      role: role as any,
+      locationIds: selectedLocationIds,
+      businessId,
+      firstName: firstName || undefined,
+      lastName: lastName || undefined,
+      phone: stripPhone(phone) ?? undefined,
+    });
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {successMsg && (
+        <div className="mb-3 rounded-lg border border-green-500/20 bg-green-500/10 p-3 text-sm text-green-400">
+          {successMsg}
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-sm font-medium text-[#EAF0FF]/80">First Name</label>
+          <input
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+            placeholder="John"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-[#EAF0FF]/80">Last Name</label>
+          <input
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+            placeholder="Doe"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-[#EAF0FF]/80">
+            Email <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+            placeholder="john@example.com"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-[#EAF0FF]/80">Phone</label>
+          <input
+            type="text"
+            value={phone}
+            onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+            className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+            placeholder="(555)555-5555"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-[#EAF0FF]/80">Role</label>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="mt-1 w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+          >
+            {ROLES.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="block text-sm font-medium text-[#EAF0FF]/80">
+            Locations <span className="text-red-400">*</span>
+          </label>
+          <div className="mt-1 space-y-1 rounded-md border border-white/10 bg-[#0B1623] p-2">
+            {locations.map((loc) => (
+              <label
+                key={loc.id}
+                className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-[#EAF0FF] hover:bg-white/5 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedLocationIds.includes(loc.id)}
+                  onChange={() => toggleLocation(loc.id)}
+                  className="rounded border-white/10 bg-[#0B1623]"
+                />
+                {loc.name}
+                {selectedLocationIds[0] === loc.id && selectedLocationIds.includes(loc.id) && (
+                  <span className="text-xs text-[#E9B44C]">Primary</span>
+                )}
+              </label>
+            ))}
+          </div>
+          {selectedLocationIds.length === 0 && (
+            <p className="mt-1 text-xs text-red-400">Select at least one location.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={sendInviteMutation.isPending}
+          className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+        >
+          {sendInviteMutation.isPending ? "Sending..." : "Send Invite"}
+        </button>
+        {sendInviteMutation.error && (
+          <p className="text-sm text-red-400">{sendInviteMutation.error.message}</p>
+        )}
+      </div>
+    </form>
+  );
+}
+
+// ── Create Directly Form ──────────────────────────────────────
+
+function CreateDirectlyForm({
   businessId,
   locations,
   onSuccess,
@@ -114,11 +279,7 @@ function InviteStaffForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-lg border border-[#E9B44C]/30 bg-[#16283F] p-5"
-    >
-      <h3 className="mb-4 font-semibold text-[#EAF0FF]">Invite New Staff</h3>
+    <form onSubmit={handleSubmit}>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-[#EAF0FF]/80">First Name</label>
@@ -244,6 +405,142 @@ function InviteStaffForm({
         )}
       </div>
     </form>
+  );
+}
+
+// ── Add Staff Section (Tabbed) ────────────────────────────────
+
+function AddStaffSection({
+  businessId,
+  locations,
+  onSuccess,
+}: {
+  businessId: string;
+  locations: { id: string; name: string }[];
+  onSuccess: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<"invite" | "create">("invite");
+
+  return (
+    <div className="rounded-lg border border-[#E9B44C]/30 bg-[#16283F] p-5">
+      <h3 className="mb-4 font-semibold text-[#EAF0FF]">Add Staff</h3>
+      <div className="mb-4 flex rounded-md border border-white/10 overflow-hidden">
+        <button
+          onClick={() => setActiveTab("invite")}
+          className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+            activeTab === "invite"
+              ? "bg-[#E9B44C]/20 text-[#E9B44C]"
+              : "bg-[#0B1623] text-[#EAF0FF]/50 hover:text-[#EAF0FF]"
+          }`}
+        >
+          Send Invite
+        </button>
+        <button
+          onClick={() => setActiveTab("create")}
+          className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+            activeTab === "create"
+              ? "bg-[#E9B44C]/20 text-[#E9B44C]"
+              : "bg-[#0B1623] text-[#EAF0FF]/50 hover:text-[#EAF0FF]"
+          }`}
+        >
+          Create Directly
+        </button>
+      </div>
+      {activeTab === "invite" ? (
+        <SendInviteForm businessId={businessId} locations={locations} onSuccess={onSuccess} />
+      ) : (
+        <CreateDirectlyForm businessId={businessId} locations={locations} onSuccess={onSuccess} />
+      )}
+    </div>
+  );
+}
+
+// ── Pending Invites Section ───────────────────────────────────
+
+function PendingInvitesSection() {
+  const { data: invites } = trpc.auth.listInvites.useQuery();
+  const utils = trpc.useUtils();
+
+  const cancelMutation = trpc.auth.cancelInvite.useMutation({
+    onSuccess: () => utils.auth.listInvites.invalidate(),
+  });
+  const resendMutation = trpc.auth.resendInvite.useMutation({
+    onSuccess: () => utils.auth.listInvites.invalidate(),
+  });
+
+  const pendingInvites = invites?.filter((i) => i.status === "pending") ?? [];
+
+  if (pendingInvites.length === 0) return null;
+
+  function timeAgo(date: Date | string) {
+    const d = new Date(date);
+    const diff = Date.now() - d.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  }
+
+  function timeUntil(date: Date | string) {
+    const d = new Date(date);
+    const diff = d.getTime() - Date.now();
+    if (diff <= 0) return "Expired";
+    const hrs = Math.floor(diff / 3600000);
+    if (hrs < 1) return "< 1h";
+    if (hrs < 24) return `${hrs}h`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d`;
+  }
+
+  return (
+    <div className="mt-6">
+      <h3 className="mb-3 font-semibold text-[#EAF0FF]">Pending Invites</h3>
+      <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+            <tr>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Sent</th>
+              <th className="px-4 py-3">Expires</th>
+              <th className="px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {pendingInvites.map((inv) => (
+              <tr key={inv.id} className="hover:bg-[#0B1623]/40">
+                <td className="px-4 py-3 text-[#EAF0FF]">{inv.email}</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-[#E9B44C]/10 px-2 py-0.5 text-xs font-medium text-[#E9B44C]">
+                    {formatRole(inv.role)}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-[#EAF0FF]/70">{timeAgo(inv.createdAt)}</td>
+                <td className="px-4 py-3 text-[#EAF0FF]/70">{timeUntil(inv.expiresAt)}</td>
+                <td className="px-4 py-3 space-x-2">
+                  <button
+                    onClick={() => resendMutation.mutate({ inviteId: inv.id })}
+                    disabled={resendMutation.isPending}
+                    className="text-xs font-medium text-[#E9B44C] hover:text-[#C8922E] disabled:opacity-50"
+                  >
+                    Resend
+                  </button>
+                  <button
+                    onClick={() => cancelMutation.mutate({ inviteId: inv.id })}
+                    disabled={cancelMutation.isPending}
+                    className="text-xs font-medium text-red-400 hover:text-red-300 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -782,18 +1079,18 @@ export default function StaffPage() {
           onClick={() => setShowInvite(!showInvite)}
           className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
         >
-          {showInvite ? "Cancel" : "+ Invite Staff"}
+          {showInvite ? "Cancel" : "+ Add Staff"}
         </button>
       </div>
 
       {showInvite && locations && (
         <div className="mb-6">
-          <InviteStaffForm
+          <AddStaffSection
             businessId={businessId}
             locations={locations}
             onSuccess={() => {
               invalidateAll();
-              setShowInvite(false);
+              utils.auth.listInvites.invalidate();
             }}
           />
         </div>
@@ -833,6 +1130,8 @@ export default function StaffPage() {
       </div>
 
       <StaffTable users={users ?? []} onEdit={(id) => setEditUserId(id)} />
+
+      <PendingInvitesSection />
 
       {editUserId && locations && (
         <EditStaffModal

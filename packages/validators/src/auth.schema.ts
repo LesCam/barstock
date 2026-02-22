@@ -49,6 +49,24 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(8),
 });
 
+export const staffInviteCreateSchema = z.object({
+  email: z.string().email(),
+  role: z.nativeEnum(Role),
+  locationIds: z.array(z.string().uuid()).min(1),
+  businessId: z.string().uuid(),
+  firstName: z.string().max(100).optional(),
+  lastName: z.string().max(100).optional(),
+  phone: z.string().max(100).optional(),
+});
+
+export const acceptInviteSchema = z.object({
+  token: z.string(),
+  password: z.string().min(8),
+  pin: z.string().length(4).regex(/^\d{4}$/),
+  firstName: z.string().max(100).optional(),
+  lastName: z.string().max(100).optional(),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
 export type UserCreateInput = z.infer<typeof userCreateSchema>;
@@ -56,3 +74,5 @@ export type UserUpdateInput = z.infer<typeof userUpdateSchema>;
 export type UserLocationCreateInput = z.infer<typeof userLocationCreateSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type StaffInviteCreateInput = z.infer<typeof staffInviteCreateSchema>;
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;

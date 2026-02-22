@@ -1,6 +1,6 @@
 import { router, publicProcedure, protectedProcedure } from "../trpc";
 import { requireRole } from "../trpc";
-import { loginSchema, refreshTokenSchema, userCreateSchema, userUpdateSchema, userLocationCreateSchema, forgotPasswordSchema, resetPasswordSchema } from "@barstock/validators";
+import { loginSchema, refreshTokenSchema, userCreateSchema, userUpdateSchema, userLocationCreateSchema, forgotPasswordSchema, resetPasswordSchema, staffInviteCreateSchema, acceptInviteSchema } from "@barstock/validators";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import crypto from "crypto";
@@ -15,6 +15,7 @@ import {
 } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { AlertService } from "../services/alert.service";
+import { EmailService } from "../services/email.service";
 import { SettingsService } from "../services/settings.service";
 import { SubscriptionService } from "../services/subscription.service";
 
@@ -661,5 +662,336 @@ export const authRouter = router({
       }
 
       return result;
+    }),
+
+  // ── Staff Invites ──────────────────────────────────────────
+
+  sendInvite: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(staffInviteCreateSchema)
+    .mutation(async ({ ctx, input }) => {
+      const subService = new SubscriptionService(ctx.prisma);
+      await subService.enforceUserLimit(input.businessId);
+
+      // Reject if email already belongs to an active user in this business
+      const existingUser = await ctx.prisma.user.findFirst({
+        where: { email: input.email, businessId: input.businessId, isActive: true },
+      });
+      if (existingUser) {
+        throw new TRPCError({ code: "CONFLICT", message: "A user with this email already exists in your business" });
+      }
+
+      // Auto-cancel any prior pending invite for same email+business
+      await ctx.prisma.staffInvite.updateMany({
+        where: {
+          email: input.email,
+          businessId: input.businessId,
+          acceptedAt: null,
+          cancelledAt: null,
+        },
+        data: { cancelledAt: new Date() },
+      });
+
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h
+
+      const invite = await ctx.prisma.staffInvite.create({
+        data: {
+          businessId: input.businessId,
+          email: input.email,
+          role: input.role,
+          locationIds: input.locationIds,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          phone: input.phone,
+          token,
+          expiresAt,
+          invitedBy: ctx.user.userId,
+        },
+      });
+
+      const business = await ctx.prisma.business.findUniqueOrThrow({
+        where: { id: input.businessId },
+        select: { name: true },
+      });
+
+      const inviteUrl = `${process.env.NEXTAUTH_URL}/accept-invite?token=${token}`;
+      await EmailService.sendInviteEmail(
+        input.email,
+        business.name,
+        ctx.user.email,
+        inviteUrl
+      );
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: input.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "user.invite_sent",
+        objectType: "staff_invite",
+        objectId: invite.id,
+        metadata: { email: input.email, role: input.role },
+      });
+
+      return { id: invite.id, email: invite.email };
+    }),
+
+  listInvites: protectedProcedure
+    .use(requireRole("business_admin"))
+    .query(async ({ ctx }) => {
+      const invites = await ctx.prisma.staffInvite.findMany({
+        where: { businessId: ctx.user.businessId },
+        include: {
+          invitedByUser: { select: { firstName: true, lastName: true, email: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const now = new Date();
+      return invites.map((inv) => {
+        let status: "pending" | "accepted" | "expired" | "cancelled";
+        if (inv.acceptedAt) status = "accepted";
+        else if (inv.cancelledAt) status = "cancelled";
+        else if (inv.expiresAt < now) status = "expired";
+        else status = "pending";
+
+        const inviterName = inv.invitedByUser.firstName
+          ? `${inv.invitedByUser.firstName} ${inv.invitedByUser.lastName ?? ""}`.trim()
+          : inv.invitedByUser.email;
+
+        return {
+          id: inv.id,
+          email: inv.email,
+          role: inv.role,
+          firstName: inv.firstName,
+          lastName: inv.lastName,
+          status,
+          expiresAt: inv.expiresAt,
+          createdAt: inv.createdAt,
+          invitedBy: inviterName,
+        };
+      });
+    }),
+
+  cancelInvite: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ inviteId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const invite = await ctx.prisma.staffInvite.findUniqueOrThrow({
+        where: { id: input.inviteId },
+      });
+
+      if (invite.businessId !== ctx.user.businessId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+      }
+      if (invite.acceptedAt || invite.cancelledAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invite is no longer pending" });
+      }
+
+      await ctx.prisma.staffInvite.update({
+        where: { id: input.inviteId },
+        data: { cancelledAt: new Date() },
+      });
+
+      return { success: true };
+    }),
+
+  resendInvite: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ inviteId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const oldInvite = await ctx.prisma.staffInvite.findUniqueOrThrow({
+        where: { id: input.inviteId },
+      });
+
+      if (oldInvite.businessId !== ctx.user.businessId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+      }
+
+      // Cancel old invite
+      await ctx.prisma.staffInvite.update({
+        where: { id: input.inviteId },
+        data: { cancelledAt: new Date() },
+      });
+
+      // Create fresh invite
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+      const newInvite = await ctx.prisma.staffInvite.create({
+        data: {
+          businessId: oldInvite.businessId,
+          email: oldInvite.email,
+          role: oldInvite.role,
+          locationIds: oldInvite.locationIds,
+          firstName: oldInvite.firstName,
+          lastName: oldInvite.lastName,
+          phone: oldInvite.phone,
+          token,
+          expiresAt,
+          invitedBy: ctx.user.userId,
+        },
+      });
+
+      const business = await ctx.prisma.business.findUniqueOrThrow({
+        where: { id: oldInvite.businessId },
+        select: { name: true },
+      });
+
+      const inviteUrl = `${process.env.NEXTAUTH_URL}/accept-invite?token=${token}`;
+      await EmailService.sendInviteEmail(
+        oldInvite.email,
+        business.name,
+        ctx.user.email,
+        inviteUrl
+      );
+
+      return { id: newInvite.id, email: newInvite.email };
+    }),
+
+  getInviteInfo: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const invite = await ctx.prisma.staffInvite.findUnique({
+        where: { token: input.token },
+        include: { business: { select: { name: true } } },
+      });
+
+      if (!invite) {
+        return { valid: false, reason: "not_found" as const };
+      }
+      if (invite.acceptedAt) {
+        return { valid: false, reason: "accepted" as const };
+      }
+      if (invite.cancelledAt) {
+        return { valid: false, reason: "cancelled" as const };
+      }
+      if (invite.expiresAt < new Date()) {
+        return { valid: false, reason: "expired" as const };
+      }
+
+      return {
+        valid: true,
+        email: invite.email,
+        firstName: invite.firstName,
+        lastName: invite.lastName,
+        businessName: invite.business.name,
+        role: invite.role,
+      };
+    }),
+
+  acceptInvite: publicProcedure
+    .input(acceptInviteSchema)
+    .mutation(async ({ ctx, input }) => {
+      const invite = await ctx.prisma.staffInvite.findUnique({
+        where: { token: input.token },
+      });
+
+      if (!invite) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+      }
+      if (invite.acceptedAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This invite has already been accepted" });
+      }
+      if (invite.cancelledAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This invite has been cancelled" });
+      }
+      if (invite.expiresAt < new Date()) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This invite has expired" });
+      }
+
+      // Check email not already taken
+      const existingUser = await ctx.prisma.user.findUnique({
+        where: { email: invite.email },
+      });
+      if (existingUser) {
+        throw new TRPCError({ code: "CONFLICT", message: "An account with this email already exists" });
+      }
+
+      // Check PIN unique within business
+      const pinUser = await ctx.prisma.user.findFirst({
+        where: { pin: input.pin, businessId: invite.businessId, isActive: true },
+      });
+      if (pinUser) {
+        throw new TRPCError({ code: "CONFLICT", message: "This PIN is already in use. Please choose a different one." });
+      }
+
+      // Re-check user limit at accept time
+      const subService = new SubscriptionService(ctx.prisma);
+      await subService.enforceUserLimit(invite.businessId);
+
+      const passwordHash = await hashPassword(input.password);
+      const primaryLocationId = invite.locationIds[0];
+
+      const user = await ctx.prisma.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            email: invite.email,
+            passwordHash,
+            role: invite.role,
+            locationId: primaryLocationId,
+            businessId: invite.businessId,
+            firstName: input.firstName ?? invite.firstName,
+            lastName: input.lastName ?? invite.lastName,
+            phone: invite.phone,
+            pin: input.pin,
+          },
+        });
+
+        // Create UserLocation rows for all locations
+        for (const locId of invite.locationIds) {
+          await tx.userLocation.create({
+            data: {
+              userId: newUser.id,
+              locationId: locId,
+              role: invite.role,
+            },
+          });
+        }
+
+        // Mark invite as accepted
+        await tx.staffInvite.update({
+          where: { id: invite.id },
+          data: { acceptedAt: new Date() },
+        });
+
+        return newUser;
+      });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: invite.businessId,
+        actorUserId: user.id,
+        actionType: "user.invite_accepted",
+        objectType: "user",
+        objectId: user.id,
+        metadata: { email: invite.email, role: invite.role, inviteId: invite.id },
+      });
+
+      // Notify admins
+      try {
+        const alertSvc = new AlertService(ctx.prisma);
+        await alertSvc.notifyAdmins(
+          invite.businessId,
+          "Staff invite accepted",
+          `${invite.email} accepted their invite and joined as ${invite.role}`,
+          "/staff",
+          { userId: user.id, email: invite.email, role: invite.role }
+        );
+      } catch {
+        // Don't fail accept if alert fails
+      }
+
+      // Auto-login: return tokens
+      const payload = await buildUserPayload(ctx.prisma, user.id);
+      const accessToken = createAccessToken(payload);
+      const refreshToken = createRefreshToken(payload);
+
+      return {
+        accessToken,
+        refreshToken,
+        tokenType: "bearer",
+        expiresIn: 1800,
+      };
     }),
 });
