@@ -4,6 +4,13 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { BarSparkline } from "@/components/charts/BarSparkline";
 import { useUsageSparklines } from "@/lib/use-usage-sparklines";
+import { useParStatus } from "@/lib/use-par-status";
+
+const PAR_DOT_COLORS: Record<string, string> = {
+  red: "#EF4444",
+  yellow: "#FBBF24",
+  green: "#4CAF50",
+};
 
 function formatStock(
   qty: number | null,
@@ -39,6 +46,7 @@ export default function InventoryTab() {
     { enabled: !!selectedLocationId }
   );
   const { sparklineMap } = useUsageSparklines(selectedLocationId ?? null);
+  const { parMap } = useParStatus(selectedLocationId ?? null);
 
   return (
     <View style={styles.container}>
@@ -59,6 +67,14 @@ export default function InventoryTab() {
               <View style={styles.sparklineWrap}>
                 <BarSparkline data={sparklineMap.get(item.id)!} />
               </View>
+            )}
+            {parMap.get(item.id) && (
+              <View
+                style={[
+                  styles.parDot,
+                  { backgroundColor: PAR_DOT_COLORS[parMap.get(item.id)!.status] },
+                ]}
+              />
             )}
             <Text style={styles.stock}>
               {formatStock(
@@ -89,6 +105,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: "500", color: "#EAF0FF" },
   type: { fontSize: 12, color: "#5A6A7A", marginTop: 2, textTransform: "capitalize" },
   sparklineWrap: { marginRight: 12 },
+  parDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
   stock: { fontSize: 14, fontWeight: "600", color: "#4FC3F7" },
   empty: { textAlign: "center", color: "#5A6A7A", marginTop: 40, fontSize: 14 },
 });

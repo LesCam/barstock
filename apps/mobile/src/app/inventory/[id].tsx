@@ -2,6 +2,13 @@ import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { UsageChartCard } from "@/components/charts/UsageChartCard";
+import { useParStatus } from "@/lib/use-par-status";
+
+const PAR_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  red: { label: "Below Min", color: "#EF4444" },
+  yellow: { label: "Below Par", color: "#FBBF24" },
+  green: { label: "Above Par", color: "#4CAF50" },
+};
 
 function formatStock(
   qty: number | null,
@@ -54,6 +61,8 @@ export default function InventoryItemDetailScreen() {
   );
 
   const onHandQty = stockRows?.find((r) => r.id === id)?.onHandQty ?? null;
+  const { parMap } = useParStatus(item?.locationId ?? null);
+  const parInfo = id ? parMap.get(id) : undefined;
 
   if (isLoading || !item) {
     return (
@@ -93,6 +102,33 @@ export default function InventoryItemDetailScreen() {
       </View>
 
       <UsageChartCard itemId={id!} locationId={item.locationId} />
+
+      {parInfo && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Par Status</Text>
+          <DetailRow label="Par Level" value={String(parInfo.parLevel ?? "—")} />
+          <DetailRow label="Min Level" value={String(parInfo.minLevel ?? "—")} />
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Status</Text>
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: PAR_STATUS_LABELS[parInfo.status]?.color ?? "#5A6A7A" },
+              ]}
+            >
+              <Text style={styles.statusBadgeText}>
+                {PAR_STATUS_LABELS[parInfo.status]?.label ?? parInfo.status}
+              </Text>
+            </View>
+          </View>
+          {parInfo.daysToStockout !== null && (
+            <DetailRow
+              label="Days to Stockout"
+              value={parInfo.daysToStockout <= 0 ? "Now" : `~${parInfo.daysToStockout}d`}
+            />
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -117,4 +153,11 @@ const styles = StyleSheet.create({
   },
   detailLabel: { fontSize: 14, color: "#5A6A7A" },
   detailValue: { fontSize: 14, fontWeight: "500", color: "#EAF0FF" },
+  cardTitle: { fontSize: 15, fontWeight: "600", color: "#EAF0FF", marginBottom: 8 },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  statusBadgeText: { fontSize: 12, fontWeight: "600", color: "#FFF" },
 });
