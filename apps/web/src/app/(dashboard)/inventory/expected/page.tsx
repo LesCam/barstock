@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 
@@ -9,12 +9,73 @@ type SortKey =
   | "categoryName"
   | "lastCountValue"
   | "daysSinceLastCount"
-  | "posDepletionSinceCount"
+  | "netChangeSinceCount"
   | "predictedLevel"
+  | "daysToStockout"
   | "avgDailyUsage"
   | "currentOnHand"
-  | "status";
+  | "confidence";
 type SortDir = "asc" | "desc";
+
+function ConfidenceDot({ confidence }: { confidence: "high" | "medium" | "low" }) {
+  const config = {
+    high: { color: "bg-green-400", label: "High" },
+    medium: { color: "bg-yellow-400", label: "Med" },
+    low: { color: "bg-red-400", label: "Low" },
+  };
+  const { color, label } = config[confidence];
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`inline-block h-2.5 w-2.5 rounded-full ${color}`} />
+      <span className="text-xs">{label}</span>
+    </span>
+  );
+}
+
+function SourceBreakdown({
+  posChange,
+  tapFlowChange,
+  receivingChange,
+  transferChange,
+  adjustmentChange,
+  netChange,
+}: {
+  posChange: number;
+  tapFlowChange: number;
+  receivingChange: number;
+  transferChange: number;
+  adjustmentChange: number;
+  netChange: number;
+}) {
+  const sources = [
+    { label: "POS Sales", value: posChange },
+    { label: "Tap Flow", value: tapFlowChange },
+    { label: "Received", value: receivingChange },
+    { label: "Transfers", value: transferChange },
+    { label: "Adjustments", value: adjustmentChange },
+  ].filter((s) => s.value !== 0);
+
+  return (
+    <div className="grid grid-cols-2 gap-x-8 gap-y-1 py-2 text-sm sm:grid-cols-3">
+      {sources.map((s) => (
+        <div key={s.label} className="flex justify-between gap-4">
+          <span className="text-[#EAF0FF]/60">{s.label}</span>
+          <span className={s.value > 0 ? "text-green-400" : s.value < 0 ? "text-red-400" : ""}>
+            {s.value > 0 ? "+" : ""}
+            {s.value.toFixed(1)}
+          </span>
+        </div>
+      ))}
+      <div className="col-span-full mt-1 flex justify-between gap-4 border-t border-white/10 pt-1">
+        <span className="font-medium text-[#EAF0FF]/80">Net Change</span>
+        <span className={`font-medium ${netChange > 0 ? "text-green-400" : netChange < 0 ? "text-red-400" : ""}`}>
+          {netChange > 0 ? "+" : ""}
+          {netChange.toFixed(1)}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function ExpectedOnHandPage() {
   const { data: session } = useSession();
@@ -25,6 +86,7 @@ export default function ExpectedOnHandPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("itemName");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data: items, isLoading } = trpc.reports.expectedOnHand.useQuery(
     { locationId: locationId! },
@@ -61,9 +123,9 @@ export default function ExpectedOnHandPage() {
     return [...filtered].sort((a, b) => {
       const aVal = a[sortKey];
       const bVal = b[sortKey];
-      if (sortKey === "status") {
-        const order = { green: 0, yellow: 1, red: 2 };
-        const cmp = order[a.status] - order[b.status];
+      if (sortKey === "confidence") {
+        const order = { high: 0, medium: 1, low: 2 };
+        const cmp = order[a.confidence] - order[b.confidence];
         return sortDir === "asc" ? cmp : -cmp;
       }
       if (typeof aVal === "string" && typeof bVal === "string") {
@@ -77,11 +139,15 @@ export default function ExpectedOnHandPage() {
   }, [items, filter, categoryFilter, sortKey, sortDir]);
 
   const needingCount = useMemo(
-    () => sortedItems.filter((i) => i.status === "yellow" || i.status === "red").length,
+    () => sortedItems.filter((i) => i.confidence === "medium" || i.confidence === "low").length,
     [sortedItems]
   );
   const negativeStock = useMemo(
-    () => sortedItems.filter((i) => i.predictedLevel != null && i.predictedLevel <= 0 && i.lastCountValue != null && i.lastCountValue - i.posDepletionSinceCount < 0).length,
+    () => sortedItems.filter((i) => i.predictedLevel != null && i.predictedLevel < 0).length,
+    [sortedItems]
+  );
+  const lowStock = useMemo(
+    () => sortedItems.filter((i) => i.daysToStockout != null && i.daysToStockout < 3 && i.daysToStockout >= 0).length,
     [sortedItems]
   );
 
@@ -102,17 +168,12 @@ export default function ExpectedOnHandPage() {
     );
   }
 
-  function StatusDot({ status }: { status: "green" | "yellow" | "red" }) {
-    const colors = { green: "bg-green-400", yellow: "bg-yellow-400", red: "bg-red-400" };
-    return <span className={`inline-block h-2.5 w-2.5 rounded-full ${colors[status]}`} />;
-  }
-
   return (
     <div>
       <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">Expected On-Hand</h1>
 
       {/* Summary cards */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid gap-4 sm:grid-cols-4">
         <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
           <p className="text-sm text-[#EAF0FF]/60">Total Items</p>
           <p className="text-2xl font-bold">{items?.length ?? 0}</p>
@@ -127,6 +188,12 @@ export default function ExpectedOnHandPage() {
           <p className="text-sm text-[#EAF0FF]/60">Negative Stock</p>
           <p className={`text-2xl font-bold ${negativeStock > 0 ? "text-red-400" : ""}`}>
             {negativeStock}
+          </p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+          <p className="text-sm text-[#EAF0FF]/60">Low Stock (&lt;3d)</p>
+          <p className={`text-2xl font-bold ${lowStock > 0 ? "text-orange-400" : ""}`}>
+            {lowStock}
           </p>
         </div>
       </div>
@@ -160,51 +227,78 @@ export default function ExpectedOnHandPage() {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
               <tr>
+                <th className="w-8 px-2 py-3" />
                 <SortHeader label="Item" field="itemName" />
                 <SortHeader label="Category" field="categoryName" />
                 <SortHeader label="Last Count" field="lastCountValue" />
                 <SortHeader label="Days Ago" field="daysSinceLastCount" />
-                <SortHeader label="POS Since" field="posDepletionSinceCount" />
+                <SortHeader label="Net Change" field="netChangeSinceCount" />
                 <SortHeader label="Predicted" field="predictedLevel" />
+                <SortHeader label="Days Left" field="daysToStockout" />
                 <SortHeader label="Avg Daily" field="avgDailyUsage" />
                 <SortHeader label="On-Hand" field="currentOnHand" />
-                <SortHeader label="Status" field="status" />
+                <SortHeader label="Confidence" field="confidence" />
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {sortedItems.map((item) => {
-                const isNegativePredicted =
-                  item.lastCountValue != null &&
-                  item.lastCountValue - item.posDepletionSinceCount < 0;
+                const isExpanded = expandedId === item.inventoryItemId;
+                const isNegative = item.predictedLevel != null && item.predictedLevel < 0;
                 return (
-                  <tr key={item.inventoryItemId} className="hover:bg-[#0B1623]/60">
-                    <td className="px-4 py-3 font-medium">{item.itemName}</td>
-                    <td className="px-4 py-3">{item.categoryName ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      {item.lastCountValue != null ? item.lastCountValue.toFixed(1) : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {item.daysSinceLastCount != null ? `${item.daysSinceLastCount}d` : "Never"}
-                    </td>
-                    <td className="px-4 py-3">{item.posDepletionSinceCount.toFixed(1)}</td>
-                    <td className={`px-4 py-3 font-medium ${isNegativePredicted ? "text-red-400" : ""}`}>
-                      {item.predictedLevel != null
-                        ? (item.lastCountValue! - item.posDepletionSinceCount).toFixed(1)
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {item.avgDailyUsage != null ? item.avgDailyUsage.toFixed(1) : "—"}
-                    </td>
-                    <td className="px-4 py-3">{item.currentOnHand.toFixed(1)}</td>
-                    <td className="px-4 py-3">
-                      <StatusDot status={item.status} />
-                    </td>
-                  </tr>
+                  <Fragment key={item.inventoryItemId}>
+                    <tr
+                      className="cursor-pointer hover:bg-[#0B1623]/60"
+                      onClick={() => setExpandedId(isExpanded ? null : item.inventoryItemId)}
+                    >
+                      <td className="px-2 py-3 text-center text-[#EAF0FF]/40">
+                        {isExpanded ? "▼" : "▶"}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{item.itemName}</td>
+                      <td className="px-4 py-3">{item.categoryName ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        {item.lastCountValue != null ? item.lastCountValue.toFixed(1) : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.daysSinceLastCount != null ? `${item.daysSinceLastCount}d` : "Never"}
+                      </td>
+                      <td className={`px-4 py-3 ${item.netChangeSinceCount > 0 ? "text-green-400" : item.netChangeSinceCount < 0 ? "text-red-400" : ""}`}>
+                        {item.netChangeSinceCount > 0 ? "+" : ""}
+                        {item.netChangeSinceCount.toFixed(1)}
+                      </td>
+                      <td className={`px-4 py-3 font-medium ${isNegative ? "text-red-400" : ""}`}>
+                        {item.predictedLevel != null ? item.predictedLevel.toFixed(1) : "—"}
+                      </td>
+                      <td className={`px-4 py-3 ${item.daysToStockout != null && item.daysToStockout < 3 ? "text-orange-400 font-medium" : ""}`}>
+                        {item.daysToStockout != null ? `${item.daysToStockout}d` : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.avgDailyUsage != null ? item.avgDailyUsage.toFixed(1) : "—"}
+                      </td>
+                      <td className="px-4 py-3">{item.currentOnHand.toFixed(1)}</td>
+                      <td className="px-4 py-3">
+                        <ConfidenceDot confidence={item.confidence} />
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-[#0B1623]/40">
+                        <td colSpan={11} className="px-8 py-3">
+                          <SourceBreakdown
+                            posChange={item.posChangeSinceCount}
+                            tapFlowChange={item.tapFlowChangeSinceCount}
+                            receivingChange={item.receivingChangeSinceCount}
+                            transferChange={item.transferChangeSinceCount}
+                            adjustmentChange={item.adjustmentChangeSinceCount}
+                            netChange={item.netChangeSinceCount}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
               {sortedItems.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                  <td colSpan={11} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                     {filter || categoryFilter
                       ? "No items match your filters."
                       : "No inventory data available."}

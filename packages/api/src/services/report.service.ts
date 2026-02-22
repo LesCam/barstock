@@ -18,8 +18,16 @@ export interface ExpectedOnHandItem {
   lastCountDate: Date | null;
   daysSinceLastCount: number | null;
   posDepletionSinceCount: number;
+  posChangeSinceCount: number;
+  tapFlowChangeSinceCount: number;
+  receivingChangeSinceCount: number;
+  transferChangeSinceCount: number;
+  adjustmentChangeSinceCount: number;
+  netChangeSinceCount: number;
   predictedLevel: number | null;
   avgDailyUsage: number | null;
+  daysToStockout: number | null;
+  confidence: "high" | "medium" | "low";
   status: "green" | "yellow" | "red";
 }
 
@@ -253,7 +261,12 @@ export class ReportService {
         count_units: string | null;
         gross_weight_grams: string | null;
         last_count_date: Date | null;
-        pos_depletion_since_count: string | null;
+        net_change: string | null;
+        pos_change: string | null;
+        tap_change: string | null;
+        receiving_change: string | null;
+        transfer_change: string | null;
+        adjustment_change: string | null;
         avg_daily: string | null;
       }>
     >(Prisma.sql`
@@ -279,17 +292,26 @@ export class ReportService {
         SELECT inventory_item_id, ABS(SUM(quantity_delta)) / 30.0 AS avg_daily
         FROM consumption_events
         WHERE location_id = ${locationId}::uuid
-          AND event_type = 'pos_sale'
+          AND event_type IN ('pos_sale', 'tap_flow')
           AND event_ts >= NOW() - INTERVAL '30 days'
+          AND reversal_of_event_id IS NULL
         GROUP BY inventory_item_id
       ),
-      depletion_since AS (
-        SELECT ce.inventory_item_id, ABS(SUM(ce.quantity_delta)) AS depleted
+      changes_since_count AS (
+        SELECT
+          ce.inventory_item_id,
+          SUM(ce.quantity_delta) AS net_change,
+          COALESCE(SUM(ce.quantity_delta) FILTER (WHERE ce.event_type = 'pos_sale'), 0) AS pos_change,
+          COALESCE(SUM(ce.quantity_delta) FILTER (WHERE ce.event_type = 'tap_flow'), 0) AS tap_change,
+          COALESCE(SUM(ce.quantity_delta) FILTER (WHERE ce.event_type = 'receiving'), 0) AS receiving_change,
+          COALESCE(SUM(ce.quantity_delta) FILTER (WHERE ce.event_type = 'transfer'), 0) AS transfer_change,
+          COALESCE(SUM(ce.quantity_delta) FILTER (WHERE ce.event_type = 'manual_adjustment'), 0) AS adjustment_change
         FROM consumption_events ce
         JOIN last_counts lc ON lc.inventory_item_id = ce.inventory_item_id
         WHERE ce.location_id = ${locationId}::uuid
-          AND ce.event_type = 'pos_sale'
+          AND ce.event_type != 'inventory_count_adjustment'
           AND ce.event_ts > lc.created_at
+          AND ce.reversal_of_event_id IS NULL
         GROUP BY ce.inventory_item_id
       )
       SELECT
@@ -300,14 +322,19 @@ export class ReportService {
         lc.count_units,
         lc.gross_weight_grams,
         lc.created_at AS last_count_date,
-        COALESCE(dsc.depleted, 0) AS pos_depletion_since_count,
+        csc.net_change,
+        csc.pos_change,
+        csc.tap_change,
+        csc.receiving_change,
+        csc.transfer_change,
+        csc.adjustment_change,
         au.avg_daily
       FROM inventory_items i
       LEFT JOIN inventory_item_categories c ON c.id = i.category_id
       LEFT JOIN on_hand oh ON oh.inventory_item_id = i.id
       LEFT JOIN last_counts lc ON lc.inventory_item_id = i.id
       LEFT JOIN avg_usage au ON au.inventory_item_id = i.id
-      LEFT JOIN depletion_since dsc ON dsc.inventory_item_id = i.id
+      LEFT JOIN changes_since_count csc ON csc.inventory_item_id = i.id
       WHERE i.location_id = ${locationId}::uuid AND i.active = true
       ORDER BY i.name
     `);
@@ -328,29 +355,43 @@ export class ReportService {
               (24 * 60 * 60 * 1000)
           )
         : null;
-      const posDepletionSinceCount = Number(
-        row.pos_depletion_since_count ?? 0
-      );
+
+      const posChangeSinceCount = Number(row.pos_change ?? 0);
+      const tapFlowChangeSinceCount = Number(row.tap_change ?? 0);
+      const receivingChangeSinceCount = Number(row.receiving_change ?? 0);
+      const transferChangeSinceCount = Number(row.transfer_change ?? 0);
+      const adjustmentChangeSinceCount = Number(row.adjustment_change ?? 0);
+      const netChangeSinceCount = Number(row.net_change ?? 0);
+      const posDepletionSinceCount = Math.abs(posChangeSinceCount);
+
       const predictedLevel =
         lastCountValue != null
-          ? Math.max(0, lastCountValue - posDepletionSinceCount)
+          ? lastCountValue + netChangeSinceCount
           : null;
+
       const avgDailyUsage =
         row.avg_daily != null ? Number(row.avg_daily) : null;
 
-      let status: "green" | "yellow" | "red" = "green";
-      if (daysSinceLastCount == null || daysSinceLastCount > 14) {
-        status = "red";
-      } else if (daysSinceLastCount > 7) {
-        status = "yellow";
+      let daysToStockout: number | null = null;
+      if (predictedLevel != null && avgDailyUsage != null && avgDailyUsage > 0) {
+        daysToStockout = predictedLevel <= 0 ? 0 : Math.floor(predictedLevel / avgDailyUsage);
       }
-      if (
-        predictedLevel != null &&
-        lastCountValue != null &&
-        lastCountValue - posDepletionSinceCount < 0
+
+      const hasDepletionData = posChangeSinceCount !== 0 || tapFlowChangeSinceCount !== 0;
+      let confidence: "high" | "medium" | "low" = "low";
+      if (predictedLevel != null && predictedLevel < 0) {
+        confidence = "low";
+      } else if (daysSinceLastCount != null && daysSinceLastCount <= 3 && hasDepletionData) {
+        confidence = "high";
+      } else if (
+        daysSinceLastCount != null &&
+        (daysSinceLastCount <= 7 || (daysSinceLastCount <= 14 && receivingChangeSinceCount > 0))
       ) {
-        status = "red";
+        confidence = "medium";
       }
+
+      const statusMap = { high: "green", medium: "yellow", low: "red" } as const;
+      const status = statusMap[confidence];
 
       return {
         inventoryItemId: row.id,
@@ -363,8 +404,16 @@ export class ReportService {
         lastCountDate,
         daysSinceLastCount,
         posDepletionSinceCount,
+        posChangeSinceCount,
+        tapFlowChangeSinceCount,
+        receivingChangeSinceCount,
+        transferChangeSinceCount,
+        adjustmentChangeSinceCount,
+        netChangeSinceCount,
         predictedLevel,
         avgDailyUsage,
+        daysToStockout,
+        confidence,
         status,
       };
     });
