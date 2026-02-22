@@ -17,8 +17,16 @@ import { useAuth } from "@/lib/auth-context";
 import { useCountingPreferences } from "@/lib/counting-preferences";
 import { useNetwork } from "@/lib/network-context";
 import { subscribe, type QueueEntry } from "@/lib/offline-queue";
+import { useSessionSSE, type SSEEvent } from "@/lib/use-session-sse";
 import { VarianceReasonModal } from "@/components/VarianceReasonModal";
+import { SessionActivityFeed, type ActivityEvent } from "@/components/SessionActivityFeed";
+import { ConflictModal, type ConflictData } from "@/components/ConflictModal";
 import type { VarianceReason } from "@barstock/types";
+
+const AVATAR_COLORS = [
+  "#2BA8A0", "#E9B44C", "#7C5CFC", "#EF4444",
+  "#3B82F6", "#22C55E", "#F97316", "#EC4899",
+];
 
 interface BarArea {
   id: string;
@@ -72,6 +80,9 @@ export default function SessionDetailScreen() {
   const [editingQty, setEditingQty] = useState("");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [sortMode, setSortMode] = useState<"alphabetical" | "smart">("alphabetical");
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+  const [recentOtherCounts, setRecentOtherCounts] = useState<Map<string, string>>(new Map());
+  const [conflictData, setConflictData] = useState<ConflictData | null>(null);
 
   // Load persisted sort mode on mount
   useEffect(() => {
@@ -88,7 +99,7 @@ export default function SessionDetailScreen() {
 
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
     { id: id! },
-    { refetchOnMount: "always", refetchInterval: 30_000 }
+    { refetchOnMount: "always", refetchInterval: 60_000 }
   );
 
   // --- Session timer ---
@@ -138,14 +149,82 @@ export default function SessionDetailScreen() {
     };
   }, [sendHeartbeat]);
 
-  // Poll participants every 10s (faster for claim visibility)
+  // Poll participants every 60s (SSE primary, polling fallback)
   const { data: participants } = trpc.sessions.listParticipants.useQuery(
     { sessionId: id! },
     {
       enabled: !!session && !session.endedTs,
-      refetchInterval: 10_000,
+      refetchInterval: 60_000,
     }
   );
+
+  // --- SSE for real-time updates ---
+  const handleSSEEvent = useCallback((event: SSEEvent) => {
+    if (event.type === "line_added" || event.type === "line_deleted") {
+      utils.sessions.getById.invalidate({ id: id! });
+      utils.sessions.previewClose.invalidate({ sessionId: id! });
+    }
+    if (event.type === "participant_joined" || event.type === "participant_left" ||
+        event.type === "area_claimed" || event.type === "area_released") {
+      utils.sessions.listParticipants.invalidate({ sessionId: id! });
+    }
+    if (event.type === "session_closed") {
+      utils.sessions.getById.invalidate({ id: id! });
+      utils.sessions.list.invalidate();
+      Alert.alert("Session Closed", "This session was closed by another user.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+      return;
+    }
+
+    // Activity feed — filter out own events
+    const payload = event.payload as Record<string, unknown> | undefined;
+    if (payload && payload.countedBy !== authUser?.userId && payload.userId !== authUser?.userId) {
+      const displayName = (payload.displayName as string) || "Someone";
+      let text = "";
+      if (event.type === "line_added") {
+        text = `${displayName} counted ${payload.itemName ?? "an item"}`;
+      } else if (event.type === "line_deleted") {
+        text = `${displayName} removed an item`;
+      } else if (event.type === "participant_joined") {
+        text = `${displayName} joined the session`;
+      } else if (event.type === "area_claimed") {
+        text = `${displayName} claimed ${payload.subAreaName ?? "an area"}`;
+      }
+      if (text) {
+        setActivityEvents((prev) => {
+          const next = [
+            { id: `${Date.now()}_${Math.random()}`, text, displayName, timestamp: Date.now() },
+            ...prev,
+          ];
+          return next.slice(0, 10);
+        });
+      }
+    }
+
+    // "Just counted" indicator for other users
+    if (event.type === "line_added" && payload && payload.countedBy !== authUser?.userId) {
+      const itemId = payload.itemId as string | undefined;
+      const displayName = (payload.displayName as string) || "Someone";
+      if (itemId) {
+        setRecentOtherCounts((prev) => {
+          const next = new Map(prev);
+          next.set(itemId, displayName);
+          return next;
+        });
+        // Auto-clear after 10 seconds
+        setTimeout(() => {
+          setRecentOtherCounts((prev) => {
+            const next = new Map(prev);
+            next.delete(itemId);
+            return next;
+          });
+        }, 10_000);
+      }
+    }
+  }, [id, authUser?.userId, utils]);
+
+  useSessionSSE(id, !!session && !session?.endedTs, handleSSEEvent);
 
   // Count participants per sub-area (excluding current user)
   const subAreaParticipantCounts = useMemo(() => {
@@ -158,6 +237,22 @@ export default function SessionDetailScreen() {
       }
     }
     return counts;
+  }, [participants, authUser]);
+
+  // Per sub-area participant details for colored avatars
+  const subAreaParticipants = useMemo(() => {
+    if (!participants || !authUser) return new Map<string, Array<{ name: string; idx: number }>>();
+    const map = new Map<string, Array<{ name: string; idx: number }>>();
+    participants.forEach((p, idx) => {
+      if (p.userId === authUser.userId) return;
+      if (p.subArea?.id) {
+        const list = map.get(p.subArea.id) ?? [];
+        const name = p.user.firstName || p.user.email.split("@")[0];
+        list.push({ name, idx });
+        map.set(p.subArea.id, list);
+      }
+    });
+    return map;
   }, [participants, authUser]);
 
   const { data: areas } = trpc.areas.listBarAreas.useQuery(
@@ -358,6 +453,26 @@ export default function SessionDetailScreen() {
   const updateLine = trpc.sessions.updateLine.useMutation({
     onSuccess() {
       utils.sessions.getById.invalidate({ id: id! });
+    },
+    onError(error: { message: string }) {
+      try {
+        const parsed = JSON.parse(error.message);
+        if (parsed.type === "CONFLICT") {
+          setConflictData({
+            lineId: editingLineId ?? "",
+            myValues: {
+              countUnits: editingQty ? parseInt(editingQty, 10) : undefined,
+            },
+            theirValues: parsed.theirValues,
+            theirName: parsed.theirName,
+            currentUpdatedAt: parsed.currentUpdatedAt,
+          });
+          return;
+        }
+      } catch {
+        // Not a conflict error
+      }
+      Alert.alert("Error", error.message);
     },
   });
 
@@ -616,7 +731,12 @@ export default function SessionDetailScreen() {
   function handleSaveEdit(lineId: string) {
     const val = parseInt(editingQty, 10);
     if (isNaN(val) || val < 0) return;
-    updateLine.mutate({ id: lineId, countUnits: val });
+    // Pass expectedUpdatedAt for conflict detection
+    const line = session?.lines.find((l: any) => l.id === lineId);
+    const expectedUpdatedAt = line?.updatedAt
+      ? new Date(line.updatedAt).toISOString()
+      : undefined;
+    updateLine.mutate({ id: lineId, countUnits: val, expectedUpdatedAt });
     setEditingLineId(null);
     setEditingQty("");
   }
@@ -696,19 +816,20 @@ export default function SessionDetailScreen() {
           showsHorizontalScrollIndicator={false}
           style={styles.participantRow}
         >
-          {participants.map((p) => {
+          {participants.map((p, idx) => {
             const isYou = p.userId === authUser?.userId;
             const idleMs = Date.now() - new Date(p.lastActiveAt).getTime();
             const isIdle = idleMs > 2 * 60 * 1000; // 2 minutes
             const displayName = p.user.firstName
               ? p.user.firstName
               : p.user.email.split("@")[0];
+            const avatarColor = AVATAR_COLORS[idx % AVATAR_COLORS.length];
             return (
               <View
                 key={p.userId}
                 style={[styles.participantChip, isIdle && styles.participantChipIdle]}
               >
-                <View style={styles.participantAvatar}>
+                <View style={[styles.participantAvatar, { backgroundColor: avatarColor }]}>
                   <Text style={styles.participantAvatarText}>
                     {displayName.charAt(0).toUpperCase()}
                   </Text>
@@ -725,6 +846,23 @@ export default function SessionDetailScreen() {
             );
           })}
         </ScrollView>
+      )}
+
+      {/* Activity Feed */}
+      {isOpen && activityEvents.length > 0 && (
+        <SessionActivityFeed events={activityEvents} />
+      )}
+
+      {/* Session Progress Bar */}
+      {isOpen && expectedTotal > 0 && (
+        <View style={styles.progressBarTrack}>
+          <View
+            style={[
+              styles.progressBarFill,
+              { width: `${Math.min(100, (expectedCounted / expectedTotal) * 100)}%` },
+            ]}
+          />
+        </View>
       )}
 
       <ScrollView style={styles.mainScroll} showsVerticalScrollIndicator={false}>
@@ -856,8 +994,26 @@ export default function SessionDetailScreen() {
                         </Text>
                       )}
                       {othersHere > 0 && (
-                        <View style={styles.subAreaBadge}>
-                          <Text style={styles.subAreaBadgeText}>{othersHere}</Text>
+                        <View style={{ flexDirection: "row", marginLeft: 4, gap: -4 }}>
+                          {(subAreaParticipants.get(sa.id) ?? []).slice(0, 3).map((p) => (
+                            <View
+                              key={p.idx}
+                              style={{
+                                width: 16,
+                                height: 16,
+                                borderRadius: 8,
+                                backgroundColor: AVATAR_COLORS[p.idx % AVATAR_COLORS.length],
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderWidth: 1,
+                                borderColor: "#0F1D2E",
+                              }}
+                            >
+                              <Text style={{ color: "#fff", fontSize: 8, fontWeight: "700" }}>
+                                {p.name.charAt(0).toUpperCase()}
+                              </Text>
+                            </View>
+                          ))}
                         </View>
                       )}
                     </TouchableOpacity>
@@ -1007,6 +1163,11 @@ export default function SessionDetailScreen() {
                             </View>
                             {hint && (
                               <Text style={styles.hintText}>{formatHint(hint)}</Text>
+                            )}
+                            {recentOtherCounts.has(item.inventoryItemId) && (
+                              <Text style={styles.justCountedText}>
+                                {recentOtherCounts.get(item.inventoryItemId)} just counted this
+                              </Text>
                             )}
                           </View>
                           <Text style={styles.expectedType}>
@@ -1353,6 +1514,28 @@ export default function SessionDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Conflict Resolution Overlay */}
+      {conflictData && (
+        <ConflictModal
+          conflict={conflictData}
+          onKeepMine={() => {
+            // Retry with fresh expectedUpdatedAt from conflict response
+            updateLine.mutate({
+              id: conflictData.lineId,
+              ...conflictData.myValues,
+              expectedUpdatedAt: conflictData.currentUpdatedAt,
+            });
+            setConflictData(null);
+          }}
+          onKeepTheirs={() => {
+            // Dismiss and refresh data
+            setConflictData(null);
+            utils.sessions.getById.invalidate({ id: id! });
+          }}
+          onCancel={() => setConflictData(null)}
+        />
+      )}
 
       {/* Variance Reason Modal */}
       {varianceItem && (
@@ -1905,6 +2088,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontStyle: "italic",
     marginLeft: 4,
+  },
+  progressBarTrack: {
+    height: 4,
+    backgroundColor: "#1E3550",
+    borderRadius: 2,
+    marginBottom: 8,
+    overflow: "hidden" as const,
+  },
+  progressBarFill: {
+    height: 4,
+    backgroundColor: "#2BA8A0",
+    borderRadius: 2,
+  },
+  justCountedText: {
+    color: "#2BA8A0",
+    fontSize: 11,
+    fontStyle: "italic",
+    marginTop: 1,
   },
 
   // Submit footer

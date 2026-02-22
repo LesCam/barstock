@@ -135,6 +135,35 @@ function isNotFoundError(err: unknown): boolean {
 
 const BACKOFF_DELAYS = [1000, 3000, 9000];
 
+/**
+ * Reset all failed entries to pending and re-process the queue.
+ */
+export async function retryFailed(
+  client: CreateTRPCClient<AppRouter>,
+): Promise<{ synced: number; failed: number; sessionClosed: boolean }> {
+  const queue = await loadQueue();
+  for (const entry of queue) {
+    if (entry.status === "failed") {
+      entry.status = "pending";
+      entry.retryCount = 0;
+      entry.error = undefined;
+    }
+  }
+  await persistQueue();
+  notify();
+  return processQueue(client);
+}
+
+/**
+ * Remove all failed entries from the queue.
+ */
+export async function clearFailed(): Promise<void> {
+  const queue = await loadQueue();
+  cachedQueue = queue.filter((e) => e.status !== "failed");
+  await persistQueue();
+  notify();
+}
+
 export async function processQueue(
   client: CreateTRPCClient<AppRouter>,
 ): Promise<{ synced: number; failed: number; sessionClosed: boolean }> {

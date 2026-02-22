@@ -654,6 +654,7 @@ model InventorySessionLine {
   subAreaId        String?  @map("sub_area_id") @db.Uuid
   countedBy        String?  @map("counted_by") @db.Uuid
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
   session       InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   inventoryItem InventoryItem    @relation(fields: [inventoryItemId], references: [id])

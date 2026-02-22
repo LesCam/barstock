@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, useCallback } from "react";
 import NetInfo, { type NetInfoState } from "@react-native-community/netinfo";
-import { processQueue } from "./offline-queue";
+import { processQueue, retryFailed, getQueue } from "./offline-queue";
 import { trpcVanilla } from "./trpc";
 
 interface NetworkContextValue {
@@ -37,6 +37,19 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = NetInfo.addEventListener(handleStateChange);
     return () => unsubscribe();
   }, [handleStateChange]);
+
+  // Periodic retry of failed items when online (every 60s)
+  useEffect(() => {
+    if (!isOnline) return;
+    const interval = setInterval(async () => {
+      const queue = await getQueue();
+      const hasFailed = queue.some((e) => e.status === "failed");
+      if (hasFailed) {
+        retryFailed(trpcVanilla);
+      }
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [isOnline]);
 
   return (
     <NetworkContext.Provider value={{ isOnline }}>

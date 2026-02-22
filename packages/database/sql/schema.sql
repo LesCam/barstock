@@ -610,3 +610,6 @@ CREATE TABLE IF NOT EXISTS session_participants (
   PRIMARY KEY (session_id, user_id)
 );
 ALTER TABLE inventory_session_lines ADD COLUMN IF NOT EXISTS counted_by UUID REFERENCES users(id);
+
+-- v1.15 PATCH: UPDATED_AT for conflict detection on session lines
+ALTER TABLE inventory_session_lines ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();

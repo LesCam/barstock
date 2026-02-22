@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Alert } from "react-native";
 import { useNetwork } from "@/lib/network-context";
-import { subscribe, isSyncing, type QueueEntry } from "@/lib/offline-queue";
+import { subscribe, isSyncing, retryFailed, clearFailed, type QueueEntry } from "@/lib/offline-queue";
+import { trpcVanilla } from "@/lib/trpc";
 
 type BannerState = "hidden" | "offline" | "syncing" | "synced" | "failed";
 
@@ -63,14 +64,21 @@ export function OfflineBanner() {
 
   if (bannerState === "hidden") return null;
 
-  function showFailedDetails() {
-    const failed = queue.filter((e) => e.status === "failed");
-    const details = failed
-      .map((e) => `${e.mutation}: ${e.error ?? "Unknown error"}`)
-      .join("\n\n");
+  const [retrying, setRetrying] = useState(false);
+
+  function handleRetry() {
+    setRetrying(true);
+    retryFailed(trpcVanilla).finally(() => setRetrying(false));
+  }
+
+  function handleClear() {
     Alert.alert(
-      `${failed.length} Item${failed.length !== 1 ? "s" : ""} Failed to Sync`,
-      details || "No details available.",
+      "Clear Failed Items",
+      `Remove ${failedCount} failed item${failedCount !== 1 ? "s" : ""} from the queue? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Clear", style: "destructive", onPress: () => clearFailed() },
+      ],
     );
   }
 
@@ -98,18 +106,38 @@ export function OfflineBanner() {
       break;
   }
 
-  const Component = bannerState === "failed" ? TouchableOpacity : View;
-
   return (
     <Animated.View
       style={[styles.container, { transform: [{ translateY: slideAnim }] }]}
     >
-      <Component
-        style={[styles.banner, bgColor]}
-        {...(bannerState === "failed" ? { onPress: showFailedDetails, activeOpacity: 0.7 } : {})}
-      >
-        <Text style={styles.text}>{text}</Text>
-      </Component>
+      <View style={[styles.banner, bgColor]}>
+        {bannerState === "failed" ? (
+          <View style={styles.failedRow}>
+            <Text style={styles.text}>{text}</Text>
+            <View style={styles.failedButtons}>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={handleRetry}
+                disabled={retrying}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.retryBtnText}>
+                  {retrying ? "Retrying..." : "Retry"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.clearBtn}
+                onPress={handleClear}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.clearBtnText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.text}>{text}</Text>
+        )}
+      </View>
     </Animated.View>
   );
 }
@@ -143,5 +171,38 @@ const styles = StyleSheet.create({
   },
   bgFailed: {
     backgroundColor: "#dc2626",
+  },
+  failedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  failedButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  retryBtn: {
+    backgroundColor: "#2563eb",
+    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  retryBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  clearBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.5)",
+    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  clearBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

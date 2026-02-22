@@ -199,9 +199,40 @@ export default function SessionDetailPage({
     },
   });
 
+  // --- Conflict state ---
+  const [conflict, setConflict] = useState<{
+    lineId: string;
+    myField: string;
+    myValue: number | undefined;
+    theirValues: { countUnits: number | null; grossWeightGrams: number | null; percentRemaining: number | null };
+    theirName: string;
+    currentUpdatedAt: string;
+  } | null>(null);
+
   // --- Mutations ---
   const updateLineMut = trpc.sessions.updateLine.useMutation({
-    onSuccess: () => utils.sessions.getById.invalidate({ id }),
+    onSuccess: () => {
+      utils.sessions.getById.invalidate({ id });
+      setConflict(null);
+    },
+    onError: (err) => {
+      try {
+        const parsed = JSON.parse(err.message);
+        if (parsed.type === "CONFLICT") {
+          setConflict((prev) => ({
+            lineId: prev?.lineId ?? "",
+            myField: prev?.myField ?? "",
+            myValue: prev?.myValue,
+            theirValues: parsed.theirValues,
+            theirName: parsed.theirName,
+            currentUpdatedAt: parsed.currentUpdatedAt,
+          }));
+          return;
+        }
+      } catch {
+        // Not a conflict error
+      }
+    },
   });
 
   const deleteLineMut = trpc.sessions.deleteLine.useMutation({
@@ -388,12 +419,14 @@ export default function SessionDetailPage({
           <span className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/40">
             Active:
           </span>
-          {participants.map((p) => {
+          {participants.map((p, idx) => {
             const idleMs = Date.now() - new Date(p.lastActiveAt).getTime();
             const isIdle = idleMs > 2 * 60 * 1000;
             const displayName = p.user.firstName
               ? `${p.user.firstName}${p.user.lastName ? ` ${p.user.lastName.charAt(0)}.` : ""}`
               : p.user.email.split("@")[0];
+            const avatarColors = ["#2BA8A0", "#E9B44C", "#7C5CFC", "#EF4444", "#3B82F6", "#22C55E", "#F97316", "#EC4899"];
+            const avatarColor = avatarColors[idx % avatarColors.length];
             return (
               <span
                 key={p.userId}
@@ -404,10 +437,11 @@ export default function SessionDetailPage({
                 }`}
               >
                 <span
-                  className={`inline-block h-2 w-2 rounded-full ${
-                    isIdle ? "bg-[#5A6A7A]" : "bg-[#2BA8A0]"
-                  }`}
-                />
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                  style={{ backgroundColor: isIdle ? "#5A6A7A" : avatarColor }}
+                >
+                  {displayName.charAt(0).toUpperCase()}
+                </span>
                 {displayName}
                 {p.subArea && !isIdle && (
                   <span className="text-[#EAF0FF]/40">
@@ -425,6 +459,54 @@ export default function SessionDetailPage({
       {duplicateWarning && (
         <div className="mb-4 rounded-lg border border-[#E9B44C]/30 bg-[#E9B44C]/10 p-3 text-sm text-[#E9B44C]">
           {duplicateWarning}
+        </div>
+      )}
+
+      {/* Conflict resolution card */}
+      {conflict && conflict.theirName && (
+        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+          <p className="mb-2 font-semibold text-red-300">
+            Conflict — {conflict.theirName} also edited this line
+          </p>
+          <div className="mb-3 flex gap-6 text-sm">
+            <div>
+              <span className="text-[#EAF0FF]/60">Your value: </span>
+              <span className="font-bold text-[#EAF0FF]">{conflict.myValue ?? "\u2014"}</span>
+            </div>
+            <div>
+              <span className="text-[#EAF0FF]/60">{conflict.theirName}&apos;s value: </span>
+              <span className="font-bold text-[#EAF0FF]">
+                {conflict.theirValues[conflict.myField as keyof typeof conflict.theirValues] ?? "\u2014"}
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              className="rounded bg-[#E9B44C] px-4 py-1.5 text-sm font-bold text-[#0B1623] hover:bg-[#E9B44C]/80"
+              onClick={() => {
+                const data: Record<string, unknown> = { id: conflict.lineId, expectedUpdatedAt: conflict.currentUpdatedAt };
+                data[conflict.myField] = conflict.myValue;
+                updateLineMut.mutate(data as any);
+              }}
+            >
+              Keep Mine
+            </button>
+            <button
+              className="rounded border border-white/20 px-4 py-1.5 text-sm text-[#EAF0FF] hover:bg-white/5"
+              onClick={() => {
+                setConflict(null);
+                utils.sessions.getById.invalidate({ id });
+              }}
+            >
+              Keep Theirs
+            </button>
+            <button
+              className="px-2 text-sm text-[#5A6A7A] hover:text-white"
+              onClick={() => setConflict(null)}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -501,9 +583,10 @@ export default function SessionDetailPage({
                     <EditableCell
                       value={line.countUnits != null ? Number(line.countUnits) : null}
                       disabled={!isOpen}
-                      onSave={(v) =>
-                        updateLineMut.mutate({ id: line.id, countUnits: v })
-                      }
+                      onSave={(v) => {
+                        setConflict({ lineId: line.id, myField: "countUnits", myValue: v, theirValues: { countUnits: null, grossWeightGrams: null, percentRemaining: null }, theirName: "", currentUpdatedAt: "" });
+                        updateLineMut.mutate({ id: line.id, countUnits: v, expectedUpdatedAt: line.updatedAt ? new Date(line.updatedAt).toISOString() : undefined });
+                      }}
                     />
                   </td>
                   <td className="px-4 py-3">
@@ -514,9 +597,10 @@ export default function SessionDetailPage({
                           : null
                       }
                       disabled={!isOpen}
-                      onSave={(v) =>
-                        updateLineMut.mutate({ id: line.id, grossWeightGrams: v })
-                      }
+                      onSave={(v) => {
+                        setConflict({ lineId: line.id, myField: "grossWeightGrams", myValue: v, theirValues: { countUnits: null, grossWeightGrams: null, percentRemaining: null }, theirName: "", currentUpdatedAt: "" });
+                        updateLineMut.mutate({ id: line.id, grossWeightGrams: v, expectedUpdatedAt: line.updatedAt ? new Date(line.updatedAt).toISOString() : undefined });
+                      }}
                     />
                   </td>
                   <td className="px-4 py-3">
@@ -527,9 +611,10 @@ export default function SessionDetailPage({
                           : null
                       }
                       disabled={!isOpen}
-                      onSave={(v) =>
-                        updateLineMut.mutate({ id: line.id, percentRemaining: v })
-                      }
+                      onSave={(v) => {
+                        setConflict({ lineId: line.id, myField: "percentRemaining", myValue: v, theirValues: { countUnits: null, grossWeightGrams: null, percentRemaining: null }, theirName: "", currentUpdatedAt: "" });
+                        updateLineMut.mutate({ id: line.id, percentRemaining: v, expectedUpdatedAt: line.updatedAt ? new Date(line.updatedAt).toISOString() : undefined });
+                      }}
                     />
                   </td>
                   <td className="px-4 py-3 text-xs">

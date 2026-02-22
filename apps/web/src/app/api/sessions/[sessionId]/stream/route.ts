@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { decodeToken } from "@barstock/api/src/services/auth.service";
 import { sessionEmitter } from "@barstock/api/src/lib/session-emitter";
 import type { SessionEvent } from "@barstock/api/src/lib/session-emitter";
 
@@ -8,9 +9,24 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return new Response("Unauthorized", { status: 401 });
+  // Try Bearer first (mobile), fall back to cookie (web)
+  let authenticated = false;
+  const authHeader = _request.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    try {
+      const decoded = decodeToken(authHeader.slice(7));
+      if (decoded.type === "access" && typeof decoded.userId === "string") {
+        authenticated = true;
+      }
+    } catch {
+      // Invalid token
+    }
+  }
+  if (!authenticated) {
+    const session = await auth();
+    if (!session?.user) {
+      return new Response("Unauthorized", { status: 401 });
+    }
   }
 
   const { sessionId } = await params;

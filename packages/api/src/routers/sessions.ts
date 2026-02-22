@@ -127,12 +127,19 @@ export const sessionsRouter = router({
       });
 
       try {
+        const user = await ctx.prisma.user.findUnique({
+          where: { id: ctx.user.userId },
+          select: { firstName: true, email: true },
+        });
+        const displayName = user?.firstName || user?.email.split("@")[0] || "Unknown";
         sessionEmitter.notifySession(input.sessionId, {
           type: "line_added",
           payload: {
             lineId: line.id,
             itemName: line.inventoryItem.name,
+            itemId: input.inventoryItemId,
             countedBy: ctx.user.userId,
+            displayName,
             subAreaId: input.subAreaId ?? null,
           },
         });
@@ -151,9 +158,39 @@ export const sessionsRouter = router({
       percentRemaining: z.number().min(0).max(100).optional(),
       notes: z.string().optional(),
       subAreaId: z.string().uuid().optional(),
+      expectedUpdatedAt: z.string().datetime().optional(),
     }))
-    .mutation(({ ctx, input }) => {
-      const { id, ...data } = input;
+    .mutation(async ({ ctx, input }) => {
+      const { id, expectedUpdatedAt, ...data } = input;
+
+      // Optimistic locking: if caller provides expectedUpdatedAt, verify it matches
+      if (expectedUpdatedAt) {
+        const current = await ctx.prisma.inventorySessionLine.findUniqueOrThrow({
+          where: { id },
+          include: {
+            countedByUser: { select: { firstName: true, email: true } },
+          },
+        });
+
+        const currentTs = current.updatedAt.toISOString();
+        if (currentTs !== expectedUpdatedAt) {
+          const theirName = current.countedByUser?.firstName
+            || current.countedByUser?.email.split("@")[0]
+            || "Another user";
+          const error = new Error(JSON.stringify({
+            type: "CONFLICT",
+            theirValues: {
+              countUnits: current.countUnits != null ? Number(current.countUnits) : null,
+              grossWeightGrams: current.grossWeightGrams != null ? Number(current.grossWeightGrams) : null,
+              percentRemaining: current.percentRemaining != null ? Number(current.percentRemaining) : null,
+            },
+            theirName,
+            currentUpdatedAt: currentTs,
+          }));
+          throw error;
+        }
+      }
+
       return ctx.prisma.inventorySessionLine.update({ where: { id }, data });
     }),
 
@@ -164,9 +201,19 @@ export const sessionsRouter = router({
         where: { id: input.id },
       });
       try {
+        const user = await ctx.prisma.user.findUnique({
+          where: { id: ctx.user.userId },
+          select: { firstName: true, email: true },
+        });
+        const displayName = user?.firstName || user?.email.split("@")[0] || "Unknown";
         sessionEmitter.notifySession(line.sessionId, {
           type: "line_deleted",
-          payload: { lineId: line.id, itemId: line.inventoryItemId },
+          payload: {
+            lineId: line.id,
+            itemId: line.inventoryItemId,
+            userId: ctx.user.userId,
+            displayName,
+          },
         });
       } catch {
         // Best-effort SSE

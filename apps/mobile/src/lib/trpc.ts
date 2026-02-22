@@ -21,6 +21,10 @@ export function setRefreshToken(token: string | null) {
   refreshToken = token;
 }
 
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
 export function setOnSignOut(cb: (() => void) | null) {
   onSignOut = cb;
 }
