@@ -17,10 +17,12 @@ interface AutoLockPolicy {
 
 interface LockContextValue {
   isLocked: boolean;
+  isSwitchMode: boolean;
   lockPolicy: AutoLockPolicy | null;
   userUnlockMethod: UnlockMethod;
   setUserUnlockMethod: (method: UnlockMethod) => void;
   unlock: () => void;
+  lockForSwitch: () => void;
 }
 
 const DEFAULT_POLICY: AutoLockPolicy = {
@@ -32,10 +34,12 @@ const DEFAULT_POLICY: AutoLockPolicy = {
 
 const LockContext = createContext<LockContextValue>({
   isLocked: false,
+  isSwitchMode: false,
   lockPolicy: null,
   userUnlockMethod: "pin",
   setUserUnlockMethod: () => {},
   unlock: () => {},
+  lockForSwitch: () => {},
 });
 
 export function useLock() {
@@ -45,6 +49,7 @@ export function useLock() {
 export function LockProvider({ children }: { children: ReactNode }) {
   const { token, user } = useAuth();
   const [isLocked, setIsLocked] = useState(false);
+  const [isSwitchMode, setIsSwitchMode] = useState(false);
   const [lockPolicy, setLockPolicy] = useState<AutoLockPolicy | null>(null);
   const [userUnlockMethod, setMethod] = useState<UnlockMethod>("pin");
   const backgroundedAt = useRef<number | null>(null);
@@ -96,13 +101,20 @@ export function LockProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) {
       setIsLocked(false);
+      setIsSwitchMode(false);
       backgroundedAt.current = null;
     }
   }, [token]);
 
   const unlock = useCallback(() => {
     setIsLocked(false);
+    setIsSwitchMode(false);
     backgroundedAt.current = null;
+  }, []);
+
+  const lockForSwitch = useCallback(() => {
+    setIsSwitchMode(true);
+    setIsLocked(true);
   }, []);
 
   const setUserUnlockMethod = useCallback((method: UnlockMethod) => {
@@ -112,7 +124,7 @@ export function LockProvider({ children }: { children: ReactNode }) {
 
   return (
     <LockContext.Provider
-      value={{ isLocked, lockPolicy, userUnlockMethod, setUserUnlockMethod, unlock }}
+      value={{ isLocked, isSwitchMode, lockPolicy, userUnlockMethod, setUserUnlockMethod, unlock, lockForSwitch }}
     >
       {children}
     </LockContext.Provider>

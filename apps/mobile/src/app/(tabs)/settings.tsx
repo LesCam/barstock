@@ -15,7 +15,7 @@ export default function SettingsTab() {
   const canAccessScale = usePermission("canAccessScale");
   const { voiceUserEnabled, setVoiceUserEnabled } = useVoicePreference();
   const { hapticEnabled, setHapticEnabled, quickEmptyEnabled, setQuickEmptyEnabled } = useCountingPreferences();
-  const { lockPolicy, userUnlockMethod, setUserUnlockMethod } = useLock();
+  const { lockPolicy, userUnlockMethod, setUserUnlockMethod, lockForSwitch } = useLock();
   const [biometricAvailable, setBiometricAvailable] = useState(false);
 
   useEffect(() => {
@@ -217,7 +217,10 @@ export default function SettingsTab() {
       </View>
 
       <View style={styles.section}>
-        <TouchableOpacity style={styles.card} onPress={signOut}>
+        <TouchableOpacity style={styles.card} onPress={lockForSwitch}>
+          <Text style={styles.switchUserText}>Switch User</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.card, { marginTop: 8 }]} onPress={signOut}>
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
@@ -237,6 +240,7 @@ const styles = StyleSheet.create({
   email: { fontSize: 15, color: "#EAF0FF", fontWeight: "500" },
   rowText: { fontSize: 15, color: "#EAF0FF" },
   switchText: { fontSize: 15, color: "#E9B44C", fontWeight: "500" },
+  switchUserText: { fontSize: 15, color: "#E9B44C", fontWeight: "500" },
   logoutText: { fontSize: 15, color: "#dc2626", fontWeight: "500" },
   toggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   disabledText: { fontSize: 15, color: "#5A6A7A" },

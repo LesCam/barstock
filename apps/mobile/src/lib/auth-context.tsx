@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQueryClient } from "@tanstack/react-query";
 import { trpcVanilla, setAuthToken, setRefreshToken, setOnSignOut } from "./trpc";
 import { scaleManager } from "./scale/scale-manager";
-import { unregisterPushToken } from "./use-push-notifications";
+import { unregisterPushToken, reregisterPushToken } from "./use-push-notifications";
 
 const KEYS = {
   token: "authToken",
@@ -61,6 +62,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 interface AuthContextValue extends AuthState {
   signIn: (accessToken: string, refreshToken: string) => Promise<void>;
   signOut: () => Promise<void>;
+  switchUser: (accessToken: string, refreshToken: string) => Promise<void>;
   selectLocation: (locationId: string | null) => Promise<void>;
 }
 
@@ -80,6 +82,7 @@ export function usePermission(key: string): boolean {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(authReducer, {
     token: null,
     user: null,
@@ -187,6 +190,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: "SIGN_OUT" });
   };
 
+  const switchUser = async (accessToken: string, refreshToken: string) => {
+    setAuthToken(accessToken);
+    setRefreshToken(refreshToken);
+    const user: UserPayload = await trpcVanilla.auth.me.query();
+
+    // Keep current location if new user has access, else auto-select or null
+    const currentLocation = state.selectedLocationId;
+    const locationId =
+      currentLocation && user.locationIds.includes(currentLocation)
+        ? currentLocation
+        : user.locationIds.length === 1
+          ? user.locationIds[0]
+          : null;
+
+    await Promise.all([
+      AsyncStorage.setItem(KEYS.token, accessToken),
+      AsyncStorage.setItem(KEYS.refreshToken, refreshToken),
+      AsyncStorage.setItem(KEYS.user, JSON.stringify(user)),
+      locationId
+        ? AsyncStorage.setItem(KEYS.locationId, locationId)
+        : AsyncStorage.removeItem(KEYS.locationId),
+    ]);
+
+    dispatch({ type: "SIGN_IN", token: accessToken, user, locationId });
+
+    // Refetch all active queries for new user
+    queryClient.invalidateQueries();
+
+    // Reassign push token to new user (fire-and-forget)
+    reregisterPushToken().catch(() => {});
+  };
+
   const selectLocation = async (locationId: string | null) => {
     if (locationId) {
       await AsyncStorage.setItem(KEYS.locationId, locationId);
@@ -197,7 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signOut, selectLocation }}>
+    <AuthContext.Provider value={{ ...state, signIn, signOut, switchUser, selectLocation }}>
       {children}
     </AuthContext.Provider>
   );

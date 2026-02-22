@@ -27,6 +27,28 @@ try {
 
 let registeredToken: string | null = null;
 
+export async function reregisterPushToken(): Promise<void> {
+  if (!Notifications) return;
+  try {
+    const { status: existingStatus } =
+      await Notifications!.getPermissionsAsync();
+    if (existingStatus !== "granted") return;
+
+    const tokenData = await Notifications!.getExpoPushTokenAsync({
+      projectId: "52eb4767-125b-40a0-9c2c-d28e99abcc9f",
+    });
+    const token = tokenData.data;
+    registeredToken = token;
+
+    await trpcVanilla.notifications.registerPushToken.mutate({
+      token,
+      platform: Platform.OS as "ios" | "android",
+    });
+  } catch {
+    // Token registration failed — non-critical
+  }
+}
+
 export async function unregisterPushToken(): Promise<void> {
   if (!registeredToken) return;
   try {
@@ -48,27 +70,13 @@ export function usePushNotifications(isAuthenticated: boolean) {
 
     (async () => {
       try {
+        // Request permission if needed (reregisterPushToken only checks existing)
         const { status: existingStatus } =
           await Notifications!.getPermissionsAsync();
-        let finalStatus = existingStatus;
-
         if (existingStatus !== "granted") {
-          const { status } = await Notifications!.requestPermissionsAsync();
-          finalStatus = status;
+          await Notifications!.requestPermissionsAsync();
         }
-
-        if (finalStatus !== "granted") return;
-
-        const tokenData = await Notifications!.getExpoPushTokenAsync({
-          projectId: "52eb4767-125b-40a0-9c2c-d28e99abcc9f",
-        });
-        const token = tokenData.data;
-        registeredToken = token;
-
-        await trpcVanilla.notifications.registerPushToken.mutate({
-          token,
-          platform: Platform.OS as "ios" | "android",
-        });
+        await reregisterPushToken();
       } catch {
         // Token registration failed — non-critical
       }

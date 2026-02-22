@@ -38,14 +38,15 @@ const KEYS_CONFIG = [
 const BUSINESS_CONFIG_KEY = "businessConfig";
 
 export default function LockScreen() {
-  const { unlock, lockPolicy, userUnlockMethod } = useLock();
-  const { user } = useAuth();
+  const { unlock, lockPolicy, userUnlockMethod, isSwitchMode } = useLock();
+  const { user, switchUser } = useAuth();
 
-  const [mode, setMode] = useState<"pin" | "biometric">("pin");
+  const [mode, setMode] = useState<"pin" | "biometric" | "switch">("pin");
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [businessName, setBusinessName] = useState("");
+  const [businessId, setBusinessId] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -57,11 +58,22 @@ export default function LockScreen() {
         try {
           const config = JSON.parse(raw);
           setBusinessName(config.name ?? "");
+          setBusinessId(config.id ?? null);
           setLogoUrl(config.logoUrl ?? null);
         } catch {}
       }
     });
   }, []);
+
+  // Enter switch mode when triggered from lock context
+  useEffect(() => {
+    if (isSwitchMode) {
+      setMode("switch");
+      setPin("");
+      setError(null);
+      setSubmitting(false);
+    }
+  }, [isSwitchMode]);
 
   // Check biometric availability
   useEffect(() => {
@@ -72,9 +84,9 @@ export default function LockScreen() {
     })();
   }, []);
 
-  // Determine initial mode based on policy and preference
+  // Determine initial mode based on policy and preference (skip if switch mode)
   useEffect(() => {
-    if (!lockPolicy) return;
+    if (!lockPolicy || isSwitchMode) return;
 
     const canPin = lockPolicy.allowPin;
     const canBio = lockPolicy.allowBiometric && biometricAvailable;
@@ -86,7 +98,7 @@ export default function LockScreen() {
     } else if (canBio) {
       setMode("biometric");
     }
-  }, [lockPolicy, userUnlockMethod, biometricAvailable]);
+  }, [lockPolicy, userUnlockMethod, biometricAvailable, isSwitchMode]);
 
   // Auto-trigger biometric when in biometric mode
   useEffect(() => {
@@ -134,25 +146,53 @@ export default function LockScreen() {
       setSubmitting(true);
       setError(null);
 
-      trpcVanilla.auth.verifyPin
-        .mutate({ pin })
-        .then(() => {
-          unlock();
-        })
-        .catch((err: any) => {
-          const msg = err?.message ?? "";
-          if (msg.includes("UNAUTHORIZED") || msg.includes("token") || msg.includes("jwt")) {
-            setError("Session expired — please restart the app");
-            setSubmitting(false);
-          } else {
-            setError("Incorrect PIN");
+      if (mode === "switch") {
+        if (!businessId) {
+          setError("Business not loaded — try again");
+          setSubmitting(false);
+          setPin("");
+          return;
+        }
+        trpcVanilla.auth.loginWithPin
+          .mutate({ pin, businessId })
+          .then(async (result) => {
+            await switchUser(result.accessToken, result.refreshToken);
+            unlock();
+          })
+          .catch((err: any) => {
+            const msg = err?.message ?? "";
+            if (msg.includes("Invalid PIN")) {
+              setError("Incorrect PIN");
+            } else {
+              setError(msg || "Login failed");
+            }
             shake();
             setTimeout(() => {
               setPin("");
               setSubmitting(false);
             }, 600);
-          }
-        });
+          });
+      } else {
+        trpcVanilla.auth.verifyPin
+          .mutate({ pin })
+          .then(() => {
+            unlock();
+          })
+          .catch((err: any) => {
+            const msg = err?.message ?? "";
+            if (msg.includes("UNAUTHORIZED") || msg.includes("token") || msg.includes("jwt")) {
+              setError("Session expired — please restart the app");
+              setSubmitting(false);
+            } else {
+              setError("Incorrect PIN");
+              shake();
+              setTimeout(() => {
+                setPin("");
+                setSubmitting(false);
+              }, 600);
+            }
+          });
+      }
     }
   }, [pin]);
 
@@ -175,6 +215,7 @@ export default function LockScreen() {
 
   const canSwitchToPin = lockPolicy?.allowPin && mode === "biometric";
   const canSwitchToBio = lockPolicy?.allowBiometric && biometricAvailable && mode === "pin";
+  const canShowSwitchUser = mode !== "switch" && !!businessId;
 
   return (
     <View style={styles.container}>
@@ -198,12 +239,16 @@ export default function LockScreen() {
           <Text style={styles.businessName}>{businessName}</Text>
         ) : null}
 
-        <Text style={styles.lockIcon}>🔒</Text>
+        <Text style={styles.lockIcon}>{mode === "switch" ? "👥" : "🔒"}</Text>
         <Text style={styles.subtitle}>
-          {mode === "biometric" ? "Tap to unlock with Face ID" : "Enter your PIN to unlock"}
+          {mode === "switch"
+            ? "Enter any staff PIN to sign in"
+            : mode === "biometric"
+              ? "Tap to unlock with Face ID"
+              : "Enter your PIN to unlock"}
         </Text>
 
-        {mode === "pin" && (
+        {(mode === "pin" || mode === "switch") && (
           <>
             {/* PIN dots */}
             <Animated.View
@@ -299,7 +344,40 @@ export default function LockScreen() {
           </TouchableOpacity>
         )}
 
-        {user?.email && (
+        {canShowSwitchUser && (
+          <TouchableOpacity
+            style={styles.switchLink}
+            onPress={() => {
+              setMode("switch");
+              setPin("");
+              setError(null);
+              setSubmitting(false);
+            }}
+          >
+            <Text style={styles.switchText}>Switch User</Text>
+          </TouchableOpacity>
+        )}
+
+        {mode === "switch" && (
+          <TouchableOpacity
+            style={styles.switchLink}
+            onPress={() => {
+              const canBio = lockPolicy?.allowBiometric && biometricAvailable;
+              if (userUnlockMethod === "biometric" && canBio) {
+                setMode("biometric");
+              } else {
+                setMode("pin");
+              }
+              setPin("");
+              setError(null);
+              setSubmitting(false);
+            }}
+          >
+            <Text style={styles.switchText}>Cancel</Text>
+          </TouchableOpacity>
+        )}
+
+        {user?.email && mode !== "switch" && (
           <Text style={styles.userEmail}>{user.email}</Text>
         )}
       </View>
