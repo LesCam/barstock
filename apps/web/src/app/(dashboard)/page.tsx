@@ -194,6 +194,41 @@ export default function DashboardPage() {
     { enabled: !!locationId }
   );
 
+  const { data: parItems, isLoading: parLoading } = trpc.parLevels.list.useQuery(
+    { locationId: locationId! },
+    { enabled: !!locationId }
+  );
+
+  const { data: coverageStats, isLoading: coverageLoading } = trpc.pos.coverageStats.useQuery(
+    { locationId: locationId! },
+    { enabled: !!locationId }
+  );
+
+  const { data: openPOs, isLoading: openPOsLoading } = trpc.purchaseOrders.list.useQuery(
+    { locationId: locationId!, status: "open" },
+    { enabled: !!locationId }
+  );
+
+  const reorderCount = useMemo(
+    () => parItems?.filter((i) => i.needsReorder).length ?? 0,
+    [parItems]
+  );
+  const lowStockCount = useMemo(
+    () =>
+      parItems?.filter(
+        (i) => i.daysToStockout != null && i.daysToStockout <= 3 && !i.needsReorder
+      ).length ?? 0,
+    [parItems]
+  );
+  const lowStockItems = useMemo(
+    () =>
+      parItems
+        ?.filter((i) => i.needsReorder)
+        .sort((a, b) => (a.daysToStockout ?? Infinity) - (b.daysToStockout ?? Infinity))
+        .slice(0, 5) ?? [],
+    [parItems]
+  );
+
   const shrinkageSuspects = useMemo(
     () => patterns?.filter((p) => p.isShrinkageSuspect) ?? [],
     [patterns]
@@ -299,6 +334,98 @@ export default function DashboardPage() {
               )}
             </Link>
           </div>
+
+          {/* Par / Reorder / Coverage / Open POs KPI Cards */}
+          <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Link href="/par" className={`rounded-lg border bg-[#16283F] p-4 transition-colors hover:border-[#E9B44C]/30 ${reorderCount > 0 ? "border-red-500/30" : "border-green-500/30"}`}>
+              <p className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/50">Reorder Needed</p>
+              {parLoading ? (
+                <div className="mt-2 h-8 w-12 animate-pulse rounded bg-white/10" />
+              ) : (
+                <>
+                  <p className={`mt-1 text-2xl font-bold ${reorderCount > 0 ? "text-red-400" : "text-green-400"}`}>{reorderCount}</p>
+                  <p className="mt-0.5 text-xs text-[#EAF0FF]/40">{reorderCount} item{reorderCount !== 1 ? "s" : ""} below min level</p>
+                </>
+              )}
+            </Link>
+
+            <Link href="/par" className={`rounded-lg border bg-[#16283F] p-4 transition-colors hover:border-[#E9B44C]/30 ${lowStockCount > 0 ? "border-amber-500/30" : "border-white/10"}`}>
+              <p className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/50">Low Stock (&lt;3d)</p>
+              {parLoading ? (
+                <div className="mt-2 h-8 w-12 animate-pulse rounded bg-white/10" />
+              ) : (
+                <>
+                  <p className={`mt-1 text-2xl font-bold ${lowStockCount > 0 ? "text-amber-400" : "text-[#EAF0FF]"}`}>{lowStockCount}</p>
+                  <p className="mt-0.5 text-xs text-[#EAF0FF]/40">{lowStockCount} item{lowStockCount !== 1 ? "s" : ""} running low</p>
+                </>
+              )}
+            </Link>
+
+            <Link href="/pos/unmapped" className={`rounded-lg border bg-[#16283F] p-4 transition-colors hover:border-[#E9B44C]/30 ${
+              (coverageStats?.mappedPercent ?? 100) >= 90 ? "border-green-500/30" : (coverageStats?.mappedPercent ?? 100) >= 70 ? "border-amber-500/30" : "border-red-500/30"
+            }`}>
+              <p className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/50">POS Mapping</p>
+              {coverageLoading ? (
+                <div className="mt-2 h-8 w-12 animate-pulse rounded bg-white/10" />
+              ) : (
+                <>
+                  <p className={`mt-1 text-2xl font-bold ${
+                    (coverageStats?.mappedPercent ?? 100) >= 90 ? "text-green-400" : (coverageStats?.mappedPercent ?? 100) >= 70 ? "text-amber-400" : "text-red-400"
+                  }`}>{coverageStats?.mappedPercent ?? 100}% mapped</p>
+                  <p className="mt-0.5 text-xs text-[#EAF0FF]/40">{(coverageStats?.totalItems ?? 0) - (coverageStats?.mappedItems ?? 0)} unmapped items</p>
+                </>
+              )}
+            </Link>
+
+            <Link href="/orders" className={`rounded-lg border bg-[#16283F] p-4 transition-colors hover:border-[#E9B44C]/30 ${
+              (openPOs?.length ?? 0) > 0 ? "border-blue-500/30" : "border-white/10"
+            }`}>
+              <p className="text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/50">Open Orders</p>
+              {openPOsLoading ? (
+                <div className="mt-2 h-8 w-12 animate-pulse rounded bg-white/10" />
+              ) : (
+                <>
+                  <p className={`mt-1 text-2xl font-bold ${(openPOs?.length ?? 0) > 0 ? "text-blue-400" : "text-[#EAF0FF]"}`}>{openPOs?.length ?? 0}</p>
+                  <p className="mt-0.5 text-xs text-[#EAF0FF]/40">{openPOs?.length ?? 0} order{(openPOs?.length ?? 0) !== 1 ? "s" : ""} pending</p>
+                </>
+              )}
+            </Link>
+          </div>
+
+          {/* Low Stock Items */}
+          {lowStockItems.length > 0 && (
+            <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-[#EAF0FF]">Items Needing Reorder</h3>
+                <Link href="/par" className="text-xs font-medium text-[#E9B44C] hover:text-[#C8922E]">
+                  View all →
+                </Link>
+              </div>
+              <div className="space-y-2">
+                {lowStockItems.map((item) => (
+                  <div
+                    key={item.inventoryItemId}
+                    className="flex items-center justify-between rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-[#EAF0FF]">{item.itemName}</p>
+                      <p className="text-xs text-[#EAF0FF]/40">{item.vendorName ?? "No vendor"}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3 text-xs">
+                      {item.daysToStockout != null ? (
+                        <span className={item.daysToStockout <= 3 ? "font-medium text-red-400" : "text-amber-400"}>
+                          {item.daysToStockout}d left
+                        </span>
+                      ) : (
+                        <span className="text-[#EAF0FF]/30">—</span>
+                      )}
+                      <span className={`inline-block h-2 w-2 rounded-full ${item.status === "red" ? "bg-red-500" : item.status === "yellow" ? "bg-yellow-500" : "bg-green-500"}`} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Two-column: Variance Trend + Flagged Items */}
           <div className="mb-6 grid gap-4 lg:grid-cols-2">

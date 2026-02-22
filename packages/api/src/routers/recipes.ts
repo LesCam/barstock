@@ -60,6 +60,11 @@ export const recipesRouter = router({
     return svc.list(input.locationId);
   }),
 
+  listWithCosts: protectedProcedure.input(recipeListSchema).query(({ ctx, input }) => {
+    const svc = new RecipeService(ctx.prisma);
+    return svc.listWithCosts(input.locationId);
+  }),
+
   listCategories: protectedProcedure
     .input(recipeListSchema)
     .query(({ ctx, input }) => {

@@ -6,10 +6,10 @@ import { useSession } from "next-auth/react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend,
-  LineChart, Line,
+  LineChart, Line, ComposedChart,
 } from "recharts";
 
-type ActiveTab = "variance" | "cogs" | "usage" | "patterns" | "staff" | "recipes";
+type ActiveTab = "variance" | "cogs" | "usage" | "patterns" | "staff" | "recipes" | "pourCost";
 type VarianceSortKey = "itemName" | "categoryName" | "variance" | "variancePercent" | "valueImpact";
 type UsageSortKey = "name" | "categoryName" | "quantityUsed" | "unitCost" | "totalCost";
 type PatternSortKey = "itemName" | "categoryName" | "sessionsAppeared" | "avgVariance" | "totalEstimatedLoss" | "trend";
@@ -141,6 +141,7 @@ export default function ReportsPage() {
     to: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
   });
   const [usageGroupBy, setUsageGroupBy] = useState<"item" | "vendor">("item");
+  const [showMA, setShowMA] = useState(false);
 
   const effectiveEod = eodTime ?? "23:59";
 
@@ -728,6 +729,55 @@ export default function ReportsPage() {
     }));
   }, [usageItemDetail, effectiveGranularity, usageMetric]);
 
+  // Moving average data (7-period)
+  const usageChartDataWithMA = useMemo(() => {
+    if (!usageChartData.length) return usageChartData;
+    const MA_WINDOW = 7;
+    return usageChartData.map((d, i) => {
+      if (i < MA_WINDOW - 1) return { ...d, ma: null };
+      const slice = usageChartData.slice(i - MA_WINDOW + 1, i + 1);
+      const avg = slice.reduce((s, p) => s + (p.value as number), 0) / MA_WINDOW;
+      return { ...d, ma: avg };
+    });
+  }, [usageChartData]);
+
+  // % change vs prior period (compare current total to same-length prior period from buckets)
+  const usagePriorPctChange = useMemo(() => {
+    if (!usageOverTime?.buckets || usageOverTime.buckets.length < 2) return null;
+    const buckets = usageOverTime.buckets;
+    const half = Math.floor(buckets.length / 2);
+    const currentSlice = buckets.slice(half);
+    const priorSlice = buckets.slice(0, half);
+    const currentTotal = currentSlice.reduce((s, b) => s + (usageMetric === "cost" ? b.totalCost : b.totalQty), 0);
+    const priorTotal = priorSlice.reduce((s, b) => s + (usageMetric === "cost" ? b.totalCost : b.totalQty), 0);
+    if (priorTotal === 0) return null;
+    return ((currentTotal - priorTotal) / priorTotal) * 100;
+  }, [usageOverTime, usageMetric]);
+
+  // Anomaly detection: items whose latest period value > 2x their mean
+  const anomalyItemIds = useMemo(() => {
+    const set = new Set<string>();
+    if (!usageOverTime?.itemSeries) return set;
+    for (const series of usageOverTime.itemSeries) {
+      const vals = series.dataPoints.map((dp: any) => usageMetric === "cost" ? (dp?.cost ?? 0) : (dp?.qty ?? 0));
+      if (vals.length < 2) continue;
+      const mean = vals.reduce((s: number, v: number) => s + v, 0) / vals.length;
+      const latest = vals[vals.length - 1];
+      if (mean > 0 && latest > 2 * mean) set.add(series.itemId);
+    }
+    return set;
+  }, [usageOverTime, usageMetric]);
+
+  // Pour Cost tab data
+  const { data: pourCostData, isLoading: pourCostLoading } = trpc.reports.pourCost.useQuery(
+    {
+      locationId: locationId!,
+      fromDate: new Date(dateRange.from),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
+    },
+    { enabled: !!locationId && activeTab === "pourCost" }
+  );
+
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: "variance", label: "Variance" },
     { key: "cogs", label: "COGS" },
@@ -735,6 +785,7 @@ export default function ReportsPage() {
     { key: "patterns", label: "Patterns" },
     { key: "staff", label: "Staff" },
     { key: "recipes", label: "Recipes" },
+    { key: "pourCost", label: "Pour Cost" },
   ];
 
   return (
@@ -1106,6 +1157,14 @@ export default function ReportsPage() {
               <p className="text-sm text-[#EAF0FF]/60">Sessions</p>
               <p className="text-2xl font-bold">{usage?.totalSessions ?? 0}</p>
             </div>
+            {usagePriorPctChange != null && (
+              <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                <p className="text-sm text-[#EAF0FF]/60">vs Prior Period</p>
+                <p className={`text-2xl font-bold ${usagePriorPctChange > 0 ? "text-red-400" : usagePriorPctChange < 0 ? "text-green-400" : "text-[#EAF0FF]"}`}>
+                  {usagePriorPctChange > 0 ? "+" : ""}{usagePriorPctChange.toFixed(1)}%
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Usage Over Time Charts */}
@@ -1182,6 +1241,16 @@ export default function ReportsPage() {
               >
                 Compare
               </button>
+              {/* Moving Average toggle */}
+              <label className="flex items-center gap-1.5 text-xs text-[#EAF0FF]/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showMA}
+                  onChange={(e) => setShowMA(e.target.checked)}
+                  className="rounded border-white/20 bg-[#0B1623]"
+                />
+                Show MA
+              </label>
             </div>
 
             {/* Compare date range picker */}
@@ -1225,21 +1294,24 @@ export default function ReportsPage() {
                     <Bar dataKey="comparison" fill="#4CAF50" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              ) : usageChartData.length > 0 ? (
+              ) : usageChartDataWithMA.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={usageChartData}>
+                  <ComposedChart data={usageChartDataWithMA}>
                     <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
                     <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => usageMetric === "cost" ? `$${v}` : `${v}`} />
                     <Tooltip
                       contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
-                      formatter={(value) => [
+                      formatter={(value, name) => [
                         usageMetric === "cost" ? `$${Number(value ?? 0).toFixed(2)}` : Number(value ?? 0).toFixed(1),
-                        usageMetric === "cost" ? "Cost" : "Quantity",
+                        name === "ma" ? "7-period MA" : usageMetric === "cost" ? "Cost" : "Quantity",
                       ]}
                       labelFormatter={(label) => label}
                     />
                     <Bar dataKey="value" fill="#E9B44C" radius={[4, 4, 0, 0]} name={usageMetric === "cost" ? "Cost" : "Quantity"} />
-                  </BarChart>
+                    {showMA && (
+                      <Line type="monotone" dataKey="ma" stroke="#4CAF50" strokeWidth={2} strokeDasharray="5 5" dot={false} name="ma" connectNulls={false} />
+                    )}
+                  </ComposedChart>
                 </ResponsiveContainer>
               ) : (
                 <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No usage data for this period.</p>
@@ -1328,6 +1400,7 @@ export default function ReportsPage() {
                   <th className="px-4 py-3">UOM</th>
                   <UsageSortHeader label="Unit Cost" field="unitCost" />
                   <UsageSortHeader label="Total Cost" field="totalCost" />
+                  <th className="px-4 py-3">Flags</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -1347,10 +1420,17 @@ export default function ReportsPage() {
                       <td className="px-4 py-3">{item.uom}</td>
                       <td className="px-4 py-3">{item.unitCost != null ? `$${item.unitCost.toFixed(2)}` : "—"}</td>
                       <td className="px-4 py-3">{item.totalCost != null ? `$${item.totalCost.toFixed(2)}` : "—"}</td>
+                      <td className="px-4 py-3">
+                        {anomalyItemIds.has(item.itemId) && (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-400" title="Usage spike: latest period > 2x average">
+                            Spike
+                          </span>
+                        )}
+                      </td>
                     </tr>
                     {expandedUsageItemId === item.itemId && (
                       <tr key={`${item.itemId}-detail`}>
-                        <td colSpan={7} className="bg-[#0B1623]/40 px-6 py-3">
+                        <td colSpan={8} className="bg-[#0B1623]/40 px-6 py-3">
                           {itemDetailChartData.length > 0 ? (
                             <ResponsiveContainer width="100%" height={200}>
                               <LineChart data={itemDetailChartData}>
@@ -1378,7 +1458,7 @@ export default function ReportsPage() {
                 ))}
                 {sortedUsageItems.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                    <td colSpan={8} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                       {filter ? "No items match your search." : "No usage data for this period."}
                     </td>
                   </tr>
@@ -1879,6 +1959,91 @@ export default function ReportsPage() {
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {/* ── Pour Cost tab ── */}
+      {activeTab === "pourCost" && (
+        <section>
+          <h2 className="mb-4 text-lg font-semibold">Pour Cost Analysis</h2>
+
+          {pourCostLoading ? (
+            <div className="space-y-4">
+              <div className="h-20 animate-pulse rounded-lg bg-white/5" />
+              <div className="h-64 animate-pulse rounded-lg bg-white/5" />
+            </div>
+          ) : pourCostData ? (
+            <>
+              {/* Summary card */}
+              <div className="mb-6 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                  <p className="text-sm text-[#EAF0FF]/60">Blended Pour Cost</p>
+                  <p className={`text-2xl font-bold ${
+                    (pourCostData.blendedPourCostPct ?? 0) > 30 ? "text-red-400" :
+                    (pourCostData.blendedPourCostPct ?? 0) > 20 ? "text-amber-400" : "text-green-400"
+                  }`}>
+                    {pourCostData.blendedPourCostPct != null ? `${pourCostData.blendedPourCostPct.toFixed(1)}%` : "N/A"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                  <p className="text-sm text-[#EAF0FF]/60">Total Revenue</p>
+                  <p className="text-2xl font-bold">${(pourCostData.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                  <p className="text-sm text-[#EAF0FF]/60">Total Ingredient Cost</p>
+                  <p className="text-2xl font-bold">${(pourCostData.totalIngredientCost ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+
+              {/* Pour cost table */}
+              <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                    <tr>
+                      <th className="px-4 py-3">POS Item</th>
+                      <th className="px-4 py-3">Recipe</th>
+                      <th className="px-4 py-3">Qty Sold</th>
+                      <th className="px-4 py-3">Avg Price</th>
+                      <th className="px-4 py-3">Ingredient Cost</th>
+                      <th className="px-4 py-3">Pour Cost %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {pourCostData.items.map((item) => (
+                      <tr key={item.posItemId}>
+                        <td className="px-4 py-3 font-medium">{item.posItemName}</td>
+                        <td className="px-4 py-3 text-[#EAF0FF]/60">{item.recipeName ?? item.mappingMode ?? "—"}</td>
+                        <td className="px-4 py-3">{item.totalSold.toFixed(1)}</td>
+                        <td className="px-4 py-3">{item.avgSalePrice != null ? `$${item.avgSalePrice.toFixed(2)}` : "—"}</td>
+                        <td className="px-4 py-3">${item.totalIngredientCost.toFixed(2)}</td>
+                        <td className="px-4 py-3">
+                          {item.pourCostPct != null ? (
+                            <span className={`font-medium ${
+                              item.pourCostPct > 30 ? "text-red-400" :
+                              item.pourCostPct > 20 ? "text-amber-400" : "text-green-400"
+                            }`}>
+                              {item.pourCostPct.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-[#EAF0FF]/30">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {pourCostData.items.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                          No pour cost data available. Ensure sales lines have unit sale prices.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No data available.</p>
+          )}
         </section>
       )}
     </div>

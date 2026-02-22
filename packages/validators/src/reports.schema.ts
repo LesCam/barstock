@@ -114,3 +114,9 @@ export const usageByVendorQuerySchema = z.object({
   granularity: z.enum(["day", "week", "month"]).default("day"),
   categoryId: z.string().uuid().optional(),
 });
+
+export const pourCostQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+});

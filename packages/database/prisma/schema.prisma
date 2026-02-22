@@ -490,6 +490,7 @@ model SalesLine {
   sizeModifierId    String?      @map("size_modifier_id")
   sizeModifierName  String?      @map("size_modifier_name")
   rawPayloadJson    Json?        @map("raw_payload_json")
+  unitSalePrice     Decimal?     @map("unit_sale_price")
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz()
 
   location          Location           @relation(fields: [locationId], references: [id])

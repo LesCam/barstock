@@ -93,6 +93,11 @@ export const CSV_TEMPLATES: CSVTemplate[] = [
         csvHeaders: ["Size", "Size Modifier", "size_modifier_id", "sizeModifierId"],
         canonicalField: "sizeModifierId",
       },
+      {
+        csvHeaders: ["Price", "Unit Price", "Sale Price", "Item Price"],
+        canonicalField: "unitSalePrice",
+        transform: parseNumber,
+      },
     ],
   },
   {
@@ -137,6 +142,11 @@ export const CSV_TEMPLATES: CSVTemplate[] = [
       {
         csvHeaders: ["Check Id"],
         canonicalField: "lineId",
+      },
+      {
+        csvHeaders: ["Price", "Unit Price", "Sale Price", "Item Price"],
+        canonicalField: "unitSalePrice",
+        transform: parseNumber,
       },
     ],
   },
@@ -224,6 +234,7 @@ export function buildCustomColumnMap(
     quantity: parseNumber,
     isVoided: parseBool,
     isRefunded: parseBool,
+    unitSalePrice: parseNumber,
   };
 
   const map: Record<
@@ -264,4 +275,5 @@ export const ALL_CANONICAL_FIELDS = [
   { field: "isRefunded", label: "Is Refunded", required: false },
   { field: "sizeModifierId", label: "Size Modifier ID", required: false },
   { field: "sizeModifierName", label: "Size Modifier Name", required: false },
+  { field: "unitSalePrice", label: "Unit Sale Price", required: false },
 ];

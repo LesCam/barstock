@@ -16,5 +16,6 @@ export interface CanonicalSalesLine {
   isRefunded: boolean;
   sizeModifierId?: string;
   sizeModifierName?: string;
+  unitSalePrice?: number;
   rawPayloadJson?: Record<string, unknown>;
 }

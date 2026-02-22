@@ -178,6 +178,10 @@ export class CSVImportService {
 
         const soldAt = (mapped.soldAt as Date) ?? rowDate;
 
+        const unitSalePrice = mapped.unitSalePrice != null && Number(mapped.unitSalePrice) > 0
+          ? Number(mapped.unitSalePrice)
+          : undefined;
+
         rows.push({
           sourceSystem,
           sourceLocationId,
@@ -196,6 +200,7 @@ export class CSVImportService {
           sizeModifierName: mapped.sizeModifierName
             ? String(mapped.sizeModifierName)
             : undefined,
+          unitSalePrice,
           rawPayloadJson: rawRow,
         });
       } catch (err: any) {
@@ -240,6 +245,7 @@ export class CSVImportService {
           isRefunded: line.isRefunded,
           sizeModifierId: line.sizeModifierId ?? null,
           sizeModifierName: line.sizeModifierName ?? null,
+          unitSalePrice: line.unitSalePrice ?? null,
           rawPayloadJson: line.rawPayloadJson ?? undefined,
         })),
         skipDuplicates: true,

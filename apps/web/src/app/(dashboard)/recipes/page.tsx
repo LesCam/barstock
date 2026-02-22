@@ -32,7 +32,7 @@ export default function RecipesPage() {
   const locationId = user?.locationIds?.[0];
   const utils = trpc.useUtils();
 
-  const { data: recipes, isLoading } = trpc.recipes.list.useQuery(
+  const { data: recipes, isLoading } = trpc.recipes.listWithCosts.useQuery(
     { locationId: locationId! },
     { enabled: !!locationId }
   );
@@ -85,7 +85,7 @@ export default function RecipesPage() {
 
   const createMut = trpc.recipes.create.useMutation({
     onSuccess: () => {
-      utils.recipes.list.invalidate();
+      utils.recipes.listWithCosts.invalidate();
       utils.recipes.listCategories.invalidate();
       resetCreateForm();
     },
@@ -93,14 +93,14 @@ export default function RecipesPage() {
 
   const updateMut = trpc.recipes.update.useMutation({
     onSuccess: () => {
-      utils.recipes.list.invalidate();
+      utils.recipes.listWithCosts.invalidate();
       utils.recipes.listCategories.invalidate();
       setEditingId(null);
     },
   });
 
   const deleteMut = trpc.recipes.delete.useMutation({
-    onSuccess: () => utils.recipes.list.invalidate(),
+    onSuccess: () => utils.recipes.listWithCosts.invalidate(),
   });
 
   function resetCreateForm() {
@@ -491,6 +491,7 @@ export default function RecipesPage() {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Ingredients</th>
+                <th className="px-4 py-3">Cost</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
@@ -504,7 +505,7 @@ export default function RecipesPage() {
                     key={recipe.id}
                     className={!recipe.active ? "opacity-50" : ""}
                   >
-                    <td className="px-4 py-3" colSpan={isExpanded ? 5 : undefined}>
+                    <td className="px-4 py-3" colSpan={isExpanded ? 6 : undefined}>
                       {isExpanded ? (
                         <div>
                           {isEditing ? (
@@ -628,26 +629,39 @@ export default function RecipesPage() {
                                     {(recipe as any)._count.posMappings} POS mapping{(recipe as any)._count.posMappings !== 1 ? "s" : ""}
                                   </span>
                                 )}
+                                {(recipe as any).totalCost != null && (
+                                  <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs text-green-400">
+                                    ${((recipe as any).totalCost as number).toFixed(2)}
+                                  </span>
+                                )}
                               </div>
                               <div className="mb-3 space-y-1">
-                                {recipe.ingredients.map((ing: any) => (
-                                  <div
-                                    key={ing.id}
-                                    className="flex items-center gap-2 text-sm text-[#EAF0FF]/80"
-                                  >
-                                    <span className="text-[#EAF0FF]/40">-</span>
-                                    <span>{Number(ing.quantity)}</span>
-                                    <span className="text-[#EAF0FF]/60">
-                                      {UOM_LABELS[ing.uom] ?? ing.uom}
-                                    </span>
-                                    <span>{ing.inventoryItem.name}</span>
-                                    {ing.inventoryItem.category?.name && (
-                                      <span className="rounded bg-white/5 px-1.5 py-0.5 text-xs text-[#EAF0FF]/40">
-                                        {ing.inventoryItem.category.name}
+                                {recipe.ingredients.map((ing: any, idx: number) => {
+                                  const costInfo = (recipe as any).ingredientCosts?.[idx];
+                                  return (
+                                    <div
+                                      key={ing.id}
+                                      className="flex items-center gap-2 text-sm text-[#EAF0FF]/80"
+                                    >
+                                      <span className="text-[#EAF0FF]/40">-</span>
+                                      <span>{Number(ing.quantity)}</span>
+                                      <span className="text-[#EAF0FF]/60">
+                                        {UOM_LABELS[ing.uom] ?? ing.uom}
                                       </span>
-                                    )}
-                                  </div>
-                                ))}
+                                      <span>{ing.inventoryItem.name}</span>
+                                      {ing.inventoryItem.category?.name && (
+                                        <span className="rounded bg-white/5 px-1.5 py-0.5 text-xs text-[#EAF0FF]/40">
+                                          {ing.inventoryItem.category.name}
+                                        </span>
+                                      )}
+                                      {costInfo?.unitCost != null && (
+                                        <span className="text-xs text-[#EAF0FF]/40">
+                                          @ ${costInfo.unitCost.toFixed(2)}/unit = ${costInfo.lineCost?.toFixed(2) ?? "—"}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                               <div className="flex gap-2">
                                 <button
@@ -709,6 +723,13 @@ export default function RecipesPage() {
                         <td className="px-4 py-3 text-[#EAF0FF]/60">
                           {recipe.ingredients.length} ingredient
                           {recipe.ingredients.length !== 1 ? "s" : ""}
+                        </td>
+                        <td className="px-4 py-3 text-[#EAF0FF]/60">
+                          {(recipe as any).totalCost != null ? (
+                            <span className="font-medium text-green-400">${((recipe as any).totalCost as number).toFixed(2)}</span>
+                          ) : (
+                            <span className="text-[#EAF0FF]/30">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span

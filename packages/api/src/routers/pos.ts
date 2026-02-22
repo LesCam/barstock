@@ -52,6 +52,39 @@ export const posRouter = router({
       })
     ),
 
+  /** Mapping coverage statistics (7d) */
+  coverageStats: protectedProcedure
+    .input(z.object({ locationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.$queryRaw<
+        Array<{
+          total_items: number;
+          mapped_items: number;
+          unmapped_qty_sold: number;
+        }>
+      >`
+        SELECT
+          COUNT(DISTINCT sl.pos_item_id)::int as total_items,
+          COUNT(DISTINCT CASE WHEN pim.id IS NOT NULL THEN sl.pos_item_id END)::int as mapped_items,
+          COALESCE(SUM(CASE WHEN pim.id IS NULL THEN sl.quantity ELSE 0 END)::float, 0) as unmapped_qty_sold
+        FROM sales_lines sl
+        LEFT JOIN pos_item_mappings pim
+          ON pim.location_id = sl.location_id
+          AND pim.source_system = sl.source_system
+          AND pim.pos_item_id = sl.pos_item_id
+          AND pim.active = true
+        WHERE sl.location_id = ${input.locationId}::uuid
+          AND sl.sold_at >= NOW() - INTERVAL '7 days'
+      `;
+      const row = rows[0] ?? { total_items: 0, mapped_items: 0, unmapped_qty_sold: 0 };
+      return {
+        totalItems: row.total_items,
+        mappedItems: row.mapped_items,
+        mappedPercent: row.total_items > 0 ? Math.round((row.mapped_items / row.total_items) * 100) : 100,
+        unmappedQtySold: row.unmapped_qty_sold,
+      };
+    }),
+
   /** Get unmapped POS items (sold but no mapping) */
   unmapped: protectedProcedure
     .input(z.object({ locationId: z.string().uuid() }))

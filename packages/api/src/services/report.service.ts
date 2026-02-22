@@ -1122,6 +1122,110 @@ export class ReportService {
     return { buckets, vendorSeries };
   }
 
+  async getPourCost(locationId: string, fromDate: Date, toDate: Date) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        pos_item_id: string;
+        pos_item_name: string;
+        mapping_mode: string | null;
+        recipe_id: string | null;
+        recipe_name: string | null;
+        total_sold: number;
+        avg_sale_price: number | null;
+        total_revenue: number | null;
+        total_ingredient_cost: number;
+        pour_cost_pct: number | null;
+      }>
+    >`
+      WITH mapped_sales AS (
+        SELECT
+          sl.pos_item_id,
+          sl.pos_item_name,
+          m.mode::text as mapping_mode,
+          m.recipe_id,
+          r.name as recipe_name,
+          SUM(sl.quantity)::float as total_sold,
+          AVG(sl.unit_sale_price)::float as avg_sale_price,
+          SUM(sl.unit_sale_price * sl.quantity)::float as total_revenue
+        FROM sales_lines sl
+        JOIN pos_item_mappings m
+          ON m.location_id = sl.location_id
+          AND m.source_system = sl.source_system
+          AND m.pos_item_id = sl.pos_item_id
+          AND m.active = true
+        LEFT JOIN recipes r ON m.recipe_id = r.id
+        WHERE sl.location_id = ${locationId}::uuid
+          AND sl.sold_at >= ${fromDate}
+          AND sl.sold_at < ${toDate}
+          AND sl.unit_sale_price IS NOT NULL
+        GROUP BY sl.pos_item_id, sl.pos_item_name, m.mode, m.recipe_id, r.name
+      ),
+      ingredient_costs AS (
+        SELECT
+          ms.pos_item_id,
+          COALESCE(SUM(
+            ABS(ce.quantity_delta) * COALESCE((
+              SELECT ph.unit_cost::float
+              FROM price_history ph
+              WHERE ph.inventory_item_id = ce.inventory_item_id
+                AND ph.effective_from_ts <= ce.event_ts
+              ORDER BY ph.effective_from_ts DESC
+              LIMIT 1
+            ), 0)
+          ), 0)::float as total_ingredient_cost
+        FROM mapped_sales ms
+        JOIN sales_lines sl2
+          ON sl2.pos_item_id = ms.pos_item_id
+          AND sl2.location_id = ${locationId}::uuid
+          AND sl2.sold_at >= ${fromDate}
+          AND sl2.sold_at < ${toDate}
+        JOIN consumption_events ce
+          ON ce.sales_line_id = sl2.id
+          AND ce.reversal_of_event_id IS NULL
+        GROUP BY ms.pos_item_id
+      )
+      SELECT
+        ms.pos_item_id,
+        ms.pos_item_name,
+        ms.mapping_mode,
+        ms.recipe_id,
+        ms.recipe_name,
+        ms.total_sold,
+        ms.avg_sale_price,
+        ms.total_revenue,
+        COALESCE(ic.total_ingredient_cost, 0)::float as total_ingredient_cost,
+        CASE WHEN ms.total_revenue > 0
+          THEN (COALESCE(ic.total_ingredient_cost, 0) / ms.total_revenue * 100)::float
+          ELSE NULL
+        END as pour_cost_pct
+      FROM mapped_sales ms
+      LEFT JOIN ingredient_costs ic ON ic.pos_item_id = ms.pos_item_id
+      ORDER BY pour_cost_pct DESC NULLS LAST
+    `;
+
+    const totalRevenue = rows.reduce((s, r) => s + (r.total_revenue ?? 0), 0);
+    const totalCost = rows.reduce((s, r) => s + r.total_ingredient_cost, 0);
+    const blendedPourCostPct = totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : null;
+
+    return {
+      items: rows.map((r) => ({
+        posItemId: r.pos_item_id,
+        posItemName: r.pos_item_name,
+        mappingMode: r.mapping_mode,
+        recipeId: r.recipe_id,
+        recipeName: r.recipe_name,
+        totalSold: r.total_sold,
+        avgSalePrice: r.avg_sale_price,
+        totalRevenue: r.total_revenue,
+        totalIngredientCost: r.total_ingredient_cost,
+        pourCostPct: r.pour_cost_pct,
+      })),
+      blendedPourCostPct,
+      totalRevenue,
+      totalIngredientCost: totalCost,
+    };
+  }
+
   async getBusinessRollup(businessId: string, asOfDate?: Date) {
     const locations = await this.prisma.location.findMany({
       where: { businessId },
