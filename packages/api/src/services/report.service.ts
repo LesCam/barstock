@@ -937,6 +937,191 @@ export class ReportService {
     };
   }
 
+  async getUsageItemDetail(
+    locationId: string,
+    itemId: string,
+    fromDate: Date,
+    toDate: Date,
+    granularity: "day" | "week" | "month" = "day"
+  ) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        bucket: Date;
+        total_qty: number | null;
+        total_cost: number | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        date_trunc(${granularity}, ce.event_ts) AS bucket,
+        SUM(ABS(ce.quantity_delta)) AS total_qty,
+        SUM(ABS(ce.quantity_delta) * COALESCE(ph.unit_cost, 0)) AS total_cost
+      FROM consumption_events ce
+      LEFT JOIN LATERAL (
+        SELECT ph2.unit_cost
+        FROM price_history ph2
+        WHERE ph2.inventory_item_id = ce.inventory_item_id
+          AND ph2.effective_from_ts <= ce.event_ts
+          AND (ph2.effective_to_ts IS NULL OR ph2.effective_to_ts > ce.event_ts)
+        ORDER BY ph2.effective_from_ts DESC
+        LIMIT 1
+      ) ph ON true
+      WHERE ce.location_id = ${locationId}::uuid
+        AND ce.inventory_item_id = ${itemId}::uuid
+        AND ce.event_type IN ('pos_sale', 'tap_flow')
+        AND ce.event_ts >= ${fromDate}
+        AND ce.event_ts < ${toDate}
+        AND ce.reversal_of_event_id IS NULL
+      GROUP BY bucket
+      ORDER BY bucket
+    `);
+
+    return {
+      periods: rows.map((r) => ({
+        period: r.bucket.toISOString(),
+        qty: Number(r.total_qty ?? 0),
+        cost: Number(r.total_cost ?? 0),
+      })),
+    };
+  }
+
+  async getUsageByVendor(
+    locationId: string,
+    fromDate: Date,
+    toDate: Date,
+    granularity: "day" | "week" | "month" = "day",
+    categoryId?: string
+  ) {
+    const categoryFilter = categoryId
+      ? Prisma.sql`AND i.category_id = ${categoryId}::uuid`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        bucket: Date;
+        vendor_id: string | null;
+        vendor_name: string | null;
+        total_qty: number | null;
+        total_cost: number | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        date_trunc(${granularity}, ce.event_ts) AS bucket,
+        v.id AS vendor_id,
+        v.name AS vendor_name,
+        SUM(ABS(ce.quantity_delta)) AS total_qty,
+        SUM(ABS(ce.quantity_delta) * COALESCE(ph.unit_cost, 0)) AS total_cost
+      FROM consumption_events ce
+      JOIN inventory_items i ON i.id = ce.inventory_item_id
+      LEFT JOIN vendors v ON v.id = i.vendor_id
+      LEFT JOIN LATERAL (
+        SELECT ph2.unit_cost
+        FROM price_history ph2
+        WHERE ph2.inventory_item_id = ce.inventory_item_id
+          AND ph2.effective_from_ts <= ce.event_ts
+          AND (ph2.effective_to_ts IS NULL OR ph2.effective_to_ts > ce.event_ts)
+        ORDER BY ph2.effective_from_ts DESC
+        LIMIT 1
+      ) ph ON true
+      WHERE ce.location_id = ${locationId}::uuid
+        AND ce.event_type IN ('pos_sale', 'tap_flow')
+        AND ce.event_ts >= ${fromDate}
+        AND ce.event_ts < ${toDate}
+        AND ce.reversal_of_event_id IS NULL
+        ${categoryFilter}
+      GROUP BY bucket, v.id, v.name
+      ORDER BY bucket
+    `);
+
+    // Aggregate totals per bucket
+    const bucketMap = new Map<string, { period: string; totalQty: number; totalCost: number }>();
+    // Track per-vendor totals for ranking
+    const vendorTotals = new Map<string, { vendorId: string; vendorName: string; totalCost: number }>();
+    // Per-vendor per-bucket data
+    const vendorBucketMap = new Map<string, Map<string, { qty: number; cost: number }>>();
+
+    for (const row of rows) {
+      const period = row.bucket.toISOString();
+      const qty = Number(row.total_qty ?? 0);
+      const cost = Number(row.total_cost ?? 0);
+      const vendorId = row.vendor_id ?? "__no_vendor__";
+      const vendorName = row.vendor_name ?? "No Vendor";
+
+      // Aggregate bucket totals
+      const existing = bucketMap.get(period);
+      if (existing) {
+        existing.totalQty += qty;
+        existing.totalCost += cost;
+      } else {
+        bucketMap.set(period, { period, totalQty: qty, totalCost: cost });
+      }
+
+      // Track vendor totals
+      const vt = vendorTotals.get(vendorId);
+      if (vt) {
+        vt.totalCost += cost;
+      } else {
+        vendorTotals.set(vendorId, { vendorId, vendorName, totalCost: cost });
+      }
+
+      // Per-vendor per-bucket
+      if (!vendorBucketMap.has(vendorId)) {
+        vendorBucketMap.set(vendorId, new Map());
+      }
+      const bd = vendorBucketMap.get(vendorId)!;
+      const eb = bd.get(period);
+      if (eb) {
+        eb.qty += qty;
+        eb.cost += cost;
+      } else {
+        bd.set(period, { qty, cost });
+      }
+    }
+
+    const buckets = Array.from(bucketMap.values()).sort(
+      (a, b) => new Date(a.period).getTime() - new Date(b.period).getTime()
+    );
+    const allPeriods = buckets.map((b) => b.period);
+
+    // Top 10 vendors by totalCost + "Other" bucket
+    const ranked = Array.from(vendorTotals.values()).sort((a, b) => b.totalCost - a.totalCost);
+    const top10Ids = new Set(ranked.slice(0, 10).map((r) => r.vendorId));
+
+    const vendorSeries = ranked.slice(0, 10).map((vendor) => {
+      const bd = vendorBucketMap.get(vendor.vendorId)!;
+      return {
+        vendorId: vendor.vendorId,
+        vendorName: vendor.vendorName,
+        dataPoints: allPeriods.map((p) => {
+          const d = bd.get(p);
+          return { period: p, qty: d?.qty ?? 0, cost: d?.cost ?? 0 };
+        }),
+      };
+    });
+
+    if (ranked.length > 10) {
+      const otherDataPoints = allPeriods.map((p) => {
+        let qty = 0;
+        let cost = 0;
+        for (const [vendorId, bd] of vendorBucketMap) {
+          if (top10Ids.has(vendorId)) continue;
+          const d = bd.get(p);
+          if (d) {
+            qty += d.qty;
+            cost += d.cost;
+          }
+        }
+        return { period: p, qty, cost };
+      });
+      vendorSeries.push({
+        vendorId: "__other__",
+        vendorName: "Other",
+        dataPoints: otherDataPoints,
+      });
+    }
+
+    return { buckets, vendorSeries };
+  }
+
   async getBusinessRollup(businessId: string, asOfDate?: Date) {
     const locations = await this.prisma.location.findMany({
       where: { businessId },

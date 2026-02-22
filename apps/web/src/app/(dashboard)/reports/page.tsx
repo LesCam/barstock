@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend,
+  LineChart, Line,
 } from "recharts";
 
 type ActiveTab = "variance" | "cogs" | "usage" | "patterns" | "staff" | "recipes";
@@ -131,6 +132,16 @@ export default function ReportsPage() {
   const [recipeGranularity, setRecipeGranularity] = useState<"day" | "week" | "month">("day");
   const [recipeGranularityOverride, setRecipeGranularityOverride] = useState(false);
 
+  // Usage enhancements
+  const [usageMetric, setUsageMetric] = useState<"cost" | "qty">("cost");
+  const [expandedUsageItemId, setExpandedUsageItemId] = useState<string | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareDateRange, setCompareDateRange] = useState({
+    from: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    to: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  });
+  const [usageGroupBy, setUsageGroupBy] = useState<"item" | "vendor">("item");
+
   const effectiveEod = eodTime ?? "23:59";
 
   const { data: variance } = trpc.reports.variance.useQuery(
@@ -237,6 +248,42 @@ export default function ReportsPage() {
   const { data: categories } = trpc.itemCategories.list.useQuery(
     { businessId: businessId!, activeOnly: true },
     { enabled: !!businessId && activeTab === "usage" }
+  );
+
+  // --- Usage Item Detail (drill-down) ---
+  const { data: usageItemDetail } = trpc.reports.usageItemDetail.useQuery(
+    {
+      locationId: locationId!,
+      itemId: expandedUsageItemId!,
+      fromDate: new Date(dateRange.from),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
+      granularity: effectiveGranularity,
+    },
+    { enabled: !!locationId && !!expandedUsageItemId && activeTab === "usage" }
+  );
+
+  // --- Usage Compare Period ---
+  const { data: usageOverTimeCompare } = trpc.reports.usageOverTime.useQuery(
+    {
+      locationId: locationId!,
+      fromDate: new Date(compareDateRange.from),
+      toDate: toEndOfDay(compareDateRange.to, effectiveEod),
+      granularity: effectiveGranularity,
+      categoryId: usageCategoryFilter || undefined,
+    },
+    { enabled: !!locationId && activeTab === "usage" && compareMode }
+  );
+
+  // --- Usage By Vendor ---
+  const { data: usageByVendor } = trpc.reports.usageByVendor.useQuery(
+    {
+      locationId: locationId!,
+      fromDate: new Date(dateRange.from),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
+      granularity: effectiveGranularity,
+      categoryId: usageCategoryFilter || undefined,
+    },
+    { enabled: !!locationId && activeTab === "usage" && usageGroupBy === "vendor" }
   );
 
   // --- Recipe Analytics ---
@@ -604,41 +651,82 @@ export default function ReportsPage() {
   // --- Usage Over Time chart data ---
   const AREA_COLORS = ["#E9B44C", "#4CAF50", "#2196F3", "#FF5722", "#9C27B0", "#00BCD4", "#FF9800", "#607D8B", "#E91E63", "#8BC34A", "#795548"];
 
+  const formatBucketLabel = (period: string, gran: "day" | "week" | "month") => {
+    const d = new Date(period);
+    if (gran === "day") return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    if (gran === "week") return `Wk ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  };
+
   const usageChartData = useMemo(() => {
     if (!usageOverTime?.buckets) return [];
-    return usageOverTime.buckets.map((b) => {
-      const d = new Date(b.period);
-      let label: string;
-      if (effectiveGranularity === "day") {
-        label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      } else if (effectiveGranularity === "week") {
-        label = `Wk ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-      } else {
-        label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-      }
-      return { ...b, label };
-    });
-  }, [usageOverTime, effectiveGranularity]);
+    return usageOverTime.buckets.map((b) => ({
+      ...b,
+      label: formatBucketLabel(b.period, effectiveGranularity),
+      value: usageMetric === "cost" ? b.totalCost : b.totalQty,
+    }));
+  }, [usageOverTime, effectiveGranularity, usageMetric]);
 
   const areaChartData = useMemo(() => {
     if (!usageOverTime?.buckets || !usageOverTime?.itemSeries) return [];
     return usageOverTime.buckets.map((b, i) => {
-      const d = new Date(b.period);
-      let label: string;
-      if (effectiveGranularity === "day") {
-        label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      } else if (effectiveGranularity === "week") {
-        label = `Wk ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-      } else {
-        label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-      }
-      const point: Record<string, string | number> = { label };
+      const point: Record<string, string | number> = {
+        label: formatBucketLabel(b.period, effectiveGranularity),
+      };
       for (const series of usageOverTime.itemSeries) {
-        point[series.itemName] = series.dataPoints[i]?.cost ?? 0;
+        const dp = series.dataPoints[i];
+        point[series.itemName] = usageMetric === "cost" ? (dp?.cost ?? 0) : (dp?.qty ?? 0);
       }
       return point;
     });
-  }, [usageOverTime, effectiveGranularity]);
+  }, [usageOverTime, effectiveGranularity, usageMetric]);
+
+  // Compare mode chart data
+  const compareChartData = useMemo(() => {
+    if (!compareMode || !usageOverTime?.buckets) return [];
+    const currentBuckets = usageOverTime.buckets;
+    const compareBuckets = usageOverTimeCompare?.buckets ?? [];
+    const maxLen = Math.max(currentBuckets.length, compareBuckets.length);
+    const data: Array<{ label: string; current: number; comparison: number }> = [];
+    for (let i = 0; i < maxLen; i++) {
+      const cur = currentBuckets[i];
+      const cmp = compareBuckets[i];
+      data.push({
+        label: cur
+          ? formatBucketLabel(cur.period, effectiveGranularity)
+          : cmp
+            ? `Day ${i + 1}`
+            : `Day ${i + 1}`,
+        current: cur ? (usageMetric === "cost" ? cur.totalCost : cur.totalQty) : 0,
+        comparison: cmp ? (usageMetric === "cost" ? cmp.totalCost : cmp.totalQty) : 0,
+      });
+    }
+    return data;
+  }, [compareMode, usageOverTime, usageOverTimeCompare, effectiveGranularity, usageMetric]);
+
+  // Vendor area chart data
+  const vendorAreaChartData = useMemo(() => {
+    if (!usageByVendor?.buckets || !usageByVendor?.vendorSeries) return [];
+    return usageByVendor.buckets.map((b, i) => {
+      const point: Record<string, string | number> = {
+        label: formatBucketLabel(b.period, effectiveGranularity),
+      };
+      for (const series of usageByVendor.vendorSeries) {
+        const dp = series.dataPoints[i];
+        point[series.vendorName] = usageMetric === "cost" ? (dp?.cost ?? 0) : (dp?.qty ?? 0);
+      }
+      return point;
+    });
+  }, [usageByVendor, effectiveGranularity, usageMetric]);
+
+  // Item drill-down chart data
+  const itemDetailChartData = useMemo(() => {
+    if (!usageItemDetail?.periods) return [];
+    return usageItemDetail.periods.map((p) => ({
+      label: formatBucketLabel(p.period, effectiveGranularity),
+      value: usageMetric === "cost" ? p.cost : p.qty,
+    }));
+  }, [usageItemDetail, effectiveGranularity, usageMetric]);
 
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: "variance", label: "Variance" },
@@ -1024,6 +1112,7 @@ export default function ReportsPage() {
           <div className="mb-8">
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <h3 className="text-base font-semibold">Usage Over Time</h3>
+              {/* Granularity picker */}
               <div className="flex items-center gap-1 rounded-lg bg-[#0B1623] p-0.5">
                 {(["day", "week", "month"] as const).map((g) => (
                   <button
@@ -1039,6 +1128,23 @@ export default function ReportsPage() {
                   </button>
                 ))}
               </div>
+              {/* Cost/Qty toggle */}
+              <div className="flex items-center gap-1 rounded-lg bg-[#0B1623] p-0.5">
+                {(["cost", "qty"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setUsageMetric(m)}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                      usageMetric === m
+                        ? "bg-[#16283F] text-[#E9B44C]"
+                        : "text-[#EAF0FF]/60 hover:text-[#EAF0FF]/80"
+                    }`}
+                  >
+                    {m === "cost" ? "Cost ($)" : "Quantity"}
+                  </button>
+                ))}
+              </div>
+              {/* Category filter */}
               <select
                 value={usageCategoryFilter}
                 onChange={(e) => setUsageCategoryFilter(e.target.value)}
@@ -1049,21 +1155,90 @@ export default function ReportsPage() {
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
+              {/* By Item / By Vendor toggle */}
+              <div className="flex items-center gap-1 rounded-lg bg-[#0B1623] p-0.5">
+                {(["item", "vendor"] as const).map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setUsageGroupBy(g)}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                      usageGroupBy === g
+                        ? "bg-[#16283F] text-[#E9B44C]"
+                        : "text-[#EAF0FF]/60 hover:text-[#EAF0FF]/80"
+                    }`}
+                  >
+                    {g === "item" ? "By Item" : "By Vendor"}
+                  </button>
+                ))}
+              </div>
+              {/* Compare toggle */}
+              <button
+                onClick={() => setCompareMode(!compareMode)}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  compareMode
+                    ? "bg-[#16283F] text-[#E9B44C]"
+                    : "rounded-lg bg-[#0B1623] text-[#EAF0FF]/60 hover:text-[#EAF0FF]/80"
+                }`}
+              >
+                Compare
+              </button>
             </div>
 
-            {/* Total Usage Trend (Bar Chart) */}
+            {/* Compare date range picker */}
+            {compareMode && (
+              <div className="mb-3 flex items-center gap-3">
+                <span className="text-xs text-[#EAF0FF]/60">Compare with:</span>
+                <input
+                  type="date"
+                  value={compareDateRange.from}
+                  onChange={(e) => setCompareDateRange((d) => ({ ...d, from: e.target.value }))}
+                  className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-1.5 text-xs text-[#EAF0FF] [color-scheme:dark]"
+                />
+                <input
+                  type="date"
+                  value={compareDateRange.to}
+                  onChange={(e) => setCompareDateRange((d) => ({ ...d, to: e.target.value }))}
+                  className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-1.5 text-xs text-[#EAF0FF] [color-scheme:dark]"
+                />
+              </div>
+            )}
+
+            {/* Total Usage Trend — Bar Chart or Compare Grouped Bar */}
             <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
-              {usageChartData.length > 0 ? (
+              {compareMode && compareChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={compareChartData}>
+                    <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                    <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => usageMetric === "cost" ? `$${v}` : `${v}`} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                      formatter={(value, name) => [
+                        usageMetric === "cost" ? `$${Number(value ?? 0).toFixed(2)}` : Number(value ?? 0).toFixed(1),
+                        name === "current" ? "Current Period" : "Comparison Period",
+                      ]}
+                    />
+                    <Legend
+                      wrapperStyle={{ fontSize: 11, color: "#EAF0FF" }}
+                      formatter={(value) => value === "current" ? "Current Period" : "Comparison Period"}
+                    />
+                    <Bar dataKey="current" fill="#E9B44C" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="comparison" fill="#4CAF50" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : usageChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={usageChartData}>
                     <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
-                    <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                    <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => usageMetric === "cost" ? `$${v}` : `${v}`} />
                     <Tooltip
                       contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
-                      formatter={(value) => [`$${Number(value ?? 0).toFixed(2)}`, "Cost"]}
+                      formatter={(value) => [
+                        usageMetric === "cost" ? `$${Number(value ?? 0).toFixed(2)}` : Number(value ?? 0).toFixed(1),
+                        usageMetric === "cost" ? "Cost" : "Quantity",
+                      ]}
                       labelFormatter={(label) => label}
                     />
-                    <Bar dataKey="totalCost" fill="#E9B44C" radius={[4, 4, 0, 0]} name="Total Cost" />
+                    <Bar dataKey="value" fill="#E9B44C" radius={[4, 4, 0, 0]} name={usageMetric === "cost" ? "Cost" : "Quantity"} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -1071,18 +1246,18 @@ export default function ReportsPage() {
               )}
             </div>
 
-            {/* Top Items Breakdown (Stacked Area Chart) */}
-            {areaChartData.length > 0 && usageOverTime?.itemSeries && usageOverTime.itemSeries.length > 0 && (
+            {/* Top Items/Vendor Breakdown (Stacked Area Chart) — hidden during compare mode */}
+            {!compareMode && usageGroupBy === "item" && areaChartData.length > 0 && usageOverTime?.itemSeries && usageOverTime.itemSeries.length > 0 && (
               <div className="mt-4">
                 <h4 className="mb-2 text-sm font-semibold text-[#EAF0FF]/80">Top Items Breakdown</h4>
                 <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
                   <ResponsiveContainer width="100%" height={320}>
                     <AreaChart data={areaChartData}>
                       <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
-                      <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                      <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => usageMetric === "cost" ? `$${v}` : `${v}`} />
                       <Tooltip
                         contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
-                        formatter={(value, name) => [`$${Number(value ?? 0).toFixed(2)}`, name]}
+                        formatter={(value, name) => [usageMetric === "cost" ? `$${Number(value ?? 0).toFixed(2)}` : Number(value ?? 0).toFixed(1), name]}
                       />
                       <Legend wrapperStyle={{ fontSize: 11, color: "#EAF0FF" }} />
                       {usageOverTime.itemSeries.map((series, i) => (
@@ -1090,6 +1265,37 @@ export default function ReportsPage() {
                           key={series.itemId}
                           type="monotone"
                           dataKey={series.itemName}
+                          stackId="1"
+                          fill={AREA_COLORS[i % AREA_COLORS.length]}
+                          stroke={AREA_COLORS[i % AREA_COLORS.length]}
+                          fillOpacity={0.6}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Vendor Breakdown (Stacked Area Chart) */}
+            {!compareMode && usageGroupBy === "vendor" && vendorAreaChartData.length > 0 && usageByVendor?.vendorSeries && usageByVendor.vendorSeries.length > 0 && (
+              <div className="mt-4">
+                <h4 className="mb-2 text-sm font-semibold text-[#EAF0FF]/80">Top Vendors Breakdown</h4>
+                <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                  <ResponsiveContainer width="100%" height={320}>
+                    <AreaChart data={vendorAreaChartData}>
+                      <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                      <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => usageMetric === "cost" ? `$${v}` : `${v}`} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                        formatter={(value, name) => [usageMetric === "cost" ? `$${Number(value ?? 0).toFixed(2)}` : Number(value ?? 0).toFixed(1), name]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11, color: "#EAF0FF" }} />
+                      {usageByVendor.vendorSeries.map((series, i) => (
+                        <Area
+                          key={series.vendorId}
+                          type="monotone"
+                          dataKey={series.vendorName}
                           stackId="1"
                           fill={AREA_COLORS[i % AREA_COLORS.length]}
                           stroke={AREA_COLORS[i % AREA_COLORS.length]}
@@ -1115,6 +1321,7 @@ export default function ReportsPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
                 <tr>
+                  <th className="w-8 px-2 py-3" />
                   <UsageSortHeader label="Item" field="name" />
                   <UsageSortHeader label="Category" field="categoryName" />
                   <UsageSortHeader label="Qty Used" field="quantityUsed" />
@@ -1125,18 +1332,53 @@ export default function ReportsPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {sortedUsageItems.map((item) => (
-                  <tr key={item.itemId} className="hover:bg-[#16283F]/60">
-                    <td className="px-4 py-3 font-medium">{item.name}</td>
-                    <td className="px-4 py-3">{item.categoryName ?? "—"}</td>
-                    <td className="px-4 py-3">{item.quantityUsed.toFixed(1)}</td>
-                    <td className="px-4 py-3">{item.uom}</td>
-                    <td className="px-4 py-3">{item.unitCost != null ? `$${item.unitCost.toFixed(2)}` : "—"}</td>
-                    <td className="px-4 py-3">{item.totalCost != null ? `$${item.totalCost.toFixed(2)}` : "—"}</td>
-                  </tr>
+                  <>
+                    <tr
+                      key={item.itemId}
+                      className="cursor-pointer hover:bg-[#0B1623]/60"
+                      onClick={() => setExpandedUsageItemId(expandedUsageItemId === item.itemId ? null : item.itemId)}
+                    >
+                      <td className="px-2 py-3 text-center text-[#EAF0FF]/40">
+                        {expandedUsageItemId === item.itemId ? "\u25BC" : "\u25B6"}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{item.name}</td>
+                      <td className="px-4 py-3">{item.categoryName ?? "—"}</td>
+                      <td className="px-4 py-3">{item.quantityUsed.toFixed(1)}</td>
+                      <td className="px-4 py-3">{item.uom}</td>
+                      <td className="px-4 py-3">{item.unitCost != null ? `$${item.unitCost.toFixed(2)}` : "—"}</td>
+                      <td className="px-4 py-3">{item.totalCost != null ? `$${item.totalCost.toFixed(2)}` : "—"}</td>
+                    </tr>
+                    {expandedUsageItemId === item.itemId && (
+                      <tr key={`${item.itemId}-detail`}>
+                        <td colSpan={7} className="bg-[#0B1623]/40 px-6 py-3">
+                          {itemDetailChartData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={200}>
+                              <LineChart data={itemDetailChartData}>
+                                <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 11 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                                <YAxis tick={{ fill: "#EAF0FF99", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => usageMetric === "cost" ? `$${v}` : `${v}`} />
+                                <Tooltip
+                                  contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                                  formatter={(value) => [
+                                    usageMetric === "cost" ? `$${Number(value ?? 0).toFixed(2)}` : Number(value ?? 0).toFixed(1),
+                                    usageMetric === "cost" ? "Cost" : "Quantity",
+                                  ]}
+                                />
+                                <Line type="monotone" dataKey="value" stroke="#E9B44C" strokeWidth={2} dot={{ r: 3, fill: "#E9B44C" }} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          ) : usageItemDetail ? (
+                            <p className="py-3 text-center text-xs text-[#EAF0FF]/40">No usage data for this item in the selected period.</p>
+                          ) : (
+                            <p className="py-3 text-center text-xs text-[#EAF0FF]/40">Loading usage trend...</p>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
                 {sortedUsageItems.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                    <td colSpan={7} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                       {filter ? "No items match your search." : "No usage data for this period."}
                     </td>
                   </tr>

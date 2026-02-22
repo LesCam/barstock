@@ -98,3 +98,19 @@ export const recipeDetailQuerySchema = z.object({
 
 export type RecipeAnalyticsQueryInput = z.infer<typeof recipeAnalyticsQuerySchema>;
 export type RecipeDetailQueryInput = z.infer<typeof recipeDetailQuerySchema>;
+
+export const usageItemDetailQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+  granularity: z.enum(["day", "week", "month"]).default("day"),
+});
+
+export const usageByVendorQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+  granularity: z.enum(["day", "week", "month"]).default("day"),
+  categoryId: z.string().uuid().optional(),
+});

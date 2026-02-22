@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 
@@ -115,6 +115,32 @@ export const reportsRouter = router({
         input.recipeId,
         input.fromDate,
         input.toDate
+      );
+    }),
+
+  usageItemDetail: protectedProcedure
+    .input(usageItemDetailQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getUsageItemDetail(
+        input.locationId,
+        input.itemId,
+        input.fromDate,
+        input.toDate,
+        input.granularity
+      );
+    }),
+
+  usageByVendor: protectedProcedure
+    .input(usageByVendorQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getUsageByVendor(
+        input.locationId,
+        input.fromDate,
+        input.toDate,
+        input.granularity,
+        input.categoryId
       );
     }),
 });
