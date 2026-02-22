@@ -43,6 +43,7 @@ export default function ParLevelsPage() {
   const [editedPars, setEditedPars] = useState<Map<string, EditedPar>>(new Map());
   const [sortColumn, setSortColumn] = useState<string>("itemName");
   const [sortAsc, setSortAsc] = useState(true);
+  const [showSuggest, setShowSuggest] = useState(false);
 
   const { data: items, isLoading } = trpc.parLevels.list.useQuery(
     { locationId: locationId! },
@@ -246,11 +247,15 @@ export default function ParLevelsPage() {
           handleSort={handleSort}
           sortArrow={sortArrow}
           editedPars={editedPars}
+          setEditedPars={setEditedPars}
           getEdited={getEdited}
           setEditedField={setEditedField}
           handleSave={handleSave}
           isSaving={bulkUpsertMutation.isPending}
           saveError={bulkUpsertMutation.error?.message}
+          showSuggest={showSuggest}
+          setShowSuggest={setShowSuggest}
+          locationId={locationId}
         />
       ) : (
         <OrderView
@@ -283,12 +288,76 @@ function ManageView({
   handleSort,
   sortArrow,
   editedPars,
+  setEditedPars,
   getEdited,
   setEditedField,
   handleSave,
   isSaving,
   saveError,
+  showSuggest,
+  setShowSuggest,
+  locationId,
 }: any) {
+  const [suggestLead, setSuggestLead] = useState(2);
+  const [suggestSafety, setSuggestSafety] = useState(1);
+  const [suggestBuffer, setSuggestBuffer] = useState(3);
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
+
+  const { data: parSuggestions, isLoading: suggestLoading } = trpc.parLevels.suggestPars.useQuery(
+    {
+      locationId: locationId!,
+      leadTimeDays: suggestLead,
+      safetyStockDays: suggestSafety,
+      bufferDays: suggestBuffer,
+    },
+    { enabled: !!locationId && showSuggest }
+  );
+
+  // Auto-select all suggestions with vendors when data loads
+  const suggestionsWithVendor = useMemo(
+    () => (parSuggestions ?? []).filter((s: any) => s.vendorId),
+    [parSuggestions]
+  );
+
+  function toggleSuggestion(id: string) {
+    const next = new Set(selectedSuggestions);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedSuggestions(next);
+  }
+
+  function selectAllSuggestions() {
+    setSelectedSuggestions(new Set(suggestionsWithVendor.map((s: any) => s.inventoryItemId)));
+  }
+
+  function deselectAllSuggestions() {
+    setSelectedSuggestions(new Set());
+  }
+
+  function applySuggestions() {
+    const next = new Map(editedPars);
+    for (const s of suggestionsWithVendor) {
+      if (!selectedSuggestions.has(s.inventoryItemId)) continue;
+      const key = `${s.inventoryItemId}:${s.vendorId}`;
+      next.set(key, {
+        inventoryItemId: s.inventoryItemId,
+        vendorId: s.vendorId,
+        parLevel: s.suggestedParLevel,
+        minLevel: s.suggestedMinLevel,
+        reorderQty: s.reorderQty,
+        parUom: s.parUom ?? "unit",
+        leadTimeDays: s.leadTimeDays,
+        safetyStockDays: s.safetyStockDays,
+      });
+    }
+    setEditedPars(next);
+    setShowSuggest(false);
+    setSelectedSuggestions(new Set());
+  }
+
+  const withoutPars = suggestionsWithVendor.filter((s: any) => s.existingParLevel == null).length;
+  const withPars = suggestionsWithVendor.filter((s: any) => s.existingParLevel != null).length;
+
   return (
     <>
       {/* Summary cards */}
@@ -349,6 +418,21 @@ function ManageView({
           />
           Below Par Only
         </label>
+        {canEdit && (
+          <button
+            onClick={() => {
+              setShowSuggest(!showSuggest);
+              if (!showSuggest) selectAllSuggestions();
+            }}
+            className={`rounded-md px-4 py-2 text-sm font-medium ${
+              showSuggest
+                ? "bg-[#E9B44C] text-white"
+                : "border border-[#E9B44C]/50 text-[#E9B44C] hover:bg-[#E9B44C]/10"
+            }`}
+          >
+            Auto-Suggest Pars
+          </button>
+        )}
 
         {editedPars.size > 0 && canEdit && (
           <button
@@ -361,6 +445,120 @@ function ManageView({
         )}
       </div>
       {saveError && <p className="mb-4 text-sm text-red-400">{saveError}</p>}
+
+      {/* Auto-Suggest Panel */}
+      {showSuggest && (
+        <div className="mb-4 rounded-lg border border-[#E9B44C]/30 bg-[#16283F] p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-[#EAF0FF]">Suggested Par Levels</h3>
+            <button
+              onClick={() => { setShowSuggest(false); setSelectedSuggestions(new Set()); }}
+              className="text-[#EAF0FF]/40 hover:text-[#EAF0FF]/80"
+            >
+              &times;
+            </button>
+          </div>
+
+          <div className="mb-3 flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-1.5 text-xs text-[#EAF0FF]/70">
+              Lead Time (days)
+              <input
+                type="number"
+                min={0}
+                value={suggestLead}
+                onChange={(e) => setSuggestLead(Number(e.target.value))}
+                className="w-16 rounded border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-xs text-[#EAF0FF]"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-[#EAF0FF]/70">
+              Safety Stock (days)
+              <input
+                type="number"
+                min={0}
+                value={suggestSafety}
+                onChange={(e) => setSuggestSafety(Number(e.target.value))}
+                className="w-16 rounded border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-xs text-[#EAF0FF]"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-[#EAF0FF]/70">
+              Buffer (days)
+              <input
+                type="number"
+                min={0}
+                value={suggestBuffer}
+                onChange={(e) => setSuggestBuffer(Number(e.target.value))}
+                className="w-16 rounded border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-xs text-[#EAF0FF]"
+              />
+            </label>
+            <span className="text-xs text-[#EAF0FF]/40">
+              {withoutPars > 0 && `${withoutPars} without pars`}
+              {withoutPars > 0 && withPars > 0 && ", "}
+              {withPars > 0 && `${withPars} with existing pars`}
+            </span>
+          </div>
+
+          {suggestLoading ? (
+            <p className="text-xs text-[#EAF0FF]/60">Calculating suggestions...</p>
+          ) : suggestionsWithVendor.length === 0 ? (
+            <p className="text-xs text-[#EAF0FF]/60">No items with usage data and a vendor found.</p>
+          ) : (
+            <>
+              <div className="mb-2 flex items-center gap-2">
+                <button onClick={selectAllSuggestions} className="text-xs text-[#E9B44C] hover:underline">Select All</button>
+                <span className="text-xs text-[#EAF0FF]/30">|</span>
+                <button onClick={deselectAllSuggestions} className="text-xs text-[#E9B44C] hover:underline">Deselect All</button>
+                <span className="ml-auto text-xs text-[#EAF0FF]/50">{selectedSuggestions.size} selected</span>
+              </div>
+              <div className="max-h-64 overflow-y-auto rounded border border-white/5">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 border-b border-white/10 bg-[#0B1623] text-[#EAF0FF]/50 uppercase">
+                    <tr>
+                      <th className="px-2 py-1.5 font-medium w-8" />
+                      <th className="px-2 py-1.5 font-medium">Item</th>
+                      <th className="px-2 py-1.5 font-medium">Vendor</th>
+                      <th className="px-2 py-1.5 font-medium text-right">Avg/Day</th>
+                      <th className="px-2 py-1.5 font-medium text-right">Current Par</th>
+                      <th className="px-2 py-1.5 font-medium text-right">Suggested Par</th>
+                      <th className="px-2 py-1.5 font-medium text-right">Current Min</th>
+                      <th className="px-2 py-1.5 font-medium text-right">Suggested Min</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {suggestionsWithVendor.map((s: any) => (
+                      <tr key={s.inventoryItemId} className="hover:bg-[#0B1623]/40">
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="checkbox"
+                            checked={selectedSuggestions.has(s.inventoryItemId)}
+                            onChange={() => toggleSuggestion(s.inventoryItemId)}
+                            className="rounded"
+                          />
+                        </td>
+                        <td className="px-2 py-1.5 text-[#EAF0FF]">{s.itemName}</td>
+                        <td className="px-2 py-1.5 text-[#EAF0FF]/60">{s.vendorName ?? "—"}</td>
+                        <td className="px-2 py-1.5 text-right text-[#EAF0FF]/60">{s.avgDailyUsage.toFixed(2)}</td>
+                        <td className="px-2 py-1.5 text-right text-[#EAF0FF]/40">{s.existingParLevel ?? "—"}</td>
+                        <td className="px-2 py-1.5 text-right font-medium text-[#E9B44C]">{s.suggestedParLevel}</td>
+                        <td className="px-2 py-1.5 text-right text-[#EAF0FF]/40">{s.existingMinLevel ?? "—"}</td>
+                        <td className="px-2 py-1.5 text-right font-medium text-[#E9B44C]">{s.suggestedMinLevel}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={applySuggestions}
+                  disabled={selectedSuggestions.size === 0}
+                  className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+                >
+                  Apply Selected ({selectedSuggestions.size})
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Table */}
       {isLoading ? (

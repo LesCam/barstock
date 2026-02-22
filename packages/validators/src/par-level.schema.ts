@@ -52,8 +52,16 @@ export const parLevelSuggestionsSchema = z.object({
   vendorId: z.string().uuid().optional(),
 });
 
+export const parLevelSuggestSchema = z.object({
+  locationId: z.string().uuid(),
+  leadTimeDays: z.number().min(0).default(2),
+  safetyStockDays: z.number().min(0).default(1),
+  bufferDays: z.number().min(0).default(3),
+});
+
 export type ParLevelCreateInput = z.infer<typeof parLevelCreateSchema>;
 export type ParLevelUpdateInput = z.infer<typeof parLevelUpdateSchema>;
 export type ParLevelBulkUpsertInput = z.infer<typeof parLevelBulkUpsertSchema>;
 export type ParLevelListInput = z.infer<typeof parLevelListSchema>;
 export type ParLevelSuggestionsInput = z.infer<typeof parLevelSuggestionsSchema>;
+export type ParLevelSuggestInput = z.infer<typeof parLevelSuggestSchema>;

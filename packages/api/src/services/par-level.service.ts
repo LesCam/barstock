@@ -318,6 +318,43 @@ export class ParLevelService {
     );
   }
 
+  async suggestParLevels(
+    locationId: string,
+    leadTimeDays = 2,
+    safetyStockDays = 1,
+    bufferDays = 3
+  ) {
+    const allItems = await this.list(locationId);
+
+    return allItems
+      .filter((item) => item.avgDailyUsage != null && item.avgDailyUsage > 0)
+      .map((item) => {
+        const avg = item.avgDailyUsage!;
+        const lead = item.leadTimeDays ?? leadTimeDays;
+        const safety = item.safetyStockDays ?? safetyStockDays;
+
+        const suggestedMinLevel = Math.ceil(avg * lead);
+        const suggestedParLevel = Math.ceil(avg * (lead + safety + bufferDays));
+
+        return {
+          inventoryItemId: item.inventoryItemId,
+          itemName: item.itemName,
+          vendorId: item.vendorId,
+          vendorName: item.vendorName,
+          currentOnHand: item.currentOnHand,
+          avgDailyUsage: avg,
+          suggestedParLevel,
+          suggestedMinLevel,
+          existingParLevel: item.parLevel,
+          existingMinLevel: item.minLevel,
+          parUom: item.parUom,
+          leadTimeDays: lead,
+          safetyStockDays: safety,
+          reorderQty: item.reorderQty,
+        };
+      });
+  }
+
   async create(input: ParLevelCreateInput) {
     return this.prisma.parLevel.create({
       data: {

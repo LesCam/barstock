@@ -5,6 +5,7 @@ import {
   parLevelBulkUpsertSchema,
   parLevelListSchema,
   parLevelSuggestionsSchema,
+  parLevelSuggestSchema,
 } from "@barstock/validators";
 import { ParLevelService } from "../services/par-level.service";
 import { AuditService } from "../services/audit.service";
@@ -94,6 +95,18 @@ export const parLevelsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new ParLevelService(ctx.prisma);
       return svc.getReorderSuggestions(input.locationId, input.vendorId);
+    }),
+
+  suggestPars: protectedProcedure
+    .input(parLevelSuggestSchema)
+    .query(({ ctx, input }) => {
+      const svc = new ParLevelService(ctx.prisma);
+      return svc.suggestParLevels(
+        input.locationId,
+        input.leadTimeDays,
+        input.safetyStockDays,
+        input.bufferDays,
+      );
     }),
 
   delete: protectedProcedure
