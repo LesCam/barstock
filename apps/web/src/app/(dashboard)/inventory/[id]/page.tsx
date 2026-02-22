@@ -1,11 +1,14 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { UOM } from "@barstock/types";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+} from "recharts";
 
 const UOM_LABELS: Record<string, string> = {
   units: "Units",
@@ -129,6 +132,119 @@ function BottleWeightsCard({
           </dd>
         </div>
       </dl>
+    </div>
+  );
+}
+
+type Period = "7d" | "30d" | "90d";
+
+function UsageHistoryCard({ itemId, locationId }: { itemId: string; locationId: string }) {
+  const [period, setPeriod] = useState<Period>("30d");
+
+  const { fromDate, toDate, granularity } = useMemo(() => {
+    const to = new Date();
+    const from = new Date();
+    let gran: "day" | "week" = "day";
+    if (period === "7d") {
+      from.setDate(to.getDate() - 7);
+    } else if (period === "30d") {
+      from.setDate(to.getDate() - 30);
+    } else {
+      from.setDate(to.getDate() - 90);
+      gran = "week";
+    }
+    return { fromDate: from, toDate: to, granularity: gran };
+  }, [period]);
+
+  const { data, isLoading } = trpc.reports.usageItemDetail.useQuery({
+    locationId,
+    itemId,
+    fromDate,
+    toDate,
+    granularity,
+  });
+
+  const chartData = useMemo(() => {
+    if (!data?.periods) return [];
+    return data.periods.map((p) => {
+      const d = new Date(p.period);
+      let label: string;
+      if (period === "7d") {
+        label = d.toLocaleDateString("en-US", { weekday: "short" });
+      } else if (period === "30d") {
+        label = `${d.getMonth() + 1}/${d.getDate()}`;
+      } else {
+        label = `Wk ${d.getMonth() + 1}/${d.getDate()}`;
+      }
+      return { label, qty: p.qty, cost: p.cost };
+    });
+  }, [data, period]);
+
+  const totalQty = chartData.reduce((s, d) => s + d.qty, 0);
+  const totalCost = chartData.reduce((s, d) => s + d.cost, 0);
+
+  const pills: Period[] = ["7d", "30d", "90d"];
+
+  return (
+    <div className="mt-6 rounded-lg border border-white/10 bg-[#16283F] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-[#EAF0FF]">Usage History</h2>
+        <div className="inline-flex rounded-md border border-white/10">
+          {pills.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-3 py-1 text-xs font-medium ${
+                period === p
+                  ? "bg-[#E9B44C] text-[#0B1623]"
+                  : "text-[#EAF0FF]/60 hover:text-[#EAF0FF]"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <p className="py-8 text-center text-sm text-[#EAF0FF]/40">Loading...</p>
+      ) : chartData.length > 0 ? (
+        <>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={chartData}>
+              <XAxis
+                dataKey="label"
+                tick={{ fill: "#EAF0FF", fontSize: 12 }}
+                axisLine={{ stroke: "#ffffff1a" }}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fill: "#EAF0FF99", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#0B1623",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 8,
+                  color: "#EAF0FF",
+                }}
+                formatter={(value, name) => [
+                  name === "cost" ? `$${Number(value ?? 0).toFixed(2)}` : Number(value ?? 0).toFixed(1),
+                  name === "cost" ? "Cost" : "Qty",
+                ]}
+              />
+              <Bar dataKey="qty" fill="#E9B44C" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+          <p className="mt-2 text-sm text-[#EAF0FF]/60">
+            Total: {totalQty.toFixed(1)} units — ${totalCost.toFixed(2)}
+          </p>
+        </>
+      ) : (
+        <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No usage data for this period.</p>
+      )}
     </div>
   );
 }
@@ -845,6 +961,11 @@ export default function InventoryDetailPage({
           <p className="text-sm text-[#EAF0FF]/40">No price history recorded.</p>
         )}
       </div>
+
+      {/* Usage History */}
+      {locationId && (
+        <UsageHistoryCard itemId={item.id} locationId={locationId} />
+      )}
     </div>
   );
 }
