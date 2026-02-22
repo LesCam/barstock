@@ -31,7 +31,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     <View style={styles.container}>
       <CameraView
         style={styles.camera}
-        barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128"] }}
+        barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128", "qr"] }}
         onBarcodeScanned={
           scanned
             ? undefined

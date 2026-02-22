@@ -9,10 +9,11 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { API_URL } from "@/lib/trpc";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 const COLUMN_GAP = 12;
 const NUM_COLUMNS = 2;
@@ -65,10 +66,32 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   return `${API_URL}${url}`;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ARTWORK_URL_RE = /\/artwork\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
 export default function ArtTab() {
   const { user } = useAuth();
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<string>("newest");
+  const [showScanner, setShowScanner] = useState(false);
+
+  const handleQrScan = useCallback((data: string) => {
+    // Try to extract artwork ID from URL pattern
+    const urlMatch = data.match(ARTWORK_URL_RE);
+    if (urlMatch) {
+      setShowScanner(false);
+      router.push(`/art/${urlMatch[1]}` as any);
+      return;
+    }
+    // Try plain UUID
+    if (UUID_RE.test(data.trim())) {
+      setShowScanner(false);
+      router.push(`/art/${data.trim()}` as any);
+      return;
+    }
+    // Not a recognized format — close scanner
+    setShowScanner(false);
+  }, []);
 
   const { data, isLoading, refetch } = trpc.artworks.list.useQuery(
     {
@@ -99,6 +122,15 @@ export default function ArtTab() {
         return raw; // newest — already sorted by API
     }
   }, [data?.items, sortBy]);
+
+  if (showScanner) {
+    return (
+      <BarcodeScanner
+        onScan={handleQrScan}
+        onClose={() => setShowScanner(false)}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -221,6 +253,15 @@ export default function ArtTab() {
         }
       />
 
+      {/* QR Scan FAB */}
+      <TouchableOpacity
+        style={styles.scanFab}
+        onPress={() => setShowScanner(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.scanFabText}>QR</Text>
+      </TouchableOpacity>
+
       {/* FAB — add artwork */}
       <TouchableOpacity
         style={styles.fab}
@@ -329,6 +370,29 @@ const styles = StyleSheet.create({
     color: "#5A6A7A",
     marginTop: 40,
     fontSize: 14,
+  },
+  scanFab: {
+    position: "absolute",
+    bottom: 20,
+    right: 88,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#16283F",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  scanFabText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#E9B44C",
   },
   fab: {
     position: "absolute",

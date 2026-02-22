@@ -4,13 +4,14 @@ import type { Metadata } from "next";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const HIDDEN_STATUSES = ["sold", "removed", "removed_not_sold"] as const;
+const HIDDEN_STATUSES = ["removed", "removed_not_sold"] as const;
 
 const PUBLIC_STATUSES: Record<string, string> = {
   on_wall: "Available",
   reserved: "Reserved",
   reserved_pending_payment: "Reserved",
   pending_payment_issue: "Reserved",
+  sold: "Sold",
 };
 
 interface PageProps {
@@ -117,12 +118,25 @@ export default async function PublicArtworkPage({ params }: PageProps) {
             className={`rounded-full px-3 py-1 text-sm font-medium ${
               statusLabel === "Available"
                 ? "bg-green-500/20 text-green-400"
-                : "bg-yellow-500/20 text-yellow-400"
+                : statusLabel === "Sold"
+                  ? "bg-red-500/20 text-red-400"
+                  : "bg-yellow-500/20 text-yellow-400"
             }`}
           >
             {statusLabel}
           </span>
         </div>
+
+        {/* Status-specific messaging */}
+        {statusLabel === "Sold" ? (
+          <p className="mt-3 text-sm text-red-400/80">
+            This piece has been sold.
+          </p>
+        ) : statusLabel === "Available" ? (
+          <p className="mt-3 text-sm text-[#EAF0FF]/50">
+            Interested? Ask a staff member about this piece.
+          </p>
+        ) : null}
 
         {/* Artist Bio */}
         {artwork.artist.bio && (
