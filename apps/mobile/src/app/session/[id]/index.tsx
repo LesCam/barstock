@@ -14,6 +14,8 @@ import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { useCountingPreferences } from "@/lib/counting-preferences";
+import { useNetwork } from "@/lib/network-context";
+import { subscribe, type QueueEntry } from "@/lib/offline-queue";
 import { VarianceReasonModal } from "@/components/VarianceReasonModal";
 import type { VarianceReason } from "@barstock/types";
 
@@ -37,7 +39,18 @@ export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { selectedLocationId, user: authUser } = useAuth();
   const { hapticEnabled, quickEmptyEnabled } = useCountingPreferences();
+  const { isOnline } = useNetwork();
   const utils = trpc.useUtils();
+
+  // Track offline queue for pending sync indicators
+  const [offlineQueue, setOfflineQueue] = useState<QueueEntry[]>([]);
+  useEffect(() => {
+    return subscribe(setOfflineQueue);
+  }, []);
+  const pendingTempIds = useMemo(
+    () => new Set(offlineQueue.filter((e) => e.status !== "failed" && e.tempId).map((e) => e.tempId!)),
+    [offlineQueue],
+  );
 
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedSubAreaId, setSelectedSubAreaId] = useState<string | null>(null);
@@ -90,14 +103,14 @@ export default function SessionDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, session?.endedTs]);
 
-  // Heartbeat: fires every 30s and immediately on sub-area change
+  // Heartbeat: fires every 30s and immediately on sub-area change (skip when offline)
   const sendHeartbeat = useCallback(() => {
-    if (!session || session.endedTs) return;
+    if (!session || session.endedTs || !isOnline) return;
     heartbeatMutation.mutate({
       sessionId: session.id,
       currentSubAreaId: selectedSubAreaId ?? undefined,
     });
-  }, [session?.id, session?.endedTs, selectedSubAreaId]);
+  }, [session?.id, session?.endedTs, selectedSubAreaId, isOnline]);
 
   useEffect(() => {
     if (!session || session.endedTs) return;
@@ -376,6 +389,11 @@ export default function SessionDetailScreen() {
 
   // Claim a sub-area (replaces warnIfOccupied)
   function claimArea(subAreaId: string) {
+    if (!isOnline) {
+      // Still allow local selection, just skip the server claim
+      setSelectedSubAreaId(subAreaId);
+      return;
+    }
     claimSubAreaMut.mutate({ sessionId: id!, subAreaId });
   }
 
@@ -487,6 +505,20 @@ export default function SessionDetailScreen() {
 
   // Handle close session — triggers verification flow
   async function handleCloseSession() {
+    if (!isOnline) {
+      Alert.alert("Offline", "Cannot close session while offline. Please reconnect first.");
+      return;
+    }
+    const pendingForSession = offlineQueue.filter(
+      (e) => e.status === "pending" && (e.input as any).sessionId === id,
+    );
+    if (pendingForSession.length > 0) {
+      Alert.alert(
+        "Pending Items",
+        `${pendingForSession.length} item(s) haven't synced yet. Wait for sync to complete before closing.`,
+      );
+      return;
+    }
     if (workedAreaIds.length === 0) {
       closeMutation.mutate({ sessionId: id! });
       return;
@@ -1057,9 +1089,14 @@ export default function SessionDetailScreen() {
                   return (
                     <View key={line.id} style={styles.reviewRow}>
                       <View style={styles.reviewInfo}>
-                        <Text style={styles.reviewItemName}>
-                          {line.inventoryItem?.name ?? "Unknown"}
-                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                          <Text style={styles.reviewItemName}>
+                            {line.inventoryItem?.name ?? "Unknown"}
+                          </Text>
+                          {(line as any)._pendingSync && pendingTempIds.has(line.id) && (
+                            <Text style={styles.pendingSyncIcon}> syncing</Text>
+                          )}
+                        </View>
                         <TouchableOpacity
                           onPress={() => {
                             if (!isOpen || submitMode) return;
@@ -1814,6 +1851,12 @@ const styles = StyleSheet.create({
   varianceGreen: { color: "#2BA8A0" },
   varianceOrange: { color: "#E9B44C" },
   varianceRed: { color: "#dc2626" },
+  pendingSyncIcon: {
+    color: "#E9B44C",
+    fontSize: 11,
+    fontStyle: "italic",
+    marginLeft: 4,
+  },
 
   // Submit footer
   submitFooter: {

@@ -1,8 +1,11 @@
 import { useState, useCallback } from "react";
 import { View, Text, TouchableOpacity, FlatList, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import * as Crypto from "expo-crypto";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
+import { useNetwork } from "@/lib/network-context";
+import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 
 interface TapEntry {
@@ -21,8 +24,9 @@ export default function DraftVerifyScreen() {
     subAreaId?: string;
     areaName?: string;
   }>();
-  const { selectedLocationId } = useAuth();
+  const { selectedLocationId, user: authUser } = useAuth();
   const utils = trpc.useUtils();
+  const { isOnline } = useNetwork();
 
   const { data: tapLines, isLoading } = trpc.draft.listTapLines.useQuery(
     { locationId: selectedLocationId! },
@@ -67,6 +71,53 @@ export default function DraftVerifyScreen() {
   async function handleSubmitAll() {
     if (tapsWithData.length === 0) return;
     setSubmitting(true);
+
+    if (!isOnline) {
+      // Queue all tap entries for offline sync
+      for (const tap of tapsWithData) {
+        const tempId = Crypto.randomUUID();
+        const input = {
+          sessionId: sessionId!,
+          inventoryItemId: tap.inventoryItemId,
+          tapLineId: tap.tapLineId,
+          kegInstanceId: tap.kegInstanceId,
+          percentRemaining: parseInt(entries[tap.tapLineId], 10),
+          isManual: false,
+          subAreaId: subAreaId || undefined,
+        };
+        await enqueue("sessions.addLine", input, tempId);
+
+        // Optimistic cache update
+        utils.sessions.getById.setData({ id: sessionId! }, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            lines: [...old.lines, {
+              id: tempId,
+              sessionId,
+              inventoryItemId: tap.inventoryItemId,
+              grossWeightGrams: null,
+              countUnits: null,
+              percentRemaining: parseInt(entries[tap.tapLineId], 10),
+              isManual: false,
+              subAreaId: subAreaId || null,
+              countedBy: authUser?.userId ?? null,
+              createdAt: new Date().toISOString(),
+              inventoryItem: { name: tap.productName, barcode: null, baseUom: "", category: null },
+              subArea: null,
+              countedByUser: authUser ? { email: authUser.email, firstName: authUser.email.split("@")[0] } : null,
+              _pendingSync: true,
+            }],
+          };
+        });
+      }
+      setSubmitting(false);
+      Alert.alert("Queued Offline", `${tapsWithData.length} tap(s) saved for sync.`, [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+      return;
+    }
+
     try {
       await Promise.all(
         tapsWithData.map((tap) =>

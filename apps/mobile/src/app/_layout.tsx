@@ -3,13 +3,23 @@ import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { NotificationProvider } from "@/lib/notification-context";
 import { LockProvider, useLock } from "@/lib/lock-context";
 import { CountingPreferencesProvider } from "@/lib/counting-preferences";
+import { NetworkProvider } from "@/lib/network-context";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import LockScreen from "@/components/LockScreen";
+
+const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  key: "@barstock/queryCache",
+});
 
 function RootNavigator() {
   const { token, isLoading } = useAuth();
@@ -146,25 +156,49 @@ export default function RootLayout() {
         defaultOptions: {
           queries: {
             staleTime: 30_000,
+            gcTime: 1000 * 60 * 60 * 24, // 24h — keep cache for offline persistence
           },
         },
       })
   );
 
+  const persistOptions = {
+    persister: asyncStoragePersister,
+    dehydrateOptions: {
+      shouldDehydrateQuery: (query: any) => {
+        // Only persist session, inventory, and area queries — not auth
+        const key = query.queryKey?.[0]?.[0] ?? "";
+        return (
+          key === "sessions" ||
+          key === "inventory" ||
+          key === "areas" ||
+          key === "scale" ||
+          key === "draft"
+        );
+      },
+    },
+  };
+
   return (
-    <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <NotificationProvider>
-            <CountingPreferencesProvider>
-              <LockProvider>
-                <RootNavigator />
-                <LockOverlay />
-              </LockProvider>
-            </CountingPreferencesProvider>
-          </NotificationProvider>
-        </AuthProvider>
-      </QueryClientProvider>
-    </trpc.Provider>
+    <NetworkProvider>
+      <trpc.Provider client={trpcClient} queryClient={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={persistOptions}
+        >
+          <AuthProvider>
+            <NotificationProvider>
+              <CountingPreferencesProvider>
+                <LockProvider>
+                  <OfflineBanner />
+                  <RootNavigator />
+                  <LockOverlay />
+                </LockProvider>
+              </CountingPreferencesProvider>
+            </NotificationProvider>
+          </AuthProvider>
+        </PersistQueryClientProvider>
+      </trpc.Provider>
+    </NetworkProvider>
   );
 }

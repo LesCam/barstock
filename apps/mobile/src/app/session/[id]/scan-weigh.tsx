@@ -15,9 +15,12 @@ import {
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import * as Crypto from "expo-crypto";
 import { trpc } from "@/lib/trpc";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import { useCountingPreferences } from "@/lib/counting-preferences";
+import { useNetwork } from "@/lib/network-context";
+import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { CreateItemFromScanModal } from "@/components/CreateItemFromScanModal";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
@@ -49,10 +52,11 @@ export default function ScanWeighScreen() {
     areaName?: string;
     itemId?: string;
   }>();
-  const { selectedLocationId } = useAuth();
+  const { selectedLocationId, user: authUser } = useAuth();
   const canTare = usePermission("canManageTareWeights");
   const utils = trpc.useUtils();
   const { hapticEnabled } = useCountingPreferences();
+  const { isOnline } = useNetwork();
 
   const [phase, setPhase] = useState<Phase>("scanning");
   const [matchedItem, setMatchedItem] = useState<MatchedItem | null>(null);
@@ -346,20 +350,96 @@ export default function ScanWeighScreen() {
     return null;
   }
 
+  // Optimistic cache update for offline addLine
+  function addOptimisticLine(tempId: string, item: MatchedItem, opts: {
+    grossWeightGrams?: number;
+    countUnits?: number;
+    isManual: boolean;
+  }) {
+    utils.sessions.getById.setData({ id: sessionId! }, (old: any) => {
+      if (!old) return old;
+      return {
+        ...old,
+        lines: [...old.lines, {
+          id: tempId,
+          sessionId,
+          inventoryItemId: item.id,
+          grossWeightGrams: opts.grossWeightGrams ?? null,
+          countUnits: opts.countUnits ?? null,
+          percentRemaining: null,
+          isManual: opts.isManual,
+          subAreaId: subAreaId || null,
+          countedBy: authUser?.userId ?? null,
+          createdAt: new Date().toISOString(),
+          inventoryItem: {
+            name: item.name,
+            barcode: item.barcode,
+            baseUom: item.baseUom,
+            category: item.category ?? null,
+          },
+          subArea: null,
+          countedByUser: authUser ? {
+            email: authUser.email,
+            firstName: authUser.email.split("@")[0],
+          } : null,
+          _pendingSync: true,
+        }],
+      };
+    });
+  }
+
+  function showSuccessFlash(itemName: string) {
+    if (hapticEnabled) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    setSubmittedCount((c) => c + 1);
+    setLastSubmittedName(itemName);
+    setPhase("submitted");
+    Animated.sequence([
+      Animated.timing(successOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.delay(800),
+      Animated.timing(successOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      resetToScanning();
+    });
+  }
+
   // Core submit logic (after duplicate check passes)
   async function doSubmit() {
     if (!matchedItem || grossWeightG == null || grossWeightG <= 0) return;
     setPhase("submitting");
     cancelAutoSubmit();
 
-    try {
-      await addLineMutation.mutateAsync({
-        sessionId: sessionId!,
-        inventoryItemId: matchedItem.id,
+    const mutationInput = {
+      sessionId: sessionId!,
+      inventoryItemId: matchedItem.id,
+      grossWeightGrams: grossWeightG,
+      isManual: usingManual,
+      subAreaId: subAreaId || undefined,
+    };
+
+    if (!isOnline) {
+      // Offline: queue mutation and update cache optimistically
+      const tempId = Crypto.randomUUID();
+      await enqueue("sessions.addLine", mutationInput, tempId);
+      addOptimisticLine(tempId, matchedItem, {
         grossWeightGrams: grossWeightG,
         isManual: usingManual,
-        subAreaId: subAreaId || undefined,
       });
+      showSuccessFlash(matchedItem.name);
+      return;
+    }
+
+    try {
+      await addLineMutation.mutateAsync(mutationInput);
 
       await recordMeasurementMutation.mutateAsync({
         locationId: selectedLocationId!,
@@ -370,34 +450,34 @@ export default function ScanWeighScreen() {
         confidenceLevel: usingManual ? "estimated" : "measured",
       });
 
-      if (hapticEnabled) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
-      setSubmittedCount((c) => c + 1);
-      setLastSubmittedName(matchedItem.name);
       utils.sessions.getById.invalidate({ id: sessionId! });
-
-      // Flash success
-      setPhase("submitted");
-      Animated.sequence([
-        Animated.timing(successOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.delay(800),
-        Animated.timing(successOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        resetToScanning();
-      });
+      showSuccessFlash(matchedItem.name);
     } catch (error: any) {
-      Alert.alert("Error", error.message ?? "Failed to submit.");
-      setPhase("weighing");
+      // If network error, offer to queue
+      if (error.message?.includes("fetch") || error.message?.includes("network")) {
+        Alert.alert(
+          "Connection Lost",
+          "Save this item to sync later?",
+          [
+            { text: "Discard", style: "cancel", onPress: () => setPhase("weighing") },
+            {
+              text: "Save Offline",
+              onPress: async () => {
+                const tempId = Crypto.randomUUID();
+                await enqueue("sessions.addLine", mutationInput, tempId);
+                addOptimisticLine(tempId, matchedItem!, {
+                  grossWeightGrams: grossWeightG!,
+                  isManual: usingManual,
+                });
+                showSuccessFlash(matchedItem!.name);
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert("Error", error.message ?? "Failed to submit.");
+        setPhase("weighing");
+      }
     }
   }
 
@@ -463,42 +543,43 @@ export default function ScanWeighScreen() {
     if (isNaN(count) || count < 0) return;
     setPhase("submitting");
 
-    try {
-      await addLineMutation.mutateAsync({
-        sessionId: sessionId!,
-        inventoryItemId: matchedItem.id,
+    const mutationInput = {
+      sessionId: sessionId!,
+      inventoryItemId: matchedItem.id,
+      countUnits: count,
+      isManual: true,
+      subAreaId: subAreaId || undefined,
+    };
+
+    if (!isOnline) {
+      const tempId = Crypto.randomUUID();
+      await enqueue("sessions.addLine", mutationInput, tempId);
+      addOptimisticLine(tempId, matchedItem, {
         countUnits: count,
         isManual: true,
-        subAreaId: subAreaId || undefined,
       });
+      showSuccessFlash(matchedItem.name);
+      return;
+    }
 
-      if (hapticEnabled) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
+    try {
+      await addLineMutation.mutateAsync(mutationInput);
 
-      setSubmittedCount((c) => c + 1);
-      setLastSubmittedName(matchedItem.name);
       utils.sessions.getById.invalidate({ id: sessionId! });
-
-      setPhase("submitted");
-      Animated.sequence([
-        Animated.timing(successOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.delay(800),
-        Animated.timing(successOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        resetToScanning();
-      });
+      showSuccessFlash(matchedItem.name);
     } catch (error: any) {
-      Alert.alert("Error", error.message ?? "Failed to submit.");
-      setPhase("counting");
+      if (error.message?.includes("fetch") || error.message?.includes("network")) {
+        const tempId = Crypto.randomUUID();
+        await enqueue("sessions.addLine", mutationInput, tempId);
+        addOptimisticLine(tempId, matchedItem!, {
+          countUnits: count,
+          isManual: true,
+        });
+        showSuccessFlash(matchedItem!.name);
+      } else {
+        Alert.alert("Error", error.message ?? "Failed to submit.");
+        setPhase("counting");
+      }
     }
   }
 
