@@ -15,7 +15,7 @@ export interface BusinessSettingsData {
   benchmarking: BenchmarkingSettings;
 }
 
-const DEFAULT_SETTINGS: BusinessSettingsData = {
+export const DEFAULT_SETTINGS: BusinessSettingsData = {
   capabilities: {
     artSalesEnabled: false,
     staffArtEntryMode: false,

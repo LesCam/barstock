@@ -86,6 +86,20 @@ export const subAreaUpdateSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
 });
 
+// ─── Business Provisioning ─────────────────────────────────
+
+export const provisionBusinessSchema = businessCreateSchema.extend({
+  // First location (required)
+  locationName: z.string().min(1).max(255),
+  timezone: z.string().default("America/Montreal"),
+  closeoutHour: z.number().int().min(0).max(23).default(4),
+  // First admin user (required)
+  adminEmail: z.string().email(),
+  adminPassword: z.string().min(8),
+  adminFirstName: z.string().optional(),
+  adminLastName: z.string().optional(),
+});
+
 export type BusinessCreateInput = z.infer<typeof businessCreateSchema>;
 export type BusinessUpdateInput = z.infer<typeof businessUpdateSchema>;
 export type LocationCreateInput = z.infer<typeof locationCreateSchema>;
@@ -94,3 +108,4 @@ export type BarAreaCreateInput = z.infer<typeof barAreaCreateSchema>;
 export type BarAreaUpdateInput = z.infer<typeof barAreaUpdateSchema>;
 export type SubAreaCreateInput = z.infer<typeof subAreaCreateSchema>;
 export type SubAreaUpdateInput = z.infer<typeof subAreaUpdateSchema>;
+export type ProvisionBusinessInput = z.infer<typeof provisionBusinessSchema>;
