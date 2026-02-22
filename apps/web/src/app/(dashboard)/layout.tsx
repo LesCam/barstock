@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 import { NotificationBell } from "@/components/notification-bell";
+import { OnboardingModal } from "@/components/onboarding-modal";
 
 export default async function DashboardLayout({
   children,
@@ -23,6 +24,7 @@ export default async function DashboardLayout({
         </header>
         <main className="flex-1 overflow-y-auto bg-[var(--navy-bg)] text-[var(--text-primary)] p-6">{children}</main>
       </div>
+      <OnboardingModal />
     </div>
   );
 }

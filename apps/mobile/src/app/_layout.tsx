@@ -15,6 +15,7 @@ import { CountingPreferencesProvider } from "@/lib/counting-preferences";
 import { NetworkProvider } from "@/lib/network-context";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import LockScreen from "@/components/LockScreen";
+import OnboardingOverlay from "@/components/OnboardingOverlay";
 
 const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
@@ -102,6 +103,10 @@ function RootNavigator() {
         options={{ title: "Receive Stock", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="par-levels"
+        options={{ title: "Par Levels", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
         name="shopping-list"
         options={{ title: "Shopping List", headerBackTitle: "Back" }}
       />
@@ -137,6 +142,10 @@ function RootNavigator() {
         name="alert-settings"
         options={{ title: "Alert Settings", headerBackTitle: "Back" }}
       />
+      <Stack.Screen
+        name="help"
+        options={{ title: "Help", headerBackTitle: "Back" }}
+      />
     </Stack>
   );
 }
@@ -147,6 +156,31 @@ function LockOverlay() {
 
   if (!isLocked || !token) return null;
   return <LockScreen />;
+}
+
+function OnboardingGate() {
+  const { token, user } = useAuth();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    AsyncStorage.getItem("@barstock/onboardingComplete").then((val) => {
+      setShowOnboarding(val !== "true");
+      setChecked(true);
+    });
+  }, [token]);
+
+  if (!checked || !showOnboarding || !token) return null;
+  return (
+    <OnboardingOverlay
+      user={user}
+      onComplete={() => {
+        AsyncStorage.setItem("@barstock/onboardingComplete", "true");
+        setShowOnboarding(false);
+      }}
+    />
+  );
 }
 
 export default function RootLayout() {
@@ -193,6 +227,7 @@ export default function RootLayout() {
                   <OfflineBanner />
                   <RootNavigator />
                   <LockOverlay />
+                  <OnboardingGate />
                 </LockProvider>
               </CountingPreferencesProvider>
             </NotificationProvider>

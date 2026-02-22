@@ -210,6 +210,13 @@ export default function SettingsTab() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Support</Text>
+        <TouchableOpacity style={styles.card} onPress={() => router.push("/help")}>
+          <Text style={styles.rowText}>Help & Guides</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
         <TouchableOpacity style={styles.card} onPress={signOut}>
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
