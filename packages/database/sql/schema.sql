@@ -629,3 +629,13 @@ CREATE TABLE IF NOT EXISTS benchmark_snapshots (
 CREATE INDEX IF NOT EXISTS ix_benchmark_snapshots_date ON benchmark_snapshots(snapshot_date);
 CREATE INDEX IF NOT EXISTS ix_benchmark_snapshots_location ON benchmark_snapshots(location_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_benchmark_snapshots_loc_date ON benchmark_snapshots(location_id, snapshot_date);
+
+-- v1.17: Subscription tiers
+do $$ begin
+  create type subscription_tier_t as enum ('starter', 'pro', 'enterprise');
+exception when duplicate_object then null; end $$;
+
+ALTER TABLE businesses
+  ADD COLUMN IF NOT EXISTS subscription_tier subscription_tier_t NOT NULL DEFAULT 'starter';
+
+CREATE INDEX IF NOT EXISTS ix_businesses_tier ON businesses(subscription_tier);

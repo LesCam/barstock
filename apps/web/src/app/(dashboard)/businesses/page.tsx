@@ -6,6 +6,23 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 
+const TIER_COLORS: Record<string, string> = {
+  starter: "bg-gray-500/10 text-gray-400",
+  pro: "bg-blue-500/10 text-blue-400",
+  enterprise: "bg-purple-500/10 text-purple-400",
+};
+
+function TierBadge({ tier }: { tier?: string }) {
+  const t = tier ?? "starter";
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${TIER_COLORS[t] ?? TIER_COLORS.starter}`}
+    >
+      {t}
+    </span>
+  );
+}
+
 export default function BusinessesPage() {
   const router = useRouter();
   const { data: session } = useSession();
@@ -70,6 +87,7 @@ export default function BusinessesPage() {
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Slug</th>
+                <th className="px-4 py-3">Tier</th>
                 <th className="px-4 py-3">Contact Email</th>
                 <th className="px-4 py-3">Locations</th>
                 <th className="px-4 py-3">Users</th>
@@ -88,6 +106,9 @@ export default function BusinessesPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-[#EAF0FF]/60">{biz.slug}</td>
+                  <td className="px-4 py-3">
+                    <TierBadge tier={biz.subscriptionTier} />
+                  </td>
                   <td className="px-4 py-3 text-[#EAF0FF]/60">
                     {biz.contactEmail || "—"}
                   </td>

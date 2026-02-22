@@ -7,6 +7,7 @@ import {
   platformUserListSchema,
 } from "@barstock/validators";
 import { hashPassword } from "../services/auth.service";
+import { SubscriptionService } from "../services/subscription.service";
 
 export const usersRouter = router({
   listForBusiness: protectedProcedure
@@ -57,6 +58,9 @@ export const usersRouter = router({
     .use(requireRole("platform_admin"))
     .input(platformUserCreateSchema)
     .mutation(async ({ ctx, input }) => {
+      const subService = new SubscriptionService(ctx.prisma);
+      await subService.enforceUserLimit(input.businessId);
+
       // Verify location belongs to business
       const location = await ctx.prisma.location.findUnique({
         where: { id: input.locationId },

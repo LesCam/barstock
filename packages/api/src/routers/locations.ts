@@ -1,13 +1,18 @@
 import { router, protectedProcedure, requireRole, requireBusinessAccess } from "../trpc";
 import { locationCreateSchema, locationUpdateSchema } from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
+import { SubscriptionService } from "../services/subscription.service";
 import { z } from "zod";
 
 export const locationsRouter = router({
   create: protectedProcedure
     .use(requireRole("business_admin"))
     .input(locationCreateSchema)
-    .mutation(({ ctx, input }) => ctx.prisma.location.create({ data: input })),
+    .mutation(async ({ ctx, input }) => {
+      const subService = new SubscriptionService(ctx.prisma);
+      await subService.enforceLocationLimit(input.businessId);
+      return ctx.prisma.location.create({ data: input });
+    }),
 
   listByBusiness: protectedProcedure
     .use(requireBusinessAccess())

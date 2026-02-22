@@ -1,5 +1,5 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
-import type { CapabilityToggles, AutoLockPolicy, AlertRules } from "@barstock/validators";
+import type { CapabilityToggles, AutoLockPolicy, AlertRules, SubscriptionOverrides } from "@barstock/validators";
 
 export interface BenchmarkingSettings {
   optedIn: boolean;
@@ -13,6 +13,7 @@ export interface BusinessSettingsData {
   lastAlertEvaluation?: string;
   endOfDayTime: string;
   benchmarking: BenchmarkingSettings;
+  subscriptionOverrides?: SubscriptionOverrides;
 }
 
 export const DEFAULT_SETTINGS: BusinessSettingsData = {
@@ -26,6 +27,10 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     proofPhotoRequired: true,
     proofPhotoRetentionDays: 90,
     voiceCommandsEnabled: false,
+    recipesEnabled: true,
+    productGuideEnabled: true,
+    benchmarkingEnabled: false,
+    crossTenantAnalyticsEnabled: false,
   },
   autoLock: {
     enabled: false,
@@ -83,6 +88,7 @@ export class SettingsService {
         ...DEFAULT_SETTINGS.benchmarking,
         ...stored.benchmarking,
       },
+      subscriptionOverrides: stored.subscriptionOverrides,
     };
   }
 
@@ -95,6 +101,7 @@ export class SettingsService {
       lastAlertEvaluation?: string;
       endOfDayTime?: string;
       benchmarking?: Partial<BenchmarkingSettings>;
+      subscriptionOverrides?: SubscriptionOverrides;
     }
   ): Promise<BusinessSettingsData> {
     const current = await this.getSettings(businessId);
@@ -117,6 +124,7 @@ export class SettingsService {
         ...current.benchmarking,
         ...patch.benchmarking,
       },
+      subscriptionOverrides: patch.subscriptionOverrides ?? current.subscriptionOverrides,
     };
 
     await this.prisma.businessSettings.upsert({

@@ -148,6 +148,15 @@ export const PaymentMethod = {
 } as const;
 export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 
+/** Matches PostgreSQL subscription_tier_t */
+export const SubscriptionTier = {
+  starter: "starter",
+  pro: "pro",
+  enterprise: "enterprise",
+} as const;
+export type SubscriptionTier =
+  (typeof SubscriptionTier)[keyof typeof SubscriptionTier];
+
 /** Role hierarchy for RBAC */
 export const ROLE_HIERARCHY: Record<Role, number> = {
   platform_admin: 6,

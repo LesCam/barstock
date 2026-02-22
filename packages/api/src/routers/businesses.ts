@@ -4,6 +4,7 @@ import { businessCreateSchema, businessUpdateSchema, provisionBusinessSchema } f
 import { createStorageAdapter } from "../services/storage";
 import { hashPassword } from "../services/auth.service";
 import { DEFAULT_SETTINGS } from "../services/settings.service";
+import { TIER_DEFAULTS } from "../services/subscription.constants";
 import { z } from "zod";
 
 const DEFAULT_CATEGORIES = [
@@ -39,6 +40,7 @@ export const businessesRouter = router({
         adminPassword,
         adminFirstName,
         adminLastName,
+        subscriptionTier,
         ...businessData
       } = input;
 
@@ -46,7 +48,9 @@ export const businessesRouter = router({
 
       return ctx.prisma.$transaction(async (tx) => {
         // 1. Create business
-        const business = await tx.business.create({ data: businessData });
+        const business = await tx.business.create({
+          data: { ...businessData, subscriptionTier },
+        });
 
         // 2. Create first location
         const location = await tx.location.create({
@@ -78,11 +82,19 @@ export const businessesRouter = router({
           })),
         });
 
-        // 5. Create business settings
+        // 5. Create business settings with tier capabilities
+        const tierCapabilities = TIER_DEFAULTS[subscriptionTier]?.capabilities ?? {};
+        const initialSettings = {
+          ...DEFAULT_SETTINGS,
+          capabilities: {
+            ...DEFAULT_SETTINGS.capabilities,
+            ...tierCapabilities,
+          },
+        };
         await tx.businessSettings.create({
           data: {
             businessId: business.id,
-            settingsJson: DEFAULT_SETTINGS as any,
+            settingsJson: initialSettings as any,
           },
         });
 

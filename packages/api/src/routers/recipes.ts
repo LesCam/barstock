@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole } from "../trpc";
+import { router, protectedProcedure, requireRole, requireCapability } from "../trpc";
 import {
   recipeCreateSchema,
   recipeUpdateSchema,
@@ -15,6 +15,7 @@ import { z } from "zod";
 export const recipesRouter = router({
   create: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("recipesEnabled"))
     .input(recipeCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const svc = new RecipeService(ctx.prisma);
@@ -35,6 +36,7 @@ export const recipesRouter = router({
 
   update: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("recipesEnabled"))
     .input(z.object({ id: z.string().uuid() }).merge(recipeUpdateSchema))
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
@@ -82,6 +84,7 @@ export const recipesRouter = router({
 
   parseCSV: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("recipesEnabled"))
     .input(recipeParseCSVSchema)
     .mutation(async ({ ctx, input }) => {
       const svc = new RecipeImportService(ctx.prisma);
@@ -90,6 +93,7 @@ export const recipesRouter = router({
 
   bulkCreate: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("recipesEnabled"))
     .input(recipeBulkCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const svc = new RecipeImportService(ctx.prisma);
@@ -114,6 +118,7 @@ export const recipesRouter = router({
 
   delete: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("recipesEnabled"))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const svc = new RecipeService(ctx.prisma);

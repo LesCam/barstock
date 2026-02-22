@@ -3,6 +3,7 @@ import {
   protectedProcedure,
   requireRole,
   requireLocationAccess,
+  requireCapability,
 } from "../trpc";
 import {
   guideCategoryCreateSchema,
@@ -27,6 +28,7 @@ export const productGuideRouter = router({
 
   createCategory: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideCategoryCreateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -44,6 +46,7 @@ export const productGuideRouter = router({
 
   updateCategory: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideCategoryUpdateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -53,6 +56,7 @@ export const productGuideRouter = router({
 
   reorderCategories: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideCategoryReorderSchema)
     .mutation(async ({ ctx, input }) => {
@@ -62,6 +66,7 @@ export const productGuideRouter = router({
 
   deleteCategory: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideCategoryDeleteSchema)
     .mutation(async ({ ctx, input }) => {
@@ -73,6 +78,7 @@ export const productGuideRouter = router({
 
   createItem: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideItemCreateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -98,6 +104,7 @@ export const productGuideRouter = router({
 
   updateItem: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideItemUpdateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -107,6 +114,7 @@ export const productGuideRouter = router({
 
   uploadItemImage: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideItemUploadImageSchema)
     .mutation(async ({ ctx, input }) => {
@@ -123,6 +131,7 @@ export const productGuideRouter = router({
 
   removeItemImage: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideItemRemoveImageSchema)
     .mutation(async ({ ctx, input }) => {
@@ -132,6 +141,7 @@ export const productGuideRouter = router({
 
   deleteItem: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideItemDeleteSchema)
     .mutation(async ({ ctx, input }) => {
@@ -141,6 +151,7 @@ export const productGuideRouter = router({
 
   reorderItems: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideItemReorderSchema)
     .mutation(async ({ ctx, input }) => {
@@ -150,6 +161,7 @@ export const productGuideRouter = router({
 
   bulkCreateItems: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
     .use(requireLocationAccess())
     .input(guideItemBulkCreateSchema)
     .mutation(async ({ ctx, input }) => {

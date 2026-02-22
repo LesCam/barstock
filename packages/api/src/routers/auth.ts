@@ -16,6 +16,7 @@ import {
 import { AuditService } from "../services/audit.service";
 import { AlertService } from "../services/alert.service";
 import { SettingsService } from "../services/settings.service";
+import { SubscriptionService } from "../services/subscription.service";
 
 export const authRouter = router({
   login: publicProcedure.input(loginSchema).mutation(async ({ ctx, input }) => {
@@ -198,6 +199,9 @@ export const authRouter = router({
     .use(requireRole("business_admin"))
     .input(userCreateSchema)
     .mutation(async ({ ctx, input }) => {
+      const subService = new SubscriptionService(ctx.prisma);
+      await subService.enforceUserLimit(input.businessId);
+
       if (input.pin) {
         const existing = await ctx.prisma.user.findFirst({
           where: { pin: input.pin, businessId: input.businessId, isActive: true },

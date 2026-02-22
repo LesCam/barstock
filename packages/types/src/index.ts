@@ -10,6 +10,7 @@ export {
   VarianceReason,
   SessionType,
   PaymentMethod,
+  SubscriptionTier,
   ROLE_HIERARCHY,
 } from "./enums";
 
@@ -25,4 +26,5 @@ export type {
   VarianceReason as VarianceReasonType,
   SessionType as SessionTypeType,
   PaymentMethod as PaymentMethodType,
+  SubscriptionTier as SubscriptionTierType,
 } from "./enums";

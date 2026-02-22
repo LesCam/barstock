@@ -10,6 +10,10 @@ export const capabilityTogglesSchema = z.object({
   proofPhotoRequired: z.boolean().default(true),
   proofPhotoRetentionDays: z.number().int().min(0).default(90),
   voiceCommandsEnabled: z.boolean().default(false),
+  recipesEnabled: z.boolean().default(true),
+  productGuideEnabled: z.boolean().default(true),
+  benchmarkingEnabled: z.boolean().default(false),
+  crossTenantAnalyticsEnabled: z.boolean().default(false),
 });
 
 export type CapabilityToggles = z.infer<typeof capabilityTogglesSchema>;
@@ -51,6 +55,13 @@ export const benchmarkingSettingsSchema = z.object({
 
 export type BenchmarkingSettings = z.infer<typeof benchmarkingSettingsSchema>;
 
+export const subscriptionOverridesSchema = z.object({
+  maxLocations: z.number().int().min(1).nullable().optional(),
+  maxUsers: z.number().int().min(1).nullable().optional(),
+});
+
+export type SubscriptionOverrides = z.infer<typeof subscriptionOverridesSchema>;
+
 export const settingsUpdateSchema = z.object({
   businessId: z.string().uuid(),
   capabilities: capabilityTogglesSchema.partial().optional(),
@@ -59,6 +70,7 @@ export const settingsUpdateSchema = z.object({
   lastAlertEvaluation: z.string().datetime().optional(),
   endOfDayTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   benchmarking: benchmarkingSettingsSchema.partial().optional(),
+  subscriptionOverrides: subscriptionOverridesSchema.optional(),
 });
 
 export const settingsGetSchema = z.object({

@@ -34,6 +34,9 @@ export default function NewBusinessPage() {
   const [timezone, setTimezone] = useState("America/Montreal");
   const [closeoutHour, setCloseoutHour] = useState(4);
 
+  // Subscription tier
+  const [subscriptionTier, setSubscriptionTier] = useState<"starter" | "pro" | "enterprise">("starter");
+
   // Admin fields
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
@@ -75,6 +78,7 @@ export default function NewBusinessPage() {
       adminPassword,
       adminFirstName: adminFirstName || undefined,
       adminLastName: adminLastName || undefined,
+      subscriptionTier,
     });
   }
 
@@ -157,6 +161,38 @@ export default function NewBusinessPage() {
               rows={2}
               className={inputClass}
             />
+          </div>
+        </fieldset>
+
+        {/* ── Subscription Tier ── */}
+        <fieldset className="space-y-4">
+          <legend className="text-sm font-semibold uppercase tracking-wider text-[#E9B44C]">
+            Subscription Tier
+          </legend>
+          <div className="grid grid-cols-3 gap-3">
+            {([
+              { value: "starter" as const, label: "Starter", desc: "1 location, 5 users" },
+              { value: "pro" as const, label: "Pro", desc: "5 locations, 25 users" },
+              { value: "enterprise" as const, label: "Enterprise", desc: "Unlimited" },
+            ]).map((tier) => (
+              <button
+                key={tier.value}
+                type="button"
+                onClick={() => setSubscriptionTier(tier.value)}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  subscriptionTier === tier.value
+                    ? "border-[#E9B44C] bg-[#E9B44C]/10"
+                    : "border-white/10 bg-[#0B1623] hover:border-white/20"
+                }`}
+              >
+                <div className="text-sm font-semibold text-[#EAF0FF]">
+                  {tier.label}
+                </div>
+                <div className="mt-0.5 text-xs text-[#EAF0FF]/50">
+                  {tier.desc}
+                </div>
+              </button>
+            ))}
           </div>
         </fieldset>
 

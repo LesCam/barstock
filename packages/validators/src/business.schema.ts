@@ -98,6 +98,8 @@ export const provisionBusinessSchema = businessCreateSchema.extend({
   adminPassword: z.string().min(8),
   adminFirstName: z.string().optional(),
   adminLastName: z.string().optional(),
+  // Subscription tier
+  subscriptionTier: z.enum(["starter", "pro", "enterprise"]).default("starter"),
 });
 
 export type BusinessCreateInput = z.infer<typeof businessCreateSchema>;

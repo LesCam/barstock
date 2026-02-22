@@ -55,6 +55,7 @@ export default function BusinessDetailPage() {
       </div>
 
       <EditBusinessSection business={business} />
+      <SubscriptionSection businessId={id} />
       <LocationsSection locations={business.locations ?? []} />
       <UsersSection
         businessId={id}
@@ -196,6 +197,216 @@ function EditBusinessSection({ business }: { business: any }) {
           </div>
         </div>
       </form>
+    </section>
+  );
+}
+
+// ─── Section 1.5: Subscription ────────────────────────────────
+
+const TIER_COLORS: Record<string, string> = {
+  starter: "bg-gray-500/10 text-gray-400 border-gray-500/30",
+  pro: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+  enterprise: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+};
+
+function SubscriptionSection({ businessId }: { businessId: string }) {
+  const utils = trpc.useUtils();
+  const { data: limits, isLoading } = trpc.subscription.getLimits.useQuery(
+    { businessId },
+    { enabled: !!businessId }
+  );
+
+  const [newTier, setNewTier] = useState<string>("");
+  const [overrideLocations, setOverrideLocations] = useState("");
+  const [overrideUsers, setOverrideUsers] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  const changeTierMutation = trpc.subscription.changeTier.useMutation({
+    onSuccess: () => {
+      utils.subscription.getLimits.invalidate({ businessId });
+      utils.businesses.getById.invalidate({ businessId });
+      utils.businesses.list.invalidate();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    },
+  });
+
+  const setOverridesMutation = trpc.subscription.setOverrides.useMutation({
+    onSuccess: () => {
+      utils.subscription.getLimits.invalidate({ businessId });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    },
+  });
+
+  if (isLoading || !limits) {
+    return (
+      <section className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+        <h2 className="mb-4 text-lg font-semibold text-[#EAF0FF]">
+          Subscription
+        </h2>
+        <p className="text-sm text-[#EAF0FF]/60">Loading...</p>
+      </section>
+    );
+  }
+
+  const tierColor = TIER_COLORS[limits.tier] ?? TIER_COLORS.starter;
+  const locPct =
+    limits.maxLocations !== null
+      ? Math.min(100, (limits.currentLocations / limits.maxLocations) * 100)
+      : 0;
+  const userPct =
+    limits.maxUsers !== null
+      ? Math.min(100, (limits.currentUsers / limits.maxUsers) * 100)
+      : 0;
+
+  return (
+    <section className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <div className="mb-4 flex items-center gap-3">
+        <h2 className="text-lg font-semibold text-[#EAF0FF]">Subscription</h2>
+        <span
+          className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold capitalize ${tierColor}`}
+        >
+          {limits.tierLabel}
+        </span>
+      </div>
+
+      {/* Usage bars */}
+      <div className="mb-6 grid grid-cols-2 gap-6">
+        <div>
+          <div className="mb-1 flex justify-between text-xs text-[#EAF0FF]/60">
+            <span>Locations</span>
+            <span>
+              {limits.currentLocations} / {limits.maxLocations ?? "Unlimited"}
+            </span>
+          </div>
+          {limits.maxLocations !== null ? (
+            <div className="h-2 overflow-hidden rounded-full bg-white/5">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  locPct >= 100 ? "bg-red-500" : locPct >= 80 ? "bg-amber-500" : "bg-[#E9B44C]"
+                }`}
+                style={{ width: `${locPct}%` }}
+              />
+            </div>
+          ) : (
+            <div className="h-2 rounded-full bg-purple-500/20" />
+          )}
+        </div>
+        <div>
+          <div className="mb-1 flex justify-between text-xs text-[#EAF0FF]/60">
+            <span>Users</span>
+            <span>
+              {limits.currentUsers} / {limits.maxUsers ?? "Unlimited"}
+            </span>
+          </div>
+          {limits.maxUsers !== null ? (
+            <div className="h-2 overflow-hidden rounded-full bg-white/5">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  userPct >= 100 ? "bg-red-500" : userPct >= 80 ? "bg-amber-500" : "bg-[#E9B44C]"
+                }`}
+                style={{ width: `${userPct}%` }}
+              />
+            </div>
+          ) : (
+            <div className="h-2 rounded-full bg-purple-500/20" />
+          )}
+        </div>
+      </div>
+
+      {/* Change Tier */}
+      <div className="mb-4">
+        <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">
+          Change Tier
+        </label>
+        <div className="flex items-center gap-3">
+          <select
+            value={newTier || limits.tier}
+            onChange={(e) => setNewTier(e.target.value)}
+            className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+          >
+            <option value="starter">Starter</option>
+            <option value="pro">Pro</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+          <button
+            onClick={() => {
+              if (newTier && newTier !== limits.tier) {
+                changeTierMutation.mutate({
+                  businessId,
+                  tier: newTier as "starter" | "pro" | "enterprise",
+                });
+              }
+            }}
+            disabled={
+              changeTierMutation.isPending || !newTier || newTier === limits.tier
+            }
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+          >
+            {changeTierMutation.isPending ? "Saving..." : "Apply"}
+          </button>
+        </div>
+      </div>
+
+      {/* Limit Overrides */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-[#EAF0FF]/80">
+          Custom Limit Overrides
+        </label>
+        <div className="flex items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs text-[#EAF0FF]/50">
+              Max Locations
+            </label>
+            <input
+              type="number"
+              min={1}
+              placeholder="tier default"
+              value={overrideLocations}
+              onChange={(e) => setOverrideLocations(e.target.value)}
+              className="w-28 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[#EAF0FF]/50">
+              Max Users
+            </label>
+            <input
+              type="number"
+              min={1}
+              placeholder="tier default"
+              value={overrideUsers}
+              onChange={(e) => setOverrideUsers(e.target.value)}
+              className="w-28 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+            />
+          </div>
+          <button
+            onClick={() => {
+              setOverridesMutation.mutate({
+                businessId,
+                maxLocations: overrideLocations
+                  ? parseInt(overrideLocations, 10)
+                  : undefined,
+                maxUsers: overrideUsers
+                  ? parseInt(overrideUsers, 10)
+                  : undefined,
+              });
+            }}
+            disabled={setOverridesMutation.isPending}
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+          >
+            {setOverridesMutation.isPending ? "Saving..." : "Set Overrides"}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-[#EAF0FF]/40">
+          Leave blank to use tier defaults. Set a value to override the tier limit for this business.
+        </p>
+      </div>
+
+      {saved && (
+        <p className="mt-3 text-sm text-green-400">Saved!</p>
+      )}
     </section>
   );
 }

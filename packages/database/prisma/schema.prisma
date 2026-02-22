@@ -173,6 +173,14 @@ enum PaymentMethodT {
   @@map("payment_method_t")
 }
 
+enum SubscriptionTierT {
+  starter
+  pro
+  enterprise
+
+  @@map("subscription_tier_t")
+}
+
 // ─── Multi-tenant ────────────────────────────────────────────
 
 model Business {
@@ -184,8 +192,9 @@ model Business {
   address      String?
   logoUrl      String?  @map("logo_url")
   logoKey      String?  @map("logo_key")
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  active           Boolean            @default(true)
+  subscriptionTier SubscriptionTierT  @default(starter) @map("subscription_tier")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz()
 
   locations        Location[]
   users            User[]
