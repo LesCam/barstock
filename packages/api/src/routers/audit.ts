@@ -1,5 +1,9 @@
 import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
-import { auditLogListSchema } from "@barstock/validators";
+import {
+  auditLogListSchema,
+  userActivityQuerySchema,
+  activitySummaryQuerySchema,
+} from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -80,5 +84,25 @@ export const auditRouter = router({
         orderBy: { name: "asc" },
       });
       return rows;
+    }),
+
+  userActivity: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(userActivityQuerySchema)
+    .query(async ({ ctx, input }) => {
+      const businessId = resolveBusinessId(ctx.user, input.businessId);
+      if (!businessId) throw new TRPCError({ code: "FORBIDDEN" });
+      const service = new AuditService(ctx.prisma);
+      return service.getUserActivity({ ...input, businessId });
+    }),
+
+  activitySummary: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(activitySummaryQuerySchema)
+    .query(async ({ ctx, input }) => {
+      const businessId = resolveBusinessId(ctx.user, input.businessId);
+      if (!businessId) throw new TRPCError({ code: "FORBIDDEN" });
+      const service = new AuditService(ctx.prisma);
+      return service.getActivitySummary(businessId, input.fromDate, input.toDate);
     }),
 });

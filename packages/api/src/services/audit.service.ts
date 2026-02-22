@@ -72,4 +72,111 @@ export class AuditService {
 
     return { items, nextCursor };
   }
+
+  async getUserActivity(params: {
+    businessId: string;
+    userId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit: number;
+  }) {
+    const where: Record<string, unknown> = { businessId: params.businessId };
+    if (params.userId) where.actorUserId = params.userId;
+    if (params.fromDate || params.toDate) {
+      where.createdAt = {
+        ...(params.fromDate ? { gte: params.fromDate } : {}),
+        ...(params.toDate ? { lte: params.toDate } : {}),
+      };
+    }
+
+    const items = await this.prisma.auditLog.findMany({
+      where,
+      take: params.limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        actorUser: {
+          select: { id: true, email: true, firstName: true, lastName: true },
+        },
+      },
+    });
+
+    return items.map((item) => ({
+      id: item.id,
+      userId: item.actorUserId,
+      displayName: item.actorUser
+        ? [item.actorUser.firstName, item.actorUser.lastName]
+            .filter(Boolean)
+            .join(" ") || item.actorUser.email
+        : "System",
+      actionType: item.actionType,
+      objectType: item.objectType,
+      objectId: item.objectId,
+      metadata: item.metadataJson,
+      createdAt: item.createdAt,
+    }));
+  }
+
+  async getActivitySummary(
+    businessId: string,
+    fromDate?: Date,
+    toDate?: Date
+  ) {
+    const conditions: string[] = [
+      `a.business_id = $1`,
+      `a.actor_user_id IS NOT NULL`,
+    ];
+    const values: unknown[] = [businessId];
+    let idx = 2;
+
+    if (fromDate) {
+      conditions.push(`a.created_at >= $${idx}`);
+      values.push(fromDate);
+      idx++;
+    }
+    if (toDate) {
+      conditions.push(`a.created_at <= $${idx}`);
+      values.push(toDate);
+      idx++;
+    }
+
+    const rows = await this.prisma.$queryRawUnsafe<
+      {
+        user_id: string;
+        email: string;
+        first_name: string | null;
+        last_name: string | null;
+        total_actions: bigint;
+        unique_action_types: bigint;
+        last_active_at: Date;
+        top_action: string;
+      }[]
+    >(
+      `SELECT
+         a.actor_user_id AS user_id,
+         u.email,
+         u.first_name,
+         u.last_name,
+         COUNT(*) AS total_actions,
+         COUNT(DISTINCT a.action_type) AS unique_action_types,
+         MAX(a.created_at) AS last_active_at,
+         MODE() WITHIN GROUP (ORDER BY a.action_type) AS top_action
+       FROM audit_logs a
+       JOIN users u ON u.id = a.actor_user_id
+       WHERE ${conditions.join(" AND ")}
+       GROUP BY a.actor_user_id, u.email, u.first_name, u.last_name
+       ORDER BY total_actions DESC`,
+      ...values
+    );
+
+    return rows.map((r) => ({
+      userId: r.user_id,
+      displayName:
+        [r.first_name, r.last_name].filter(Boolean).join(" ") || r.email,
+      email: r.email,
+      totalActions: Number(r.total_actions),
+      uniqueActionTypes: Number(r.unique_action_types),
+      lastActiveAt: r.last_active_at,
+      topAction: r.top_action,
+    }));
+  }
 }

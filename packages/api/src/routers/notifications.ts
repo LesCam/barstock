@@ -1,11 +1,15 @@
-import { router, protectedProcedure } from "../trpc";
+import { router, protectedProcedure, requireRole, isPlatformAdmin } from "../trpc";
 import {
   notificationListSchema,
   notificationMarkReadSchema,
   pushTokenRegisterSchema,
   pushTokenUnregisterSchema,
+  alertHistoryQuerySchema,
+  alertFrequencyQuerySchema,
+  alertTopItemsQuerySchema,
 } from "@barstock/validators";
 import { NotificationService } from "../services/notification.service";
+import { TRPCError } from "@trpc/server";
 
 export const notificationsRouter = router({
   list: protectedProcedure
@@ -74,5 +78,47 @@ export const notificationsRouter = router({
         where: { userId: ctx.user.userId, token: input.token },
       });
       return { ok: true };
+    }),
+
+  alertHistory: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(alertHistoryQuerySchema)
+    .query(async ({ ctx, input }) => {
+      const businessId = isPlatformAdmin(ctx.user)
+        ? input.businessId
+        : ctx.user.businessId;
+      if (!businessId) throw new TRPCError({ code: "FORBIDDEN" });
+      const service = new NotificationService(ctx.prisma);
+      return service.getAlertHistory(
+        businessId,
+        input.ruleType,
+        input.fromDate,
+        input.toDate,
+        input.limit
+      );
+    }),
+
+  alertFrequency: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(alertFrequencyQuerySchema)
+    .query(async ({ ctx, input }) => {
+      const businessId = isPlatformAdmin(ctx.user)
+        ? input.businessId
+        : ctx.user.businessId;
+      if (!businessId) throw new TRPCError({ code: "FORBIDDEN" });
+      const service = new NotificationService(ctx.prisma);
+      return service.getAlertFrequency(businessId, input.weeksBack);
+    }),
+
+  alertTopItems: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(alertTopItemsQuerySchema)
+    .query(async ({ ctx, input }) => {
+      const businessId = isPlatformAdmin(ctx.user)
+        ? input.businessId
+        : ctx.user.businessId;
+      if (!businessId) throw new TRPCError({ code: "FORBIDDEN" });
+      const service = new NotificationService(ctx.prisma);
+      return service.getAlertTopItems(businessId);
     }),
 });

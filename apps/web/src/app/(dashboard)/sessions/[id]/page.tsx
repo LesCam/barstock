@@ -74,6 +74,7 @@ const VARIANCE_LABELS: Record<VarianceReason, string> = {
   line_cleaning: "Line Cleaning",
   transfer: "Transfer",
   unknown: "Unknown",
+  session_expired: "Session Expired",
 };
 
 export default function SessionDetailPage({

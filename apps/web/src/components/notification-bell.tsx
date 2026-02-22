@@ -10,9 +10,28 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  const utils = trpc.useUtils();
+
   const { data: unreadCount } = trpc.notifications.unreadCount.useQuery(undefined, {
-    refetchInterval: 30_000,
+    refetchInterval: 60_000, // Fallback polling (SSE handles real-time)
   });
+
+  // SSE for real-time notifications
+  useEffect(() => {
+    const es = new EventSource("/api/notifications/stream");
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "notification") {
+          utils.notifications.unreadCount.invalidate();
+          if (open) utils.notifications.list.invalidate();
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+    return () => es.close();
+  }, [utils, open]);
 
   const { data, isLoading } = trpc.notifications.list.useQuery(
     { limit: 20 },
@@ -21,7 +40,6 @@ export function NotificationBell() {
 
   const markReadMutation = trpc.notifications.markRead.useMutation();
   const markAllReadMutation = trpc.notifications.markAllRead.useMutation();
-  const utils = trpc.useUtils();
 
   // Click outside to close
   useEffect(() => {

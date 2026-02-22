@@ -11,7 +11,7 @@ interface Notification {
   linkUrl: string | null;
   isRead: boolean;
   createdAt: Date;
-  metadataJson?: Record<string, unknown> | null;
+  metadataJson?: unknown;
 }
 
 const RULE_LABELS: Record<string, string> = {
