@@ -158,7 +158,6 @@ export function VoiceButton() {
           case "transfer": {
             const params: Record<string, string> = {};
             if (result.itemId) params.itemId = result.itemId;
-            if (result.itemName) params.itemName = result.itemName;
             if (result.quantity != null)
               params.quantity = String(result.quantity);
             if (result.fromSubAreaId) params.fromSubAreaId = result.fromSubAreaId;
@@ -190,7 +189,6 @@ export function VoiceButton() {
           case "receive": {
             const params: Record<string, string> = {};
             if (result.itemId) params.itemId = result.itemId;
-            if (result.itemName) params.itemName = result.itemName;
             if (result.quantity != null)
               params.quantity = String(result.quantity);
 

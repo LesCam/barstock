@@ -17,6 +17,7 @@ import { useNetwork } from "@/lib/network-context";
 import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
+import { usePrefillItem } from "@/lib/use-prefill-item";
 
 interface BarArea {
   id: string;
@@ -48,11 +49,11 @@ export default function TransferScreen() {
   const { isOnline } = useNetwork();
   const params = useLocalSearchParams<{
     itemId?: string;
-    itemName?: string;
     quantity?: string;
     fromSubAreaId?: string;
     toSubAreaId?: string;
   }>();
+  const prefillItem = usePrefillItem(params.itemId);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [fromSubAreaId, setFromSubAreaId] = useState<string | null>(params.fromSubAreaId ?? null);
@@ -62,7 +63,6 @@ export default function TransferScreen() {
   const [loggedTransfers, setLoggedTransfers] = useState<LoggedTransfer[]>([]);
   const [showReview, setShowReview] = useState(false);
   const sessionCreating = useRef(false);
-  const prefillApplied = useRef(false);
 
   const utils = trpc.useUtils();
 
@@ -140,23 +140,9 @@ export default function TransferScreen() {
   }, [areas]);
 
   // Pre-fill item from voice command route params
-  const { data: prefillItem } = trpc.inventory.getById.useQuery(
-    { id: params.itemId! },
-    { enabled: !!params.itemId && !prefillApplied.current },
-  );
-
   useEffect(() => {
-    if (prefillItem && !prefillApplied.current) {
-      prefillApplied.current = true;
-      setSelectedItem({
-        id: prefillItem.id,
-        name: prefillItem.name,
-        barcode: prefillItem.barcode ?? null,
-        packSize: prefillItem.packSize,
-        containerSize: prefillItem.containerSize,
-        baseUom: prefillItem.baseUom,
-        category: prefillItem.category ?? null,
-      });
+    if (prefillItem && !selectedItem) {
+      setSelectedItem(prefillItem);
     }
   }, [prefillItem]);
 

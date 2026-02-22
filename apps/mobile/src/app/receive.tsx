@@ -17,6 +17,7 @@ import { useNetwork } from "@/lib/network-context";
 import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
+import { usePrefillItem } from "@/lib/use-prefill-item";
 
 interface SelectedItem {
   id: string;
@@ -39,9 +40,9 @@ export default function ReceiveStockScreen() {
   const businessId = user?.businessId;
   const params = useLocalSearchParams<{
     itemId?: string;
-    itemName?: string;
     quantity?: string;
   }>();
+  const prefillItem = usePrefillItem(params.itemId);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
@@ -49,7 +50,6 @@ export default function ReceiveStockScreen() {
   const [countType, setCountType] = useState<"individual" | "pack">("individual");
   const [quantity, setQuantity] = useState(params.quantity ?? "");
   const [notes, setNotes] = useState("");
-  const prefillApplied = useRef(false);
   const [vendorSearch, setVendorSearch] = useState("");
   const [showVendorPicker, setShowVendorPicker] = useState(false);
   const [showNewVendor, setShowNewVendor] = useState(false);
@@ -115,23 +115,9 @@ export default function ReceiveStockScreen() {
   }, [selectedLocationId]);
 
   // Pre-fill item from voice command route params
-  const { data: prefillItem } = trpc.inventory.getById.useQuery(
-    { id: params.itemId! },
-    { enabled: !!params.itemId && !prefillApplied.current },
-  );
-
   useEffect(() => {
-    if (prefillItem && !prefillApplied.current) {
-      prefillApplied.current = true;
-      setSelectedItem({
-        id: prefillItem.id,
-        name: prefillItem.name,
-        barcode: prefillItem.barcode ?? null,
-        packSize: prefillItem.packSize,
-        containerSize: prefillItem.containerSize,
-        baseUom: prefillItem.baseUom,
-        category: prefillItem.category ?? null,
-      });
+    if (prefillItem && !selectedItem) {
+      setSelectedItem(prefillItem);
     }
   }, [prefillItem]);
 
