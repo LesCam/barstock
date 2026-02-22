@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import { useRouter } from "next/navigation";
 import { SessionType } from "@barstock/types";
 
 export default function SessionsPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
   const router = useRouter();
   const utils = trpc.useUtils();
 

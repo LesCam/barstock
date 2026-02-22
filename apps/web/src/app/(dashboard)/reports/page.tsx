@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend,
@@ -101,7 +102,7 @@ function toEndOfDay(dateStr: string, eodTime: string): Date {
 export default function ReportsPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
   const businessId = user?.businessId as string | undefined;
 
   const { data: eodTime } = trpc.settings.endOfDayTime.useQuery(

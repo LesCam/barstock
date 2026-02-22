@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 
 interface SidebarProps {
   user: {
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/recipes", label: "Recipes", icon: "🍹" },
   { href: "/draft", label: "Draft / Kegs", icon: "🍺" },
   { href: "/par", label: "Par Levels", icon: "\uD83C\uDFAF" },
+  { href: "/orders", label: "Orders", icon: "\uD83D\uDED2" },
   { href: "/sessions", label: "Sessions", icon: "📋" },
   { href: "/reports", label: "Reports", icon: "📈" },
   { href: "/audit", label: "Audit Log", icon: "🔍" },
@@ -45,6 +47,11 @@ function formatRole(role: string): string {
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
+  const { selectedLocationId, setSelectedLocationId, locations, isAdmin } = useLocation();
+
+  const selectedLocationName = selectedLocationId
+    ? locations.find((l) => l.id === selectedLocationId)?.name ?? "Unknown"
+    : "All Locations";
 
   return (
     <aside className="flex w-64 flex-col border-r border-white/10 bg-[var(--navy-bg)]">
@@ -57,6 +64,31 @@ export function Sidebar({ user }: SidebarProps) {
           </span>
         )}
       </div>
+
+      {locations.length > 1 && (
+        <div className="border-b border-white/10 px-4 py-3">
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#EAF0FF]/50">
+            Location
+          </label>
+          <select
+            value={selectedLocationId ?? "all"}
+            onChange={(e) =>
+              setSelectedLocationId(e.target.value === "all" ? null : e.target.value)
+            }
+            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C]/50 focus:outline-none"
+          >
+            {isAdmin && <option value="all">All Locations</option>}
+            {locations.map((loc) => (
+              <option key={loc.id} value={loc.id}>
+                {loc.name}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-[#EAF0FF]/40">
+            {selectedLocationId ? selectedLocationName : "Portfolio View"}
+          </p>
+        </div>
+      )}
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {navItems.map((item) => {

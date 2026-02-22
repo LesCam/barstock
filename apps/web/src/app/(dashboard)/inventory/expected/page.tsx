@@ -3,6 +3,7 @@
 import { useState, useMemo, Fragment } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 
 type SortKey =
   | "itemName"
@@ -80,7 +81,7 @@ function SourceBreakdown({
 export default function ExpectedOnHandPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
 
   const [filter, setFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");

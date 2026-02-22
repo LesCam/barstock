@@ -2,12 +2,13 @@
 
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 
 export default function POSPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
 
   const { data: connections } = trpc.pos.listConnections.useQuery(
     { locationId: locationId! },

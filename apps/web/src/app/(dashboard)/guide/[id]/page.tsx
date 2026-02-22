@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 
 export default function GuideItemDetailPage() {
@@ -11,7 +12,7 @@ export default function GuideItemDetailPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const id = params.id as string;

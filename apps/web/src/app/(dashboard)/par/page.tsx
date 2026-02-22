@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 
 const ADMIN_ROLES = ["platform_admin", "business_admin", "manager"];
@@ -32,7 +33,7 @@ function formatCurrency(value: number | null): string {
 export default function ParLevelsPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0] as string | undefined;
+  const { selectedLocationId: locationId } = useLocation();
   const canEdit = ADMIN_ROLES.includes(user?.highestRole ?? "");
 
   const [view, setView] = useState<"manage" | "order">("manage");
@@ -264,6 +265,7 @@ export default function ParLevelsPage() {
           filterVendor={filterVendor}
           setFilterVendor={setFilterVendor}
           vendors={vendors}
+          locationId={locationId}
         />
       )}
     </div>
@@ -752,9 +754,39 @@ function OrderView({
   filterVendor,
   setFilterVendor,
   vendors,
+  locationId,
 }: any) {
   const [excludedItems, setExcludedItems] = useState<Set<string>>(new Set());
   const [editedQtys, setEditedQtys] = useState<Map<string, number>>(new Map());
+  const [createdVendorIds, setCreatedVendorIds] = useState<Set<string>>(new Set());
+  const [notesMap, setNotesMap] = useState<Map<string, string>>(new Map());
+  const [showNotes, setShowNotes] = useState<Set<string>>(new Set());
+  const utils = trpc.useUtils();
+
+  const createPOMutation = trpc.purchaseOrders.create.useMutation({
+    onSuccess: (_data, variables) => {
+      setCreatedVendorIds((prev) => new Set(prev).add(variables.vendorId));
+      utils.parLevels.suggestions.invalidate();
+    },
+  });
+
+  function handleCreatePO(vendor: any) {
+    if (!locationId) return;
+    const lines = vendor.items
+      .filter((i: any) => !excludedItems.has(i.inventoryItemId))
+      .map((i: any) => ({
+        inventoryItemId: i.inventoryItemId,
+        orderedQty: getOrderQty(i.inventoryItemId, i.orderQty),
+        orderedUom: i.parUom ?? "unit",
+      }));
+    if (lines.length === 0) return;
+    createPOMutation.mutate({
+      locationId,
+      vendorId: vendor.vendorId,
+      notes: notesMap.get(vendor.vendorId) || undefined,
+      lines,
+    });
+  }
 
   function toggleExclude(itemId: string) {
     const next = new Set(excludedItems);
@@ -894,6 +926,10 @@ function OrderView({
         </button>
       </div>
 
+      {createPOMutation.error && (
+        <p className="mb-4 text-sm text-red-400">{createPOMutation.error.message}</p>
+      )}
+
       <div className="space-y-6">
         {suggestions.map((vendor: any) => (
           <div key={vendor.vendorId} className="rounded-lg border border-white/10 bg-[#16283F]">
@@ -923,8 +959,49 @@ function OrderView({
                 >
                   Export CSV
                 </button>
+                <button
+                  onClick={() => {
+                    const next = new Set(showNotes);
+                    if (next.has(vendor.vendorId)) next.delete(vendor.vendorId);
+                    else next.add(vendor.vendorId);
+                    setShowNotes(next);
+                  }}
+                  className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-[#EAF0FF]/70 hover:bg-white/5"
+                >
+                  Notes
+                </button>
+                {createdVendorIds.has(vendor.vendorId) ? (
+                  <span className="flex items-center gap-1.5 rounded-md bg-green-500/10 border border-green-500/30 px-3 py-1.5 text-xs font-medium text-green-400">
+                    PO Created <a href="/orders" className="underline hover:text-green-300">View</a>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleCreatePO(vendor)}
+                    disabled={createPOMutation.isPending}
+                    className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+                  >
+                    {createPOMutation.isPending ? "Creating..." : "Create PO"}
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* Notes field (collapsible) */}
+            {showNotes.has(vendor.vendorId) && (
+              <div className="border-b border-white/10 px-4 py-2">
+                <input
+                  type="text"
+                  value={notesMap.get(vendor.vendorId) ?? ""}
+                  onChange={(e) => {
+                    const next = new Map(notesMap);
+                    next.set(vendor.vendorId, e.target.value);
+                    setNotesMap(next);
+                  }}
+                  placeholder="Add notes for this order..."
+                  className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-1.5 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+                />
+              </div>
+            )}
 
             {/* Vendor items table */}
             <table className="w-full text-left text-sm">

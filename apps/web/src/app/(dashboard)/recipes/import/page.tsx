@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { UOM } from "@barstock/types";
@@ -52,7 +53,7 @@ Old Fashioned,Cocktails,Simple Syrup,0.25,oz`;
 export default function RecipeImportPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
 
   const [step, setStep] = useState<WizardStep>(1);
   const [fileName, setFileName] = useState("");

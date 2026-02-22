@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 
 const ADMIN_ROLES = ["platform_admin", "business_admin", "manager"];
 
@@ -16,7 +17,7 @@ const STATUS_BADGE: Record<string, string> = {
 export default function DraftPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
   const canEdit = ADMIN_ROLES.includes(user?.highestRole ?? "");
 
   const utils = trpc.useUtils();

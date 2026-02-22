@@ -3,6 +3,7 @@
 import { use, useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { UOM } from "@barstock/types";
 
@@ -140,7 +141,7 @@ export default function InventoryDetailPage({
   const { id } = use(params);
   const { data: authSession } = useSession();
   const user = authSession?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
   const utils = trpc.useUtils();
 
   // --- Data fetching ---

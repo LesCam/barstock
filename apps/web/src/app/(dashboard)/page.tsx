@@ -7,6 +7,8 @@ import Link from "next/link";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
+import { useLocation } from "@/components/location-context";
+import { PortfolioOverview } from "@/components/portfolio-overview";
 
 const TIMEZONES = [
   "America/Montreal",
@@ -133,7 +135,7 @@ export default function DashboardPage() {
   const businessId = user?.businessId;
   const highestRole = user?.highestRole;
   const canCreate = highestRole === "platform_admin" || highestRole === "business_admin";
-  const isAdmin = canCreate;
+  const { selectedLocationId: locationId, setSelectedLocationId, isAdmin } = useLocation();
 
   const [showForm, setShowForm] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -165,7 +167,6 @@ export default function DashboardPage() {
   });
 
   // --- KPI data queries (only when user has a location) ---
-  const locationId = user?.locationIds?.[0] as string | undefined;
   const sevenDaysAgo = useMemo(() => new Date(Date.now() - 7 * 86400000), []);
   const now = useMemo(() => new Date(), []);
 
@@ -284,6 +285,14 @@ export default function DashboardPage() {
       </div>
 
       {isAdmin && <AlertBanner />}
+
+      {/* ── Portfolio Overview (admin with no location selected) ── */}
+      {!locationId && isAdmin && businessId && (
+        <PortfolioOverview
+          businessId={businessId}
+          onSelectLocation={(id) => setSelectedLocationId(id)}
+        />
+      )}
 
       {/* ── KPI Summary (visible when user has a location) ── */}
       {locationId && (

@@ -1,5 +1,5 @@
-import { router, protectedProcedure } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema } from "@barstock/validators";
+import { router, protectedProcedure, requireRole } from "../trpc";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 
@@ -149,5 +149,13 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new ReportService(ctx.prisma);
       return svc.getPourCost(input.locationId, input.fromDate, input.toDate);
+    }),
+
+  portfolioRollup: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(portfolioRollupQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getPortfolioRollup(input.businessId, input.fromDate, input.toDate);
     }),
 });

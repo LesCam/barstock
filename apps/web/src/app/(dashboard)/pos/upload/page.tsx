@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 
@@ -102,7 +103,7 @@ type WizardStep = 1 | 2 | 3 | 4;
 export default function UploadCSVPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
 
   // Step state
   const [step, setStep] = useState<WizardStep>(1);

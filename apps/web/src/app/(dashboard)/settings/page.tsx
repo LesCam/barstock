@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 
@@ -29,7 +30,7 @@ export default function SettingsPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const businessId = user?.businessId as string | undefined;
-  const locationId = user?.locationIds?.[0] as string | undefined;
+  const { selectedLocationId: locationId } = useLocation();
   const canEdit = ADMIN_ROLES.includes(user?.highestRole ?? "");
 
   if (!businessId) {

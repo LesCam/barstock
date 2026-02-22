@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { MappingMode } from "@barstock/types";
@@ -62,7 +63,7 @@ type FilterMode = "all" | "matched" | "review";
 export default function BulkMapPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
 
   const [step, setStep] = useState<WizardStep>(1);
   const [inputMode, setInputMode] = useState<"paste" | "csv">("paste");

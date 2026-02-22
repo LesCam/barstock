@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { UOM } from "@barstock/types";
 
@@ -29,7 +30,7 @@ const emptyIngredient = (): IngredientRow => ({
 export default function RecipesPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
   const utils = trpc.useUtils();
 
   const { data: recipes, isLoading } = trpc.recipes.listWithCosts.useQuery(

@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import {
   DndContext,
@@ -173,7 +174,7 @@ function SortableItemCard({ item }: { item: any }) {
 export default function ProductGuidePage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [showCategoryForm, setShowCategoryForm] = useState(false);

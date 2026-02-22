@@ -6,6 +6,8 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
 import { Prisma } from "@prisma/client";
 import { InventoryService } from "./inventory.service";
+import { VarianceService } from "./variance.service";
+import { ParLevelService } from "./par-level.service";
 
 export interface ExpectedOnHandItem {
   inventoryItemId: string;
@@ -1223,6 +1225,97 @@ export class ReportService {
       blendedPourCostPct,
       totalRevenue,
       totalIngredientCost: totalCost,
+    };
+  }
+
+  async getPortfolioRollup(businessId: string, fromDate: Date, toDate: Date) {
+    const locations = await this.prisma.location.findMany({
+      where: { businessId, active: true },
+    });
+
+    const varianceService = new VarianceService(this.prisma);
+    const parLevelService = new ParLevelService(this.prisma);
+
+    const locationData = await Promise.all(
+      locations.map(async (loc) => {
+        const [onHand, cogs, variance, patterns, pourCost, coverageRows, parItems] =
+          await Promise.all([
+            this.getOnHandReport(loc.id),
+            this.getCOGSReport(loc.id, fromDate, toDate),
+            varianceService.calculateVarianceReport(loc.id, fromDate, toDate),
+            varianceService.analyzeVariancePatterns(loc.id, 10),
+            this.getPourCost(loc.id, fromDate, toDate),
+            this.prisma.$queryRaw<
+              Array<{ total_items: number; mapped_items: number }>
+            >`
+              SELECT
+                COUNT(DISTINCT sl.pos_item_id)::int as total_items,
+                COUNT(DISTINCT CASE WHEN pim.id IS NOT NULL THEN sl.pos_item_id END)::int as mapped_items
+              FROM sales_lines sl
+              LEFT JOIN pos_item_mappings pim
+                ON pim.location_id = sl.location_id
+                AND pim.source_system = sl.source_system
+                AND pim.pos_item_id = sl.pos_item_id
+                AND pim.active = true
+              WHERE sl.location_id = ${loc.id}::uuid
+                AND sl.sold_at >= NOW() - INTERVAL '7 days'
+            `,
+            parLevelService.list(loc.id),
+          ]);
+
+        const coverageRow = coverageRows[0] ?? { total_items: 0, mapped_items: 0 };
+        const mappingCoveragePct =
+          coverageRow.total_items > 0
+            ? Math.round((coverageRow.mapped_items / coverageRow.total_items) * 100)
+            : 100;
+
+        const shrinkageSuspects = patterns.filter((p) => p.isShrinkageSuspect).length;
+        const reorderCount = parItems.filter((i) => i.needsReorder).length;
+
+        return {
+          locationId: loc.id,
+          locationName: loc.name,
+          onHandValue: onHand.totalValue,
+          onHandItems: onHand.totalItems,
+          cogs7d: cogs.cogs,
+          varianceImpact: variance.totalVarianceValue,
+          shrinkageSuspects,
+          pourCostPct: pourCost.blendedPourCostPct,
+          mappingCoveragePct,
+          reorderCount,
+        };
+      })
+    );
+
+    const totalOnHandValue = locationData.reduce((s, l) => s + l.onHandValue, 0);
+    const totalCogs = locationData.reduce((s, l) => s + l.cogs7d, 0);
+    const totalVarianceImpact = locationData.reduce((s, l) => s + l.varianceImpact, 0);
+    const totalShrinkageSuspects = locationData.reduce((s, l) => s + l.shrinkageSuspects, 0);
+    const totalReorderCount = locationData.reduce((s, l) => s + l.reorderCount, 0);
+
+    const pourCostValues = locationData.filter((l) => l.pourCostPct != null);
+    const avgPourCostPct =
+      pourCostValues.length > 0
+        ? pourCostValues.reduce((s, l) => s + (l.pourCostPct ?? 0), 0) / pourCostValues.length
+        : null;
+
+    const avgMappingCoveragePct =
+      locationData.length > 0
+        ? locationData.reduce((s, l) => s + l.mappingCoveragePct, 0) / locationData.length
+        : 100;
+
+    return {
+      locations: locationData,
+      totals: {
+        totalLocations: locations.length,
+        totalOnHandValue,
+        totalCogs,
+        totalVarianceImpact,
+        totalShrinkageSuspects,
+        avgPourCostPct,
+        avgMappingCoveragePct,
+        totalReorderCount,
+      },
     };
   }
 

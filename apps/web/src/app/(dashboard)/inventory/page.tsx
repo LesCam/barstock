@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import { UOM } from "@barstock/types";
 
 type SortKey = "name" | "category";
@@ -21,7 +22,7 @@ export default function InventoryPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
   const businessId = user?.businessId;
   const utils = trpc.useUtils();
 

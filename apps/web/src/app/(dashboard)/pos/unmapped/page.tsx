@@ -2,6 +2,7 @@
 
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { useLocation } from "@/components/location-context";
 import { useState, useMemo } from "react";
 import { MappingMode } from "@barstock/types";
 
@@ -14,7 +15,7 @@ const MODE_OPTIONS = [
 export default function UnmappedPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
-  const locationId = user?.locationIds?.[0];
+  const { selectedLocationId: locationId } = useLocation();
 
   const [search, setSearch] = useState("");
   const [mappingItemKey, setMappingItemKey] = useState<string | null>(null);

@@ -120,3 +120,9 @@ export const pourCostQuerySchema = z.object({
   fromDate: z.coerce.date(),
   toDate: z.coerce.date(),
 });
+
+export const portfolioRollupQuerySchema = z.object({
+  businessId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+});
