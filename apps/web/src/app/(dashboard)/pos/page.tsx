@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
@@ -9,6 +10,11 @@ export default function POSPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const { selectedLocationId: locationId } = useLocation();
+
+  const [depletionResult, setDepletionResult] = useState<{
+    processed: number; created: number; unmapped: number; skipped: number;
+  } | null>(null);
+  const [depletionError, setDepletionError] = useState<string | null>(null);
 
   const { data: connections } = trpc.pos.listConnections.useQuery(
     { locationId: locationId! },
@@ -20,11 +26,32 @@ export default function POSPage() {
     { enabled: !!locationId }
   );
 
+  const runDepletionMut = trpc.pos.runDepletion.useMutation({
+    onSuccess: (data) => {
+      setDepletionResult(data);
+      setDepletionError(null);
+    },
+    onError: (err) => {
+      setDepletionError(err.message);
+      setDepletionResult(null);
+    },
+  });
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-[#EAF0FF]">POS Connections</h1>
         <div className="flex gap-3">
+          <button
+            onClick={() => {
+              if (!locationId) return;
+              runDepletionMut.mutate({ locationId });
+            }}
+            disabled={runDepletionMut.isPending || !locationId}
+            className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {runDepletionMut.isPending ? "Running..." : "Run Depletion Now"}
+          </button>
           <Link
             href="/pos/bulk-map"
             className="rounded-md border border-[#E9B44C] px-4 py-2 text-sm font-medium text-[#E9B44C] hover:bg-[#E9B44C]/10"
@@ -45,6 +72,26 @@ export default function POSPage() {
           </Link>
         </div>
       </div>
+
+      {depletionResult && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
+          <span>
+            Depletion complete: {depletionResult.processed} processed, {depletionResult.created} created, {depletionResult.unmapped} unmapped, {depletionResult.skipped} skipped
+          </span>
+          <button onClick={() => setDepletionResult(null)} className="ml-4 text-green-400/60 hover:text-green-400">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {depletionError && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          <span>Depletion error: {depletionError}</span>
+          <button onClick={() => setDepletionError(null)} className="ml-4 text-red-400/60 hover:text-red-400">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-semibold">Connections</h2>

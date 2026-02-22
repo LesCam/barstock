@@ -48,11 +48,51 @@ export default function InventoryTab() {
   const { sparklineMap } = useUsageSparklines(selectedLocationId ?? null);
   const { parMap } = useParStatus(selectedLocationId ?? null);
 
+  const { data: posCoverage } = trpc.pos.coverageStats.useQuery(
+    { locationId: selectedLocationId! },
+    { enabled: !!selectedLocationId, staleTime: 5 * 60 * 1000 }
+  );
+
+  const coverageColor =
+    (posCoverage?.mappedPercent ?? 100) >= 90
+      ? "#4CAF50"
+      : (posCoverage?.mappedPercent ?? 100) >= 70
+        ? "#FBBF24"
+        : "#EF4444";
+
   return (
     <View style={styles.container}>
       <FlatList
         data={items}
         keyExtractor={(i) => i.id}
+        ListHeaderComponent={
+          posCoverage && posCoverage.totalItems > 0 ? (
+            <View style={styles.coverageCard}>
+              <View style={styles.coverageHeader}>
+                <Text style={styles.coverageTitle}>POS Coverage</Text>
+                <Text style={[styles.coveragePercent, { color: coverageColor }]}>
+                  {posCoverage.mappedPercent}%
+                </Text>
+              </View>
+              <View style={styles.coverageBar}>
+                <View
+                  style={[
+                    styles.coverageBarFill,
+                    { width: `${posCoverage.mappedPercent}%`, backgroundColor: coverageColor },
+                  ]}
+                />
+              </View>
+              <Text style={styles.coverageDetail}>
+                {posCoverage.mappedItems} of {posCoverage.totalItems} POS items mapped
+              </Text>
+              {posCoverage.totalItems - posCoverage.mappedItems > 0 && (
+                <Text style={styles.coverageWarning}>
+                  {posCoverage.totalItems - posCoverage.mappedItems} unmapped items — map on web to enable depletion tracking
+                </Text>
+              )}
+            </View>
+          ) : null
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}
@@ -108,4 +148,30 @@ const styles = StyleSheet.create({
   parDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
   stock: { fontSize: 14, fontWeight: "600", color: "#4FC3F7" },
   empty: { textAlign: "center", color: "#5A6A7A", marginTop: 40, fontSize: 14 },
+  coverageCard: {
+    backgroundColor: "#16283F",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+    margin: 12,
+    padding: 14,
+  },
+  coverageHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  coverageTitle: { fontSize: 13, fontWeight: "600", color: "#EAF0FF" },
+  coveragePercent: { fontSize: 22, fontWeight: "700" },
+  coverageBar: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#1E3550",
+    marginBottom: 8,
+    overflow: "hidden",
+  },
+  coverageBarFill: { height: 6, borderRadius: 3 },
+  coverageDetail: { fontSize: 12, color: "#EAF0FF", opacity: 0.7 },
+  coverageWarning: { fontSize: 11, color: "#FBBF24", marginTop: 6 },
 });

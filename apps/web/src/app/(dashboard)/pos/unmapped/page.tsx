@@ -5,13 +5,21 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { useState, useMemo } from "react";
 import { HelpLink } from "@/components/help-link";
-import { MappingMode } from "@barstock/types";
+import { MappingMode, UOM } from "@barstock/types";
 
 const MODE_OPTIONS = [
   { value: MappingMode.packaged_unit, label: "Packaged Unit" },
   { value: MappingMode.draft_by_tap, label: "Draft by Tap" },
   { value: MappingMode.recipe, label: "Recipe" },
 ] as const;
+
+const UOM_LABELS: Record<string, string> = {
+  oz: "oz",
+  ml: "mL",
+  units: "units",
+  grams: "g",
+  L: "L",
+};
 
 type SuggestionOverride = {
   accepted: boolean;
@@ -41,6 +49,14 @@ export default function UnmappedPage() {
   const [recipeId, setRecipeId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  // Inline recipe creation state
+  const [showCreateRecipe, setShowCreateRecipe] = useState(false);
+  const [newRecipeName, setNewRecipeName] = useState("");
+  const [newRecipeIngredients, setNewRecipeIngredients] = useState<
+    { inventoryItemId: string; quantity: string; uom: string }[]
+  >([{ inventoryItemId: "", quantity: "", uom: UOM.oz }]);
+  const [newRecipeIngSearch, setNewRecipeIngSearch] = useState<Record<number, string>>({});
+
   // Bulk suggestion state
   const [suggestions, setSuggestions] = useState<any[] | null>(null);
   const [overrides, setOverrides] = useState<Record<string, SuggestionOverride>>({});
@@ -55,7 +71,7 @@ export default function UnmappedPage() {
 
   const { data: inventoryItems } = trpc.inventory.list.useQuery(
     { locationId: locationId! },
-    { enabled: !!locationId && !!mappingItemKey }
+    { enabled: !!locationId && (!!mappingItemKey || showCreateRecipe) }
   );
 
   const isDraft = mode === MappingMode.draft_by_tap;
@@ -81,6 +97,18 @@ export default function UnmappedPage() {
       utils.pos.unmapped.invalidate();
       setMappingItemKey(null);
       resetForm();
+    },
+    onError: (err) => setError(err.message),
+  });
+
+  const createRecipeMut = trpc.recipes.create.useMutation({
+    onSuccess: (data) => {
+      setRecipeId(data.id);
+      setShowCreateRecipe(false);
+      setNewRecipeName("");
+      setNewRecipeIngredients([{ inventoryItemId: "", quantity: "", uom: UOM.oz }]);
+      setNewRecipeIngSearch({});
+      utils.recipes.list.invalidate();
     },
     onError: (err) => setError(err.message),
   });
@@ -126,6 +154,10 @@ export default function UnmappedPage() {
     setRecipeId("");
     setInventorySearch("");
     setError(null);
+    setShowCreateRecipe(false);
+    setNewRecipeName("");
+    setNewRecipeIngredients([{ inventoryItemId: "", quantity: "", uom: UOM.oz }]);
+    setNewRecipeIngSearch({});
   }
 
   function openMapping(key: string) {
@@ -419,12 +451,20 @@ export default function UnmappedPage() {
                                 </select>
                               </div>
 
-                              {isRecipe && (
+                              {isRecipe && !showCreateRecipe && (
                                 <div className="min-w-[240px] flex-1">
                                   <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Recipe</label>
                                   <select
                                     value={recipeId}
-                                    onChange={(e) => setRecipeId(e.target.value)}
+                                    onChange={(e) => {
+                                      if (e.target.value === "__create_new__") {
+                                        setShowCreateRecipe(true);
+                                        setRecipeId("");
+                                        setNewRecipeName(item.pos_item_name);
+                                      } else {
+                                        setRecipeId(e.target.value);
+                                      }
+                                    }}
                                     className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none focus:ring-1 focus:ring-[#E9B44C]"
                                   >
                                     <option value="">Select recipe...</option>
@@ -433,6 +473,7 @@ export default function UnmappedPage() {
                                         {r.name} ({r.ingredients.length} ingredients)
                                       </option>
                                     ))}
+                                    <option value="__create_new__">+ Create New Recipe</option>
                                   </select>
                                   {recipeId && (() => {
                                     const selected = recipes?.find((r) => r.id === recipeId);
@@ -450,6 +491,137 @@ export default function UnmappedPage() {
                                       </div>
                                     );
                                   })()}
+                                </div>
+                              )}
+
+                              {isRecipe && showCreateRecipe && (
+                                <div className="w-full rounded-md border border-[#E9B44C]/30 bg-[#0B1623]/60 p-3">
+                                  <p className="mb-2 text-xs font-semibold text-[#E9B44C]">Create New Recipe</p>
+                                  <div className="mb-2">
+                                    <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Recipe Name</label>
+                                    <input
+                                      type="text"
+                                      value={newRecipeName}
+                                      onChange={(e) => setNewRecipeName(e.target.value)}
+                                      className="w-full max-w-sm rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
+                                    />
+                                  </div>
+                                  <label className="mb-1 block text-xs font-medium text-[#EAF0FF]/70">Ingredients</label>
+                                  <div className="space-y-2">
+                                    {newRecipeIngredients.map((row, idx) => (
+                                      <div key={idx} className="flex items-end gap-2">
+                                        <div className="relative min-w-[200px] flex-1">
+                                          <input
+                                            type="text"
+                                            placeholder={row.inventoryItemId ? (inventoryItems?.find((i) => i.id === row.inventoryItemId)?.name ?? "Selected") : "Search inventory..."}
+                                            value={newRecipeIngSearch[idx] ?? ""}
+                                            onChange={(e) => setNewRecipeIngSearch((prev) => ({ ...prev, [idx]: e.target.value }))}
+                                            onFocus={() => {
+                                              if (newRecipeIngSearch[idx] === undefined) setNewRecipeIngSearch((prev) => ({ ...prev, [idx]: "" }));
+                                            }}
+                                            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
+                                          />
+                                          {row.inventoryItemId && newRecipeIngSearch[idx] === undefined && (
+                                            <div className="mt-0.5 text-xs text-[#E9B44C]">{inventoryItems?.find((i) => i.id === row.inventoryItemId)?.name}</div>
+                                          )}
+                                          {newRecipeIngSearch[idx] !== undefined && (
+                                            <div className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-white/10 bg-[#0B1623] shadow-lg">
+                                              {(() => {
+                                                const q = (newRecipeIngSearch[idx] ?? "").toLowerCase();
+                                                const filtered = inventoryItems?.filter((i) => !q || i.name.toLowerCase().includes(q)).slice(0, 20) ?? [];
+                                                if (filtered.length === 0) return <div className="px-2 py-1.5 text-xs text-[#EAF0FF]/40">No items found</div>;
+                                                return filtered.map((itm) => (
+                                                  <button
+                                                    key={itm.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setNewRecipeIngredients((prev) => prev.map((r, i) => i === idx ? { ...r, inventoryItemId: itm.id } : r));
+                                                      setNewRecipeIngSearch((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+                                                    }}
+                                                    className="w-full px-2 py-1.5 text-left text-sm text-[#EAF0FF] hover:bg-[#16283F]"
+                                                  >
+                                                    {itm.name}
+                                                  </button>
+                                                ));
+                                              })()}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="w-24">
+                                          <input
+                                            type="number"
+                                            step="0.25"
+                                            min="0"
+                                            placeholder="Qty"
+                                            value={row.quantity}
+                                            onChange={(e) => setNewRecipeIngredients((prev) => prev.map((r, i) => i === idx ? { ...r, quantity: e.target.value } : r))}
+                                            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
+                                          />
+                                        </div>
+                                        <div className="w-20">
+                                          <select
+                                            value={row.uom}
+                                            onChange={(e) => setNewRecipeIngredients((prev) => prev.map((r, i) => i === idx ? { ...r, uom: e.target.value } : r))}
+                                            className="w-full rounded-md border border-white/10 bg-[#0B1623] px-2 py-1.5 text-sm text-[#EAF0FF] focus:border-[#E9B44C] focus:outline-none"
+                                          >
+                                            {Object.entries(UOM_LABELS).map(([val, label]) => (
+                                              <option key={val} value={val}>{label}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                        {newRecipeIngredients.length > 1 && (
+                                          <button
+                                            onClick={() => setNewRecipeIngredients((prev) => prev.filter((_, i) => i !== idx))}
+                                            className="rounded px-2 py-1.5 text-sm text-red-400/60 hover:text-red-400"
+                                          >
+                                            X
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <button
+                                    onClick={() => setNewRecipeIngredients((prev) => [...prev, { inventoryItemId: "", quantity: "", uom: UOM.oz }])}
+                                    className="mt-2 text-xs text-[#E9B44C] hover:underline"
+                                  >
+                                    + Add Ingredient
+                                  </button>
+                                  <div className="mt-3 flex gap-2">
+                                    <button
+                                      onClick={() => {
+                                        if (!locationId || !newRecipeName.trim()) return;
+                                        const valid = newRecipeIngredients.filter((i) => i.inventoryItemId && Number(i.quantity) > 0);
+                                        if (valid.length === 0) { setError("Add at least one ingredient"); return; }
+                                        createRecipeMut.mutate({
+                                          locationId,
+                                          name: newRecipeName.trim(),
+                                          ingredients: valid.map((i) => ({
+                                            inventoryItemId: i.inventoryItemId,
+                                            quantity: Number(i.quantity),
+                                            uom: i.uom as any,
+                                          })),
+                                        });
+                                      }}
+                                      disabled={createRecipeMut.isPending}
+                                      className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-xs font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+                                    >
+                                      {createRecipeMut.isPending ? "Creating..." : "Create & Select"}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setShowCreateRecipe(false);
+                                        setNewRecipeName("");
+                                        setNewRecipeIngredients([{ inventoryItemId: "", quantity: "", uom: UOM.oz }]);
+                                        setNewRecipeIngSearch({});
+                                      }}
+                                      className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-[#EAF0FF]/70 hover:bg-white/5"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                  {createRecipeMut.isError && (
+                                    <p className="mt-2 text-xs text-red-500">{createRecipeMut.error.message}</p>
+                                  )}
                                 </div>
                               )}
 

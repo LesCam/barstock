@@ -2,6 +2,8 @@ import { router, protectedProcedure, requireRole } from "../trpc";
 import { posConnectionCreateSchema, posConnectionUpdateSchema, salesLineCreateSchema, csvImportSchema, csvImportHistorySchema } from "@barstock/validators";
 import { z } from "zod";
 import { CSVImportService } from "../services/csv-import.service";
+import { DepletionEngine } from "../services/depletion.service";
+import { AuditService } from "../services/audit.service";
 
 export const posRouter = router({
   createConnection: protectedProcedure
@@ -148,5 +150,34 @@ export const posRouter = router({
     .query(async ({ ctx, input }) => {
       const service = new CSVImportService(ctx.prisma);
       return service.listImports(input.locationId, input.limit);
+    }),
+
+  /** Manually trigger depletion engine for recent sales */
+  runDepletion: protectedProcedure
+    .use(requireRole("manager"))
+    .input(
+      z.object({
+        locationId: z.string().uuid(),
+        hoursBack: z.number().int().min(1).max(168).default(24),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const engine = new DepletionEngine(ctx.prisma);
+      const toTs = new Date();
+      const fromTs = new Date(toTs.getTime() - input.hoursBack * 60 * 60 * 1000);
+
+      const stats = await engine.processSalesLines(input.locationId, fromTs, toTs);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "depletion.manual_run",
+        objectType: "location",
+        objectId: input.locationId,
+        metadata: { hoursBack: input.hoursBack, ...stats },
+      });
+
+      return stats;
     }),
 });
