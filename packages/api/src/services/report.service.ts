@@ -1319,6 +1319,474 @@ export class ReportService {
     };
   }
 
+  async getForecastDashboard(locationId: string) {
+    // 1. Query daily usage per item for last 56 days
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        inventory_item_id: string;
+        item_name: string;
+        category_name: string | null;
+        usage_date: Date;
+        daily_qty: number | null;
+        unit_cost: number | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        ce.inventory_item_id,
+        i.name AS item_name,
+        c.name AS category_name,
+        date_trunc('day', ce.event_ts)::date AS usage_date,
+        SUM(ABS(ce.quantity_delta)) AS daily_qty,
+        AVG(COALESCE(ph.unit_cost, 0))::float AS unit_cost
+      FROM consumption_events ce
+      JOIN inventory_items i ON i.id = ce.inventory_item_id
+      LEFT JOIN inventory_item_categories c ON c.id = i.category_id
+      LEFT JOIN LATERAL (
+        SELECT ph2.unit_cost
+        FROM price_history ph2
+        WHERE ph2.inventory_item_id = ce.inventory_item_id
+          AND ph2.effective_from_ts <= ce.event_ts
+          AND (ph2.effective_to_ts IS NULL OR ph2.effective_to_ts > ce.event_ts)
+        ORDER BY ph2.effective_from_ts DESC
+        LIMIT 1
+      ) ph ON true
+      WHERE ce.location_id = ${locationId}::uuid
+        AND ce.event_type IN ('pos_sale', 'tap_flow')
+        AND ce.event_ts >= NOW() - INTERVAL '56 days'
+        AND ce.reversal_of_event_id IS NULL
+      GROUP BY ce.inventory_item_id, i.name, c.name, usage_date
+      ORDER BY ce.inventory_item_id, usage_date
+    `);
+
+    // Group by item
+    const itemDataMap = new Map<
+      string,
+      {
+        itemName: string;
+        categoryName: string | null;
+        unitCost: number;
+        dailyUsage: Map<string, number>; // date string -> qty
+      }
+    >();
+
+    for (const row of rows) {
+      const id = row.inventory_item_id;
+      if (!itemDataMap.has(id)) {
+        itemDataMap.set(id, {
+          itemName: row.item_name,
+          categoryName: row.category_name,
+          unitCost: Number(row.unit_cost ?? 0),
+          dailyUsage: new Map(),
+        });
+      }
+      const dateStr = new Date(row.usage_date).toISOString().split("T")[0]!;
+      itemDataMap.get(id)!.dailyUsage.set(dateStr, Number(row.daily_qty ?? 0));
+    }
+
+    // Get expected on-hand + par levels
+    const [expectedItems, parLevelService] = await Promise.all([
+      this.getExpectedOnHandDashboard(locationId),
+      Promise.resolve(new ParLevelService(this.prisma)),
+    ]);
+    const parItems = await parLevelService.list(locationId);
+
+    const expectedMap = new Map(expectedItems.map((e) => [e.inventoryItemId, e]));
+    const parMap = new Map(parItems.map((p) => [p.inventoryItemId, p]));
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekWeights = [0.30, 0.25, 0.20, 0.15, 0.04, 0.03, 0.02, 0.01];
+
+    type ForecastItem = {
+      inventoryItemId: string;
+      itemName: string;
+      categoryName: string | null;
+      currentLevel: number | null;
+      forecastDailyUsage: number;
+      daysToStockout: number | null;
+      reorderByDate: string | null;
+      needsReorderSoon: boolean;
+      projectedCogs7d: number;
+      parLevel: number | null;
+      minLevel: number | null;
+      leadTimeDays: number | null;
+    };
+
+    const forecastItems: ForecastItem[] = [];
+    let totalProjectedCogs = 0;
+    let itemsNeedingReorder = 0;
+
+    for (const [itemId, data] of itemDataMap) {
+      // 2. Weekly totals (8 weeks)
+      const weeklyTotals: number[] = [];
+      for (let w = 0; w < 8; w++) {
+        let weekTotal = 0;
+        for (let d = 0; d < 7; d++) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - (w * 7 + d + 1));
+          const dateStr = date.toISOString().split("T")[0]!;
+          weekTotal += data.dailyUsage.get(dateStr) ?? 0;
+        }
+        weeklyTotals.push(weekTotal);
+      }
+
+      // Check if we have enough data
+      const weeksWithData = weeklyTotals.filter((w) => w > 0).length;
+
+      let forecastDailyUsage: number;
+      if (weeksWithData < 2) {
+        // Simple average over all days with data
+        const totalQty = Array.from(data.dailyUsage.values()).reduce((s, v) => s + v, 0);
+        const daysWithData = data.dailyUsage.size;
+        forecastDailyUsage = daysWithData > 0 ? totalQty / daysWithData : 0;
+      } else {
+        // Exponential-weighted weekly average
+        let weightedSum = 0;
+        let weightSum = 0;
+        for (let w = 0; w < weeklyTotals.length; w++) {
+          const weight = weekWeights[w] ?? 0.01;
+          weightedSum += weeklyTotals[w]! * weight;
+          weightSum += weight;
+        }
+        forecastDailyUsage = weightSum > 0 ? weightedSum / weightSum / 7 : 0;
+      }
+
+      // 3. Day-of-week ratios
+      const dowTotals = [0, 0, 0, 0, 0, 0, 0]; // Sun-Sat
+      const dowCounts = [0, 0, 0, 0, 0, 0, 0];
+      for (const [dateStr, qty] of data.dailyUsage) {
+        const dow = new Date(dateStr + "T12:00:00").getDay();
+        dowTotals[dow] += qty;
+        dowCounts[dow] += 1;
+      }
+      const overallAvg = data.dailyUsage.size > 0
+        ? Array.from(data.dailyUsage.values()).reduce((s, v) => s + v, 0) / data.dailyUsage.size
+        : 1;
+      const dowRatios = dowTotals.map((total, i) => {
+        const avg = dowCounts[i]! > 0 ? total! / dowCounts[i]! : overallAvg;
+        return overallAvg > 0 ? avg / overallAvg : 1;
+      });
+
+      // 4. Forecast next 30 days with DOW seasonality
+      const forecast30d: number[] = [];
+      for (let d = 0; d < 30; d++) {
+        const futureDate = new Date(today);
+        futureDate.setDate(futureDate.getDate() + d + 1);
+        const dow = futureDate.getDay();
+        forecast30d.push(forecastDailyUsage * (dowRatios[dow] ?? 1));
+      }
+
+      // 5. Reorder logic
+      const expected = expectedMap.get(itemId);
+      const par = parMap.get(itemId);
+      const currentLevel = expected?.predictedLevel ?? null;
+      const parLevel = par?.parLevel ?? null;
+      const minLevel = par?.minLevel ?? null;
+      const leadTimeDays = par?.leadTimeDays ?? null;
+
+      let daysToStockout: number | null = null;
+      let reorderByDate: string | null = null;
+      let needsReorderSoon = false;
+
+      if (currentLevel != null && forecastDailyUsage > 0) {
+        // Walk forecast days until level hits 0
+        let level = currentLevel;
+        for (let d = 0; d < 30; d++) {
+          level -= forecast30d[d]!;
+          if (level <= 0) {
+            daysToStockout = d + 1;
+            break;
+          }
+        }
+        if (daysToStockout == null && level > 0) {
+          daysToStockout = forecastDailyUsage > 0
+            ? Math.floor(currentLevel / forecastDailyUsage)
+            : null;
+        }
+
+        // Reorder date logic
+        if (minLevel != null) {
+          let runningLevel = currentLevel;
+          for (let d = 0; d < 30; d++) {
+            runningLevel -= forecast30d[d]!;
+            if (runningLevel <= minLevel) {
+              const reorderDate = new Date(today);
+              reorderDate.setDate(reorderDate.getDate() + d + 1 - (leadTimeDays ?? 0));
+              reorderByDate = reorderDate.toISOString().split("T")[0]!;
+              break;
+            }
+          }
+
+          // Check if needs reorder soon (level after lead time < minLevel)
+          const lt = leadTimeDays ?? 0;
+          let levelAfterLead = currentLevel;
+          for (let d = 0; d < Math.min(lt, 30); d++) {
+            levelAfterLead -= forecast30d[d]!;
+          }
+          if (levelAfterLead < minLevel) {
+            needsReorderSoon = true;
+          }
+        }
+      } else if (currentLevel != null && currentLevel <= 0) {
+        daysToStockout = 0;
+        needsReorderSoon = minLevel != null;
+      }
+
+      // 6. Cost projection
+      const projectedCogs7d = forecastDailyUsage * 7 * data.unitCost;
+      totalProjectedCogs += projectedCogs7d;
+      if (needsReorderSoon) itemsNeedingReorder++;
+
+      forecastItems.push({
+        inventoryItemId: itemId,
+        itemName: data.itemName,
+        categoryName: data.categoryName,
+        currentLevel,
+        forecastDailyUsage,
+        daysToStockout,
+        reorderByDate,
+        needsReorderSoon,
+        projectedCogs7d,
+        parLevel,
+        minLevel,
+        leadTimeDays,
+      });
+    }
+
+    // Sort: needs reorder first, then by days to stockout
+    forecastItems.sort((a, b) => {
+      if (a.needsReorderSoon !== b.needsReorderSoon) return a.needsReorderSoon ? -1 : 1;
+      const aDays = a.daysToStockout ?? 999;
+      const bDays = b.daysToStockout ?? 999;
+      return aDays - bDays;
+    });
+
+    return {
+      items: forecastItems,
+      summary: {
+        totalItems: forecastItems.length,
+        itemsNeedingReorderSoon: itemsNeedingReorder,
+        projectedCogs7d: totalProjectedCogs,
+        avgForecastAccuracy: null as number | null,
+      },
+    };
+  }
+
+  async getForecastAccuracy(locationId: string, sessionCount = 5) {
+    // Fetch last N closed sessions
+    const sessions = await this.prisma.inventorySession.findMany({
+      where: { locationId, endedTs: { not: null } },
+      orderBy: { startedTs: "desc" },
+      take: sessionCount,
+      include: {
+        lines: {
+          include: {
+            inventoryItem: { select: { id: true, name: true } },
+          },
+          take: 20,
+        },
+      },
+    });
+
+    if (sessions.length === 0) {
+      return { avgAccuracy: null, sessions: [] };
+    }
+
+    const sessionResults: Array<{
+      sessionId: string;
+      startedTs: string;
+      items: Array<{
+        itemId: string;
+        itemName: string;
+        forecasted: number;
+        actual: number;
+        delta: number;
+        accuracyPct: number;
+      }>;
+      avgAccuracy: number;
+    }> = [];
+
+    for (const session of sessions) {
+      const itemResults: Array<{
+        itemId: string;
+        itemName: string;
+        forecasted: number;
+        actual: number;
+        delta: number;
+        accuracyPct: number;
+      }> = [];
+
+      for (const line of session.lines) {
+        const actual =
+          line.countUnits != null
+            ? Number(line.countUnits)
+            : line.grossWeightGrams != null
+              ? Number(line.grossWeightGrams)
+              : null;
+
+        if (actual == null || actual === 0) continue;
+
+        // Compute what we would have predicted: sum all consumption_events before session start
+        const result = await this.prisma.consumptionEvent.aggregate({
+          where: {
+            inventoryItemId: line.inventoryItemId,
+            locationId,
+            eventTs: { lt: session.startedTs },
+          },
+          _sum: { quantityDelta: true },
+        });
+
+        const forecasted = Number(result._sum.quantityDelta ?? 0);
+        const delta = forecasted - actual;
+        const accuracyPct = Math.max(
+          0,
+          100 - (Math.abs(delta) / Math.abs(actual)) * 100
+        );
+
+        itemResults.push({
+          itemId: line.inventoryItemId,
+          itemName: line.inventoryItem.name,
+          forecasted,
+          actual,
+          delta,
+          accuracyPct,
+        });
+      }
+
+      const avgAccuracy =
+        itemResults.length > 0
+          ? itemResults.reduce((s, i) => s + i.accuracyPct, 0) / itemResults.length
+          : 0;
+
+      sessionResults.push({
+        sessionId: session.id,
+        startedTs: session.startedTs.toISOString(),
+        items: itemResults,
+        avgAccuracy,
+      });
+    }
+
+    const overallAvg =
+      sessionResults.length > 0
+        ? sessionResults.reduce((s, sr) => s + sr.avgAccuracy, 0) / sessionResults.length
+        : null;
+
+    return { avgAccuracy: overallAvg, sessions: sessionResults };
+  }
+
+  async getForecastItemDetail(locationId: string, itemId: string) {
+    // 56 days historical + 30 days forecast
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        usage_date: Date;
+        daily_qty: number | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        date_trunc('day', ce.event_ts)::date AS usage_date,
+        SUM(ABS(ce.quantity_delta)) AS daily_qty
+      FROM consumption_events ce
+      WHERE ce.location_id = ${locationId}::uuid
+        AND ce.inventory_item_id = ${itemId}::uuid
+        AND ce.event_type IN ('pos_sale', 'tap_flow')
+        AND ce.event_ts >= NOW() - INTERVAL '56 days'
+        AND ce.reversal_of_event_id IS NULL
+      GROUP BY usage_date
+      ORDER BY usage_date
+    `);
+
+    const dailyUsageMap = new Map<string, number>();
+    for (const row of rows) {
+      const dateStr = new Date(row.usage_date).toISOString().split("T")[0]!;
+      dailyUsageMap.set(dateStr, Number(row.daily_qty ?? 0));
+    }
+
+    // Build complete historical array (56 days)
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const historical: Array<{ date: string; qty: number }> = [];
+    for (let d = 55; d >= 0; d--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - d);
+      const dateStr = date.toISOString().split("T")[0]!;
+      historical.push({ date: dateStr, qty: dailyUsageMap.get(dateStr) ?? 0 });
+    }
+
+    // EWMA forecast
+    const weekWeights = [0.30, 0.25, 0.20, 0.15, 0.04, 0.03, 0.02, 0.01];
+    const weeklyTotals: number[] = [];
+    for (let w = 0; w < 8; w++) {
+      let weekTotal = 0;
+      for (let d = 0; d < 7; d++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - (w * 7 + d + 1));
+        const dateStr = date.toISOString().split("T")[0]!;
+        weekTotal += dailyUsageMap.get(dateStr) ?? 0;
+      }
+      weeklyTotals.push(weekTotal);
+    }
+
+    const weeksWithData = weeklyTotals.filter((w) => w > 0).length;
+    let forecastDailyUsage: number;
+    if (weeksWithData < 2) {
+      const totalQty = Array.from(dailyUsageMap.values()).reduce((s, v) => s + v, 0);
+      forecastDailyUsage = dailyUsageMap.size > 0 ? totalQty / dailyUsageMap.size : 0;
+    } else {
+      let weightedSum = 0;
+      let weightSum = 0;
+      for (let w = 0; w < weeklyTotals.length; w++) {
+        const weight = weekWeights[w] ?? 0.01;
+        weightedSum += weeklyTotals[w]! * weight;
+        weightSum += weight;
+      }
+      forecastDailyUsage = weightSum > 0 ? weightedSum / weightSum / 7 : 0;
+    }
+
+    // Day-of-week pattern
+    const dowTotals = [0, 0, 0, 0, 0, 0, 0];
+    const dowCounts = [0, 0, 0, 0, 0, 0, 0];
+    for (const [dateStr, qty] of dailyUsageMap) {
+      const dow = new Date(dateStr + "T12:00:00").getDay();
+      dowTotals[dow] += qty;
+      dowCounts[dow] += 1;
+    }
+    const overallAvg = dailyUsageMap.size > 0
+      ? Array.from(dailyUsageMap.values()).reduce((s, v) => s + v, 0) / dailyUsageMap.size
+      : 1;
+    const dowPattern = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, i) => {
+      const avg = dowCounts[i]! > 0 ? dowTotals[i]! / dowCounts[i]! : 0;
+      const ratio = overallAvg > 0 ? avg / overallAvg : 1;
+      return { day: label, avgUsage: avg, ratio };
+    });
+
+    // 30-day forecast
+    const forecast: Array<{ date: string; qty: number }> = [];
+    for (let d = 0; d < 30; d++) {
+      const futureDate = new Date(today);
+      futureDate.setDate(futureDate.getDate() + d + 1);
+      const dow = futureDate.getDay();
+      const ratio = dowPattern[dow]?.ratio ?? 1;
+      forecast.push({
+        date: futureDate.toISOString().split("T")[0]!,
+        qty: forecastDailyUsage * ratio,
+      });
+    }
+
+    // Get par levels for reference lines
+    const parLevelService = new ParLevelService(this.prisma);
+    const parItems = await parLevelService.list(locationId);
+    const par = parItems.find((p) => p.inventoryItemId === itemId);
+
+    return {
+      historical,
+      forecast,
+      dowPattern,
+      forecastDailyUsage,
+      parLevel: par?.parLevel ?? null,
+      minLevel: par?.minLevel ?? null,
+    };
+  }
+
   async getBusinessRollup(businessId: string, asOfDate?: Date) {
     const locations = await this.prisma.location.findMany({
       where: { businessId },

@@ -24,6 +24,7 @@ const navItems = [
   { href: "/recipes", label: "Recipes", icon: "🍹" },
   { href: "/draft", label: "Draft / Kegs", icon: "🍺" },
   { href: "/par", label: "Par Levels", icon: "\uD83C\uDFAF" },
+  { href: "/forecast", label: "Forecast", icon: "\uD83D\uDD2E" },
   { href: "/orders", label: "Orders", icon: "\uD83D\uDED2" },
   { href: "/sessions", label: "Sessions", icon: "📋" },
   { href: "/reports", label: "Reports", icon: "📈" },
@@ -37,6 +38,7 @@ const navItems = [
 
 const adminNavItems = [
   { href: "/staff", label: "Staff", icon: "👥" },
+  { href: "/staff/scorecards", label: "Scorecards", icon: "\uD83C\uDFC6" },
 ];
 
 function formatRole(role: string): string {

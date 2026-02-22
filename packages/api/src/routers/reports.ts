@@ -1,5 +1,5 @@
 import { router, protectedProcedure, requireRole } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 
@@ -157,5 +157,40 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new ReportService(ctx.prisma);
       return svc.getPortfolioRollup(input.businessId, input.fromDate, input.toDate);
+    }),
+
+  staffVarianceReasonBreakdown: protectedProcedure
+    .input(staffVarianceReasonBreakdownQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new VarianceService(ctx.prisma);
+      return svc.getStaffVarianceReasonBreakdown(input.locationId, input.userId, input.fromDate, input.toDate);
+    }),
+
+  staffItemVariance: protectedProcedure
+    .input(staffItemVarianceQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new VarianceService(ctx.prisma);
+      return svc.getStaffItemVariance(input.locationId, input.userId, input.fromDate, input.toDate, input.limit);
+    }),
+
+  forecastDashboard: protectedProcedure
+    .input(forecastDashboardQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getForecastDashboard(input.locationId);
+    }),
+
+  forecastAccuracy: protectedProcedure
+    .input(forecastAccuracyQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getForecastAccuracy(input.locationId, input.sessionCount);
+    }),
+
+  forecastItemDetail: protectedProcedure
+    .input(forecastItemDetailQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getForecastItemDetail(input.locationId, input.itemId);
     }),
 });

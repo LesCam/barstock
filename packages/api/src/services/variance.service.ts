@@ -75,6 +75,30 @@ export interface VarianceReport {
   totalVarianceValue: number;
 }
 
+export interface StaffVarianceReasonBreakdown {
+  userId: string;
+  displayName: string;
+  reasons: Array<{
+    reason: string | null;
+    label: string;
+    count: number;
+    totalUnits: number;
+  }>;
+}
+
+export interface StaffItemVariance {
+  userId: string;
+  displayName: string;
+  items: Array<{
+    inventoryItemId: string;
+    itemName: string;
+    categoryName: string | null;
+    sessionsWithVariance: number;
+    totalVarianceMagnitude: number;
+    avgVariance: number;
+  }>;
+}
+
 export interface StaffAccountabilityScore {
   userId: string;
   email: string;
@@ -769,5 +793,139 @@ export class VarianceService {
         avgSessionDurationMinutes: Math.round(avgSessionDurationMinutes),
       },
     };
+  }
+
+  async getStaffVarianceReasonBreakdown(
+    locationId: string,
+    userId?: string,
+    fromDate?: Date,
+    toDate?: Date
+  ): Promise<StaffVarianceReasonBreakdown[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        user_id: string;
+        display_name: string;
+        variance_reason: string | null;
+        count: bigint;
+        total_units: number | null;
+      }>
+    >`
+      SELECT
+        u.id AS user_id,
+        COALESCE(TRIM(CONCAT(u.first_name, ' ', u.last_name)), u.email) AS display_name,
+        ce.variance_reason,
+        COUNT(*) AS count,
+        SUM(ABS(ce.quantity_delta)) AS total_units
+      FROM consumption_events ce
+      JOIN inventory_sessions s ON s.location_id = ce.location_id
+        AND ce.event_ts BETWEEN s.started_ts AND s.ended_ts
+      JOIN inventory_session_lines sl ON sl.session_id = s.id
+        AND sl.inventory_item_id = ce.inventory_item_id
+      JOIN users u ON u.id = sl.counted_by
+      WHERE ce.location_id = ${locationId}::uuid
+        AND ce.event_type = 'inventory_count_adjustment'
+        AND ce.reversal_of_event_id IS NULL
+        AND sl.counted_by IS NOT NULL
+        AND (${userId ?? null}::uuid IS NULL OR sl.counted_by = ${userId ?? null}::uuid)
+        AND (${fromDate ?? null}::timestamptz IS NULL OR ce.event_ts >= ${fromDate ?? null}::timestamptz)
+        AND (${toDate ?? null}::timestamptz IS NULL OR ce.event_ts < ${toDate ?? null}::timestamptz)
+      GROUP BY u.id, u.first_name, u.last_name, u.email, ce.variance_reason
+      ORDER BY u.id, count DESC
+    `;
+
+    const staffMap = new Map<string, StaffVarianceReasonBreakdown>();
+
+    for (const row of rows) {
+      if (!staffMap.has(row.user_id)) {
+        staffMap.set(row.user_id, {
+          userId: row.user_id,
+          displayName: row.display_name,
+          reasons: [],
+        });
+      }
+      staffMap.get(row.user_id)!.reasons.push({
+        reason: row.variance_reason,
+        label: row.variance_reason
+          ? VarianceService.REASON_LABELS[row.variance_reason] ?? row.variance_reason
+          : "No Reason",
+        count: Number(row.count),
+        totalUnits: Number(row.total_units ?? 0),
+      });
+    }
+
+    return Array.from(staffMap.values());
+  }
+
+  async getStaffItemVariance(
+    locationId: string,
+    userId?: string,
+    fromDate?: Date,
+    toDate?: Date,
+    limit = 10
+  ): Promise<StaffItemVariance[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        user_id: string;
+        display_name: string;
+        inventory_item_id: string;
+        item_name: string;
+        category_name: string | null;
+        sessions_with_variance: bigint;
+        total_variance_magnitude: number | null;
+        avg_variance: number | null;
+      }>
+    >`
+      SELECT
+        u.id AS user_id,
+        COALESCE(TRIM(CONCAT(u.first_name, ' ', u.last_name)), u.email) AS display_name,
+        ce.inventory_item_id,
+        i.name AS item_name,
+        c.name AS category_name,
+        COUNT(DISTINCT s.id) AS sessions_with_variance,
+        SUM(ABS(ce.quantity_delta)) AS total_variance_magnitude,
+        AVG(ce.quantity_delta) AS avg_variance
+      FROM consumption_events ce
+      JOIN inventory_sessions s ON s.location_id = ce.location_id
+        AND ce.event_ts BETWEEN s.started_ts AND s.ended_ts
+      JOIN inventory_session_lines sl ON sl.session_id = s.id
+        AND sl.inventory_item_id = ce.inventory_item_id
+      JOIN users u ON u.id = sl.counted_by
+      JOIN inventory_items i ON i.id = ce.inventory_item_id
+      LEFT JOIN inventory_item_categories c ON c.id = i.category_id
+      WHERE ce.location_id = ${locationId}::uuid
+        AND ce.event_type = 'inventory_count_adjustment'
+        AND ce.reversal_of_event_id IS NULL
+        AND sl.counted_by IS NOT NULL
+        AND (${userId ?? null}::uuid IS NULL OR sl.counted_by = ${userId ?? null}::uuid)
+        AND (${fromDate ?? null}::timestamptz IS NULL OR ce.event_ts >= ${fromDate ?? null}::timestamptz)
+        AND (${toDate ?? null}::timestamptz IS NULL OR ce.event_ts < ${toDate ?? null}::timestamptz)
+      GROUP BY u.id, u.first_name, u.last_name, u.email, ce.inventory_item_id, i.name, c.name
+      ORDER BY u.id, total_variance_magnitude DESC
+    `;
+
+    const staffMap = new Map<string, StaffItemVariance>();
+
+    for (const row of rows) {
+      if (!staffMap.has(row.user_id)) {
+        staffMap.set(row.user_id, {
+          userId: row.user_id,
+          displayName: row.display_name,
+          items: [],
+        });
+      }
+      const staff = staffMap.get(row.user_id)!;
+      if (staff.items.length < limit) {
+        staff.items.push({
+          inventoryItemId: row.inventory_item_id,
+          itemName: row.item_name,
+          categoryName: row.category_name,
+          sessionsWithVariance: Number(row.sessions_with_variance),
+          totalVarianceMagnitude: Number(row.total_variance_magnitude ?? 0),
+          avgVariance: Number(row.avg_variance ?? 0),
+        });
+      }
+    }
+
+    return Array.from(staffMap.values());
   }
 }

@@ -126,3 +126,32 @@ export const portfolioRollupQuerySchema = z.object({
   fromDate: z.coerce.date(),
   toDate: z.coerce.date(),
 });
+
+export const staffVarianceReasonBreakdownQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  userId: z.string().uuid().optional(),
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+});
+
+export const staffItemVarianceQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  userId: z.string().uuid().optional(),
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+  limit: z.number().int().min(1).max(50).default(10),
+});
+
+export const forecastDashboardQuerySchema = z.object({
+  locationId: z.string().uuid(),
+});
+
+export const forecastAccuracyQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  sessionCount: z.number().int().min(1).max(20).default(5),
+});
+
+export const forecastItemDetailQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  itemId: z.string().uuid(),
+});
