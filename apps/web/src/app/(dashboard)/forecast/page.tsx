@@ -180,6 +180,7 @@ export default function ForecastPage() {
                 Days to Stockout{sortArrow("daysToStockout")}
               </th>
               <th className="px-4 py-3">Reorder By</th>
+              <th className="px-4 py-3">COGS (7d)</th>
               <th className="cursor-pointer px-4 py-3" onClick={() => toggleSort("needsReorderSoon")}>
                 Status{sortArrow("needsReorderSoon")}
               </th>
@@ -216,12 +217,13 @@ export default function ForecastPage() {
                   {item.daysToStockout != null ? `${item.daysToStockout}d` : "—"}
                 </td>
                 <td className="px-4 py-3">{item.reorderByDate ?? "—"}</td>
+                <td className="px-4 py-3">${item.projectedCogs7d.toFixed(2)}</td>
                 <td className="px-4 py-3">{statusBadge(item)}</td>
               </tr>
             ))}
             {sortedItems.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-[#EAF0FF]/40">
+                <td colSpan={8} className="px-4 py-8 text-center text-[#EAF0FF]/40">
                   {filter ? "No items match your search." : "No usage data available for forecasting."}
                 </td>
               </tr>
@@ -325,9 +327,34 @@ export default function ForecastPage() {
       {/* Forecast Accuracy Section */}
       {accuracy && accuracy.sessions.length > 0 && (
         <div>
-          <h2 className="mb-3 text-lg font-semibold">Forecast Accuracy (Last {accuracy.sessions.length} Sessions)</h2>
-          <div className="mb-2 text-sm text-[#EAF0FF]/60">
-            Overall avg accuracy: <span className="font-medium text-[#EAF0FF]">{accuracy.avgAccuracy != null ? `${accuracy.avgAccuracy.toFixed(1)}%` : "—"}</span>
+          <div className="mb-4 flex items-center gap-4">
+            <h2 className="text-lg font-semibold">Forecast Accuracy (Last {accuracy.sessions.length} Sessions)</h2>
+            <span className={`rounded-full px-3 py-1 text-sm font-bold ${
+              (accuracy.avgAccuracy ?? 0) >= 90
+                ? "bg-green-500/20 text-green-400"
+                : (accuracy.avgAccuracy ?? 0) >= 70
+                  ? "bg-yellow-500/20 text-yellow-400"
+                  : "bg-red-500/20 text-red-400"
+            }`}>
+              {accuracy.avgAccuracy != null ? `${accuracy.avgAccuracy.toFixed(1)}%` : "—"}
+            </span>
+          </div>
+          {/* Per-session accuracy bar chart */}
+          <div className="mb-4 rounded-lg border border-white/10 bg-[#16283F] p-4">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={accuracy.sessions.map((s) => ({
+                label: new Date(s.startedTs).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                accuracy: Number(s.avgAccuracy.toFixed(1)),
+              }))}>
+                <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 11 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={{ fill: "#EAF0FF99", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                  formatter={(value) => [`${value}%`, "Accuracy"]}
+                />
+                <Bar dataKey="accuracy" fill="#E9B44C" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
           <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
             <table className="w-full text-left text-sm">

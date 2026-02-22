@@ -1,28 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "@/components/location-context";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
 } from "recharts";
+
+const PIE_COLORS = ["#E9B44C", "#4CAF50", "#2196F3", "#FF5722", "#9C27B0", "#00BCD4", "#FF9800", "#607D8B"];
 
 export default function StaffScorecardsPage() {
   const { selectedLocationId } = useLocation();
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
+  // Date range picker state
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const fromDateObj = useMemo(() => new Date(fromDate + "T00:00:00"), [fromDate]);
+  const toDateObj = useMemo(() => new Date(toDate + "T23:59:59"), [toDate]);
+
   const { data: accountability, isLoading } = trpc.reports.staffAccountability.useQuery(
-    { locationId: selectedLocationId! },
+    { locationId: selectedLocationId!, fromDate: fromDateObj, toDate: toDateObj },
     { enabled: !!selectedLocationId }
   );
 
   const { data: reasonBreakdown } = trpc.reports.staffVarianceReasonBreakdown.useQuery(
-    { locationId: selectedLocationId!, userId: expandedUserId ?? undefined },
+    { locationId: selectedLocationId!, userId: expandedUserId ?? undefined, fromDate: fromDateObj, toDate: toDateObj },
     { enabled: !!selectedLocationId && !!expandedUserId }
   );
 
   const { data: itemVariance } = trpc.reports.staffItemVariance.useQuery(
-    { locationId: selectedLocationId!, userId: expandedUserId ?? undefined, limit: 10 },
+    { locationId: selectedLocationId!, userId: expandedUserId ?? undefined, limit: 10, fromDate: fromDateObj, toDate: toDateObj },
     { enabled: !!selectedLocationId && !!expandedUserId }
   );
 
@@ -80,12 +94,40 @@ export default function StaffScorecardsPage() {
     ? itemVariance?.find((s) => s.userId === expandedUserId)
     : null;
 
+  const avgItemsPerHour = useMemo(() => {
+    if (!accountability?.sessions || accountability.sessions.length === 0) return 0;
+    const validSessions = accountability.sessions.filter((s: any) => s.itemsPerHour > 0);
+    if (validSessions.length === 0) return 0;
+    return validSessions.reduce((sum: number, s: any) => sum + s.itemsPerHour, 0) / validSessions.length;
+  }, [accountability]);
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Staff Scorecards</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Staff Scorecards</h1>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-1.5 text-sm text-[#EAF0FF]"
+          />
+          <span className="text-xs text-[#EAF0FF]/40">to</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-1.5 text-sm text-[#EAF0FF]"
+          />
+        </div>
+      </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-5">
+        <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+          <p className="text-sm text-[#EAF0FF]/60">Total Staff</p>
+          <p className="text-2xl font-bold">{staff.length}</p>
+        </div>
         <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
           <p className="text-sm text-[#EAF0FF]/60">Team Avg Accuracy</p>
           <p className="text-2xl font-bold" style={{ color: accuracyColor(summary?.avgAccuracyRate ?? 0) }}>
@@ -99,6 +141,10 @@ export default function StaffScorecardsPage() {
         <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
           <p className="text-sm text-[#EAF0FF]/60">Total Sessions</p>
           <p className="text-2xl font-bold">{summary?.totalSessions ?? 0}</p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+          <p className="text-sm text-[#EAF0FF]/60">Avg Items/Hr</p>
+          <p className="text-2xl font-bold">{avgItemsPerHour.toFixed(1)}</p>
         </div>
       </div>
 
@@ -195,26 +241,48 @@ export default function StaffScorecardsPage() {
           </h3>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Variance Reason Breakdown */}
+            {/* Variance Reason Breakdown - Pie Chart */}
             <div>
               <h4 className="mb-3 text-sm font-semibold text-[#EAF0FF]/80">Variance Reason Breakdown</h4>
               <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
                 {expandedReasons && expandedReasons.reasons.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={Math.max(160, expandedReasons.reasons.length * 36)}>
-                    <BarChart data={expandedReasons.reasons.map((r) => ({
-                      name: r.label,
-                      count: r.count,
-                      units: Number(r.totalUnits.toFixed(1)),
-                    }))} layout="vertical">
-                      <XAxis type="number" tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} />
-                      <YAxis type="category" dataKey="name" tick={{ fill: "#EAF0FF", fontSize: 11 }} axisLine={false} tickLine={false} width={120} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
-                        formatter={(value, name) => [value, name === "count" ? "Count" : "Units"]}
-                      />
-                      <Bar dataKey="count" fill="#E9B44C" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <div className="flex items-center gap-4">
+                    <ResponsiveContainer width="50%" height={200}>
+                      <PieChart>
+                        <Pie
+                          data={expandedReasons.reasons.map((r) => ({
+                            name: r.label,
+                            value: r.count,
+                          }))}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={40}
+                          outerRadius={80}
+                          dataKey="value"
+                          label={false}
+                        >
+                          {expandedReasons.reasons.map((_, i) => (
+                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex-1 space-y-1">
+                      {expandedReasons.reasons.map((r, i) => (
+                        <div key={r.label} className="flex items-center gap-2 text-xs">
+                          <span
+                            className="inline-block h-3 w-3 rounded-sm"
+                            style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                          />
+                          <span className="text-[#EAF0FF]/80">{r.label}</span>
+                          <span className="text-[#EAF0FF]/40">({r.count})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ) : (
                   <p className="py-6 text-center text-sm text-[#EAF0FF]/40">No variance reason data.</p>
                 )}
@@ -256,6 +324,53 @@ export default function StaffScorecardsPage() {
               </div>
             </div>
           </div>
+
+          {/* Session History */}
+          {accountability?.sessions && (
+            <div>
+              <h4 className="mb-3 text-sm font-semibold text-[#EAF0FF]/80">Session History</h4>
+              <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+                {(() => {
+                  const staffSessions = accountability.sessions.filter(
+                    (s: any) => s.participants?.some((p: any) => p.userId === expandedUserId)
+                  );
+                  return staffSessions.length > 0 ? (
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                        <tr>
+                          <th className="px-3 py-2">Date</th>
+                          <th className="px-3 py-2">Duration</th>
+                          <th className="px-3 py-2">Items</th>
+                          <th className="px-3 py-2">Items/Hr</th>
+                          <th className="px-3 py-2">Variance Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {staffSessions.slice(0, 10).map((s: any) => (
+                          <tr key={s.sessionId} className="hover:bg-[#0B1623]/60">
+                            <td className="px-3 py-2">
+                              {new Date(s.startedTs).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </td>
+                            <td className="px-3 py-2">{s.durationMinutes}m</td>
+                            <td className="px-3 py-2">{s.totalLines}</td>
+                            <td className="px-3 py-2">{s.itemsPerHour?.toFixed(1) ?? "—"}</td>
+                            <td className={`px-3 py-2 ${s.varianceRate > 20 ? "text-red-400" : s.varianceRate > 10 ? "text-amber-400" : ""}`}>
+                              {s.varianceRate?.toFixed(1) ?? "—"}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="py-6 text-center text-sm text-[#EAF0FF]/40">No session history for this staff member.</p>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

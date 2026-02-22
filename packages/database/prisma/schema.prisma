@@ -348,6 +348,7 @@ model InventoryItem {
   recipeIngredients  RecipeIngredient[]
   parLevels          ParLevel[]
   purchaseOrderLines PurchaseOrderLine[]
+  ratioSnapshots     RecipeRatioSnapshot[]
 
   @@index([locationId], map: "ix_inventory_items_location")
   @@map("inventory_items")
@@ -537,9 +538,10 @@ model Recipe {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  location    Location           @relation(fields: [locationId], references: [id])
-  ingredients RecipeIngredient[]
-  posMappings POSItemMapping[]
+  location       Location               @relation(fields: [locationId], references: [id])
+  ingredients    RecipeIngredient[]
+  posMappings    POSItemMapping[]
+  ratioSnapshots RecipeRatioSnapshot[]
 
   @@index([locationId], map: "ix_recipes_location")
   @@map("recipes")
@@ -556,6 +558,25 @@ model RecipeIngredient {
   inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
 
   @@map("recipe_ingredients")
+}
+
+model RecipeRatioSnapshot {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipeId        String   @map("recipe_id") @db.Uuid
+  sessionId       String   @map("session_id") @db.Uuid
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  recipeQuantity  Decimal  @map("recipe_quantity")
+  impliedQuantity Decimal  @map("implied_quantity")
+  ratio           Decimal
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  recipe        Recipe           @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  session       InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem    @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([recipeId, sessionId, inventoryItemId])
+  @@index([recipeId])
+  @@map("recipe_ratio_snapshots")
 }
 
 // ─── Immutable Ledger ────────────────────────────────────────
@@ -610,6 +631,7 @@ model InventorySession {
   lines              InventorySessionLine[]
   participants       SessionParticipant[]
   bottleMeasurements BottleMeasurement[]
+  ratioSnapshots     RecipeRatioSnapshot[]
 
   @@map("inventory_sessions")
 }

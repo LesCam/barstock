@@ -9,6 +9,7 @@ import { Prisma, type UomT } from "@prisma/client";
 import type { ExtendedPrismaClient } from "@barstock/database";
 import type { VarianceReason } from "@barstock/types";
 import { AuditService } from "./audit.service";
+import { RecipeLearningService } from "./recipe-learning.service";
 
 export interface AdjustmentDetail {
   itemId: string;
@@ -142,6 +143,12 @@ export class SessionService {
       where: { id: sessionId },
       data: { endedTs: new Date() },
     });
+
+    // Fire-and-forget recipe auto-learning snapshot
+    const learningService = new RecipeLearningService(this.prisma);
+    learningService
+      .captureSessionSnapshot(sessionId, session.locationId)
+      .catch(() => {});
 
     return {
       sessionId,

@@ -7,6 +7,9 @@ import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { HelpLink } from "@/components/help-link";
 import { UOM } from "@barstock/types";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
+} from "recharts";
 
 const UOM_LABELS: Record<string, string> = {
   oz: "oz",
@@ -27,6 +30,115 @@ const emptyIngredient = (): IngredientRow => ({
   quantity: "",
   uom: UOM.oz,
 });
+
+function RecipeAutoLearning({ recipeId }: { recipeId: string }) {
+  const { data: trend, isLoading } = trpc.recipes.recipeTrend.useQuery(
+    { recipeId },
+    { enabled: !!recipeId }
+  );
+
+  if (isLoading) {
+    return (
+      <div className="mt-4 border-t border-white/10 pt-4">
+        <div className="h-6 w-32 animate-pulse rounded bg-white/10" />
+      </div>
+    );
+  }
+
+  if (!trend || trend.snapshotCount === 0) {
+    return (
+      <div className="mt-4 border-t border-white/10 pt-4">
+        <h4 className="mb-1 text-sm font-semibold text-[#EAF0FF]/80">Auto-Learning</h4>
+        <p className="text-xs text-[#EAF0FF]/40">
+          No learning data yet. Close counting sessions with recipe-mapped POS items to start tracking pour accuracy.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 border-t border-white/10 pt-4">
+      <h4 className="mb-3 text-sm font-semibold text-[#EAF0FF]/80">
+        Auto-Learning ({trend.snapshotCount} snapshot{trend.snapshotCount !== 1 ? "s" : ""})
+      </h4>
+      <div className="space-y-4">
+        {trend.ingredients.map((ing) => {
+          const badge =
+            ing.weightedAvgRatio >= 0.95 && ing.weightedAvgRatio <= 1.05
+              ? { label: "Accurate", color: "text-green-400 bg-green-500/10" }
+              : ing.weightedAvgRatio > 1.05
+                ? { label: "Over-pouring", color: "text-red-400 bg-red-500/10" }
+                : { label: "Under-pouring", color: "text-amber-400 bg-amber-500/10" };
+
+          const pctDiff = Math.abs((ing.weightedAvgRatio - 1) * 100);
+          const suggestion =
+            ing.weightedAvgRatio > 1.05
+              ? `Staff pour ~${pctDiff.toFixed(0)}% more ${ing.itemName} than recipe specifies`
+              : ing.weightedAvgRatio < 0.95
+                ? `Staff pour ~${pctDiff.toFixed(0)}% less ${ing.itemName} than recipe specifies`
+                : null;
+
+          const chartData = [...ing.history].reverse().map((h) => ({
+            date: new Date(h.sessionDate).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            }),
+            ratio: Number(h.ratio.toFixed(3)),
+          }));
+
+          return (
+            <div key={ing.inventoryItemId} className="rounded-lg border border-white/10 bg-[#0B1623] p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-sm font-medium text-[#EAF0FF]">{ing.itemName}</span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.color}`}>
+                  {badge.label}
+                </span>
+                <span className={`text-xs ${
+                  ing.trend === "improving" ? "text-green-400" : ing.trend === "worsening" ? "text-red-400" : "text-[#EAF0FF]/40"
+                }`}>
+                  {ing.trend === "improving" ? "\u2191 improving" : ing.trend === "worsening" ? "\u2193 worsening" : "\u2192 stable"}
+                </span>
+              </div>
+              <div className="mb-2 flex items-center gap-4 text-xs text-[#EAF0FF]/60">
+                <span>Recipe: {ing.recipeQuantity} per serving</span>
+                <span>Avg ratio: <span className="font-medium text-[#EAF0FF]">{ing.weightedAvgRatio.toFixed(3)}</span></span>
+              </div>
+              {suggestion && (
+                <p className="mb-2 text-xs text-[#EAF0FF]/50">{suggestion}</p>
+              )}
+              {chartData.length >= 2 && (
+                <ResponsiveContainer width="100%" height={120}>
+                  <LineChart data={chartData}>
+                    <XAxis dataKey="date" tick={{ fill: "#EAF0FF99", fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis
+                      domain={[0.5, 1.5]}
+                      tick={{ fill: "#EAF0FF99", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={30}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                      formatter={(value) => [typeof value === "number" ? value.toFixed(3) : value, "Ratio"]}
+                    />
+                    <ReferenceLine y={1} stroke="#4CAF5080" strokeDasharray="5 5" />
+                    <Line
+                      type="monotone"
+                      dataKey="ratio"
+                      stroke="#E9B44C"
+                      strokeWidth={2}
+                      dot={{ fill: "#E9B44C", r: 3 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function RecipesPage() {
   const { data: session } = useSession();
@@ -705,6 +817,8 @@ export default function RecipesPage() {
                                   Collapse
                                 </button>
                               </div>
+                              {/* Auto-Learning Section */}
+                              <RecipeAutoLearning recipeId={recipe.id} />
                             </div>
                           )}
                         </div>

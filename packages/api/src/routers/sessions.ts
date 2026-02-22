@@ -454,6 +454,7 @@ export const sessionsRouter = router({
       // Find the most recent session line per inventory item where the sub_area_id
       // is in the selected bar area's sub-areas. This gives us items historically
       // associated with this area.
+      const useSmart = input.sortMode === "smart";
       const items = await ctx.prisma.$queryRaw<
         Array<{
           inventory_item_id: string;
@@ -465,6 +466,8 @@ export const sessionsRouter = router({
           sub_area_id: string;
           sub_area_name: string;
           last_counted_at: Date;
+          variance_flag_count: number;
+          frequency_count: number;
         }>
       >(Prisma.sql`
         WITH ranked AS (
@@ -480,6 +483,29 @@ export const sessionsRouter = router({
           INNER JOIN inventory_sessions s ON s.id = sl.session_id
           WHERE s.location_id = ${input.locationId}::uuid
             AND sl.sub_area_id IS NOT NULL
+        ),
+        variance_flags AS (
+          SELECT
+            ce.inventory_item_id,
+            COUNT(DISTINCT ce.id) AS flag_count
+          FROM consumption_events ce
+          WHERE ce.location_id = ${input.locationId}::uuid
+            AND ce.event_type = 'inventory_count_adjustment'
+            AND ce.reversal_of_event_id IS NULL
+            AND ABS(ce.quantity_delta) > 5
+            AND ce.created_at >= NOW() - INTERVAL '90 days'
+          GROUP BY ce.inventory_item_id
+        ),
+        freq AS (
+          SELECT
+            sl2.inventory_item_id,
+            COUNT(DISTINCT sl2.session_id) AS session_count
+          FROM inventory_session_lines sl2
+          INNER JOIN inventory_sessions s2 ON s2.id = sl2.session_id
+          WHERE s2.location_id = ${input.locationId}::uuid
+            AND s2.ended_ts IS NOT NULL
+            AND s2.started_ts >= NOW() - INTERVAL '180 days'
+          GROUP BY sl2.inventory_item_id
         )
         SELECT
           r.inventory_item_id,
@@ -489,14 +515,19 @@ export const sessionsRouter = router({
           c.name AS category_name,
           r.sub_area_id,
           sa.name AS sub_area_name,
-          r.created_at AS last_counted_at
+          r.created_at AS last_counted_at,
+          COALESCE(vf.flag_count, 0)::int AS variance_flag_count,
+          COALESCE(f.session_count, 0)::int AS frequency_count
         FROM ranked r
         INNER JOIN inventory_items i ON i.id = r.inventory_item_id
         LEFT JOIN inventory_item_categories c ON c.id = i.category_id
         INNER JOIN sub_areas sa ON sa.id = r.sub_area_id
+        LEFT JOIN variance_flags vf ON vf.inventory_item_id = r.inventory_item_id
+        LEFT JOIN freq f ON f.inventory_item_id = r.inventory_item_id
         WHERE r.rn = 1
           AND r.sub_area_id = ANY(${subAreaIds}::uuid[])
-        ORDER BY i.name ASC
+        ORDER BY
+          ${useSmart ? Prisma.sql`COALESCE(vf.flag_count, 0) DESC, COALESCE(f.session_count, 0) DESC, i.name ASC` : Prisma.sql`i.name ASC`}
       `);
 
       return items.map((item) => ({
@@ -508,15 +539,21 @@ export const sessionsRouter = router({
         subAreaId: item.sub_area_id,
         subAreaName: item.sub_area_name,
         lastCountedAt: item.last_counted_at,
+        varianceFlagCount: item.variance_flag_count ?? 0,
+        frequencyCount: item.frequency_count ?? 0,
       }));
     }),
 
   expectedItemsForLocation: protectedProcedure
-    .input(z.object({ locationId: z.string().uuid() }))
+    .input(z.object({
+      locationId: z.string().uuid(),
+      sortMode: z.enum(["alphabetical", "smart"]).optional().default("alphabetical"),
+    }))
     .query(async ({ ctx, input }) => {
       // Return active inventory items for this location, listed once per
       // distinct sub-area they've historically been counted in.
       // e.g. "Bud Light Cans" appears under Walk-In AND Main Bar if counted in both.
+      const useSmart = input.sortMode === "smart";
       const items = await ctx.prisma.$queryRaw<
         Array<{
           id: string;
@@ -528,6 +565,8 @@ export const sessionsRouter = router({
           sub_area_id: string | null;
           sub_area_name: string | null;
           bar_area_name: string | null;
+          variance_flag_count: number;
+          frequency_count: number;
         }>
       >(Prisma.sql`
         WITH distinct_placements AS (
@@ -538,6 +577,29 @@ export const sessionsRouter = router({
           INNER JOIN inventory_sessions s ON s.id = sl.session_id
           WHERE s.location_id = ${input.locationId}::uuid
             AND sl.sub_area_id IS NOT NULL
+        ),
+        variance_flags AS (
+          SELECT
+            ce.inventory_item_id,
+            COUNT(DISTINCT ce.id) AS flag_count
+          FROM consumption_events ce
+          WHERE ce.location_id = ${input.locationId}::uuid
+            AND ce.event_type = 'inventory_count_adjustment'
+            AND ce.reversal_of_event_id IS NULL
+            AND ABS(ce.quantity_delta) > 5
+            AND ce.created_at >= NOW() - INTERVAL '90 days'
+          GROUP BY ce.inventory_item_id
+        ),
+        freq AS (
+          SELECT
+            sl2.inventory_item_id,
+            COUNT(DISTINCT sl2.session_id) AS session_count
+          FROM inventory_session_lines sl2
+          INNER JOIN inventory_sessions s2 ON s2.id = sl2.session_id
+          WHERE s2.location_id = ${input.locationId}::uuid
+            AND s2.ended_ts IS NOT NULL
+            AND s2.started_ts >= NOW() - INTERVAL '180 days'
+          GROUP BY sl2.inventory_item_id
         )
         SELECT
           i.id,
@@ -547,15 +609,20 @@ export const sessionsRouter = router({
           c.name AS category_name,
           dp.sub_area_id,
           sa.name AS sub_area_name,
-          ba.name AS bar_area_name
+          ba.name AS bar_area_name,
+          COALESCE(vf.flag_count, 0)::int AS variance_flag_count,
+          COALESCE(f.session_count, 0)::int AS frequency_count
         FROM inventory_items i
         LEFT JOIN inventory_item_categories c ON c.id = i.category_id
         LEFT JOIN distinct_placements dp ON dp.inventory_item_id = i.id
         LEFT JOIN sub_areas sa ON sa.id = dp.sub_area_id
         LEFT JOIN bar_areas ba ON ba.id = sa.bar_area_id
+        LEFT JOIN variance_flags vf ON vf.inventory_item_id = i.id
+        LEFT JOIN freq f ON f.inventory_item_id = i.id
         WHERE i.location_id = ${input.locationId}::uuid
           AND i.active = true
-        ORDER BY ba.name NULLS LAST, sa.name NULLS LAST, i.name ASC
+        ORDER BY
+          ${useSmart ? Prisma.sql`COALESCE(vf.flag_count, 0) DESC, COALESCE(f.session_count, 0) DESC, i.name ASC` : Prisma.sql`ba.name NULLS LAST, sa.name NULLS LAST, i.name ASC`}
       `);
 
       return items.map((item) => ({
@@ -568,6 +635,8 @@ export const sessionsRouter = router({
         subAreaName: item.sub_area_name
           ? `${item.bar_area_name} — ${item.sub_area_name}`
           : "Unassigned",
+        varianceFlagCount: item.variance_flag_count ?? 0,
+        frequencyCount: item.frequency_count ?? 0,
       }));
     }),
 

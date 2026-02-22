@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { useCountingPreferences } from "@/lib/counting-preferences";
@@ -70,6 +71,20 @@ export default function SessionDetailScreen() {
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editingQty, setEditingQty] = useState("");
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [sortMode, setSortMode] = useState<"alphabetical" | "smart">("alphabetical");
+
+  // Load persisted sort mode on mount
+  useEffect(() => {
+    AsyncStorage.getItem("@barstock/countSortMode").then((val) => {
+      if (val === "smart" || val === "alphabetical") setSortMode(val);
+    });
+  }, []);
+
+  const toggleSortMode = useCallback(() => {
+    const next = sortMode === "alphabetical" ? "smart" : "alphabetical";
+    setSortMode(next);
+    AsyncStorage.setItem("@barstock/countSortMode", next);
+  }, [sortMode]);
 
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
     { id: id! },
@@ -156,13 +171,14 @@ export default function SessionDetailScreen() {
       locationId: selectedLocationId!,
       barAreaId: selectedAreaId!,
       subAreaId: selectedSubAreaId ?? undefined,
+      sortMode,
     },
     { enabled: !!selectedLocationId && !!selectedAreaId && !fullLocationMode }
   );
 
   // Full location expected items (always fetched — used for progress indicators)
   const { data: expectedItemsForLocation } = trpc.sessions.expectedItemsForLocation.useQuery(
-    { locationId: selectedLocationId! },
+    { locationId: selectedLocationId!, sortMode },
     { enabled: !!selectedLocationId }
   );
 
@@ -917,9 +933,32 @@ export default function SessionDetailScreen() {
         {/* Expected Items Checklist */}
         {isOpen && expectedTotal > 0 && (
           <View style={styles.expectedSection}>
-            <Text style={styles.expectedTitle}>
-              Expected{fullLocationMode ? " at Location" : ` in ${areaLabel}`} — {expectedCounted}/{expectedTotal}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={styles.expectedTitle}>
+                Expected{fullLocationMode ? " at Location" : ` in ${areaLabel}`} — {expectedCounted}/{expectedTotal}
+              </Text>
+              <TouchableOpacity
+                onPress={toggleSortMode}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 12,
+                  backgroundColor: sortMode === "smart" ? "rgba(233,180,76,0.15)" : "rgba(255,255,255,0.06)",
+                  borderWidth: 1,
+                  borderColor: sortMode === "smart" ? "rgba(233,180,76,0.3)" : "rgba(255,255,255,0.1)",
+                }}
+              >
+                <Text style={{
+                  fontSize: 11,
+                  fontWeight: "600",
+                  color: sortMode === "smart" ? "#E9B44C" : "rgba(234,240,255,0.6)",
+                }}>
+                  {sortMode === "smart" ? "Priority" : "A-Z"}
+                </Text>
+              </TouchableOpacity>
+            </View>
             {fullLocationMode ? (
               // Group by area name for full location view
               (() => {
@@ -960,7 +999,12 @@ export default function SessionDetailScreen() {
                         >
                           <View style={styles.expectedCheck} />
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.expectedName}>{item.name}</Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                              <Text style={styles.expectedName}>{item.name}</Text>
+                              {sortMode === "smart" && (item as any).varianceFlagCount > 0 && (
+                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
+                              )}
+                            </View>
                             {hint && (
                               <Text style={styles.hintText}>{formatHint(hint)}</Text>
                             )}
@@ -1002,7 +1046,12 @@ export default function SessionDetailScreen() {
                   >
                     <View style={styles.expectedCheck} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.expectedName}>{item.name}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Text style={styles.expectedName}>{item.name}</Text>
+                        {sortMode === "smart" && (item as any).varianceFlagCount > 0 && (
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
+                        )}
+                      </View>
                       {hint && (
                         <Text style={styles.hintText}>{formatHint(hint)}</Text>
                       )}

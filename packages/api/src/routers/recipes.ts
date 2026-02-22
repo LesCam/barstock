@@ -8,6 +8,7 @@ import {
 } from "@barstock/validators";
 import { RecipeService } from "../services/recipe.service";
 import { RecipeImportService } from "../services/recipe-import.service";
+import { RecipeLearningService } from "../services/recipe-learning.service";
 import { AuditService } from "../services/audit.service";
 import { z } from "zod";
 
@@ -129,5 +130,24 @@ export const recipesRouter = router({
       });
 
       return result;
+    }),
+
+  recipeTrend: protectedProcedure
+    .input(z.object({ recipeId: z.string().uuid() }))
+    .query(({ ctx, input }) => {
+      const svc = new RecipeLearningService(ctx.prisma);
+      return svc.getRecipeTrend(input.recipeId);
+    }),
+
+  recipeSnapshotHistory: protectedProcedure
+    .input(
+      z.object({
+        recipeId: z.string().uuid(),
+        limit: z.number().int().min(1).max(100).optional(),
+      })
+    )
+    .query(({ ctx, input }) => {
+      const svc = new RecipeLearningService(ctx.prisma);
+      return svc.getSnapshotHistory(input.recipeId, input.limit);
     }),
 });

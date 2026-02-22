@@ -46,6 +46,7 @@ export const expectedItemsForAreaSchema = z.object({
   locationId: z.string().uuid(),
   barAreaId: z.string().uuid(),
   subAreaId: z.string().uuid().optional(),
+  sortMode: z.enum(["alphabetical", "smart"]).optional().default("alphabetical"),
 });
 
 export const itemCountHintsSchema = z.object({
