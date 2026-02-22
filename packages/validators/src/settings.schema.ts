@@ -38,6 +38,8 @@ export const alertRulesSchema = z.object({
   largeAdjustment: alertRuleSchema.default({ enabled: true, threshold: 20 }),
   shrinkagePattern: alertRuleSchema.default({ enabled: true, threshold: 3 }),
   parReorderAlert: alertRuleSchema.default({ enabled: false, threshold: 3 }),
+  usageSpike: alertRuleSchema.default({ enabled: true, threshold: 2.5 }),
+  depletionMismatch: alertRuleSchema.default({ enabled: true, threshold: 1.5 }),
 });
 
 export type AlertRules = z.infer<typeof alertRulesSchema>;

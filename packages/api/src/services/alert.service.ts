@@ -4,6 +4,7 @@ import { InventoryService } from "./inventory.service";
 import { NotificationService } from "./notification.service";
 import { SettingsService } from "./settings.service";
 import { ParLevelService } from "./par-level.service";
+import { AnalyticsService } from "./analytics.service";
 import { deriveDefaultPermissions } from "./auth.service";
 import { Prisma } from "@prisma/client";
 import type { Role } from "@barstock/types";
@@ -73,6 +74,16 @@ export class AlertService {
       if ((rules as any).parReorderAlert?.enabled) {
         const parAlerts = await this.checkParLevels(loc.id, loc.name, (rules as any).parReorderAlert.threshold);
         alerts.push(...parAlerts);
+      }
+
+      if ((rules as any).usageSpike?.enabled) {
+        const spikeAlerts = await this.checkUsageSpikes(loc.id, loc.name, (rules as any).usageSpike.threshold);
+        alerts.push(...spikeAlerts);
+      }
+
+      if ((rules as any).depletionMismatch?.enabled) {
+        const mismatchAlerts = await this.checkDepletionMismatches(loc.id, loc.name, (rules as any).depletionMismatch.threshold);
+        alerts.push(...mismatchAlerts);
       }
     }
 
@@ -459,6 +470,52 @@ export class AlertService {
       linkUrl: "/audit",
       metadata: { rule: "loginFailures", failCount },
     }];
+  }
+
+  private async checkUsageSpikes(locationId: string, locationName: string, threshold: number): Promise<AlertResult[]> {
+    const svc = new AnalyticsService(this.prisma);
+    try {
+      const anomalies = await svc.getUsageAnomalies(locationId);
+      const flagged = anomalies.filter((a) => a.type === "usage_spike" && a.zScore > threshold);
+      if (flagged.length === 0) return [];
+
+      const itemList = flagged
+        .slice(0, 5)
+        .map((a) => `${a.itemName} (${a.zScore.toFixed(1)}x std dev)`)
+        .join(", ");
+
+      return [{
+        title: `Unusual usage spike at ${locationName}`,
+        body: `${flagged.length} item(s) with abnormal usage this week: ${itemList}`,
+        linkUrl: "/analytics",
+        metadata: { rule: "usageSpike", locationId, flaggedCount: flagged.length },
+      }];
+    } catch {
+      return [];
+    }
+  }
+
+  private async checkDepletionMismatches(locationId: string, locationName: string, threshold: number): Promise<AlertResult[]> {
+    const svc = new AnalyticsService(this.prisma);
+    try {
+      const ratios = await svc.getPosDepletionRatios(locationId);
+      const flagged = ratios.filter((r) => r.ratio > threshold);
+      if (flagged.length === 0) return [];
+
+      const itemList = flagged
+        .slice(0, 5)
+        .map((r) => `${r.itemName} (${r.ratio.toFixed(1)}x)`)
+        .join(", ");
+
+      return [{
+        title: `Depletion mismatch at ${locationName}`,
+        body: `${flagged.length} item(s) with more loss than POS explains: ${itemList}`,
+        linkUrl: "/analytics",
+        metadata: { rule: "depletionMismatch", locationId, flaggedCount: flagged.length },
+      }];
+    } catch {
+      return [];
+    }
   }
 
   async checkHighVarianceSession(

@@ -1,8 +1,9 @@
 import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 import { BenchmarkService } from "../services/benchmark.service";
+import { AnalyticsService } from "../services/analytics.service";
 
 export const reportsRouter = router({
   variance: protectedProcedure
@@ -193,6 +194,36 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new ReportService(ctx.prisma);
       return svc.getForecastItemDetail(input.locationId, input.itemId);
+    }),
+
+  // ─── Analytics Endpoints ──────────────────────────────────
+
+  usageAnomalies: protectedProcedure
+    .input(usageAnomaliesQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getUsageAnomalies(input.locationId);
+    }),
+
+  posDepletionRatios: protectedProcedure
+    .input(posDepletionRatiosQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getPosDepletionRatios(input.locationId);
+    }),
+
+  varianceForecasts: protectedProcedure
+    .input(varianceForecastsQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getVarianceForecasts(input.locationId);
+    }),
+
+  analyticsSummary: protectedProcedure
+    .input(analyticsSummaryQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getAnalyticsSummary(input.locationId);
     }),
 
   // ─── Benchmark Endpoints ──────────────────────────────────

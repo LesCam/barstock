@@ -27,6 +27,7 @@ const navItems = [
   { href: "/forecast", label: "Forecast", icon: "\uD83D\uDD2E" },
   { href: "/orders", label: "Orders", icon: "\uD83D\uDED2" },
   { href: "/sessions", label: "Sessions", icon: "📋" },
+  { href: "/analytics", label: "Analytics", icon: "\uD83E\uDDE0" },
   { href: "/reports", label: "Reports", icon: "📈" },
   { href: "/audit", label: "Audit Log", icon: "🔍" },
   { href: "/alerts", label: "Alerts", icon: "🚨" },

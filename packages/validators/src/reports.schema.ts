@@ -175,3 +175,21 @@ export const benchmarkTrendSchema = z.object({
 });
 
 export const platformBenchmarksSchema = z.object({});
+
+// ─── Analytics Schemas ──────────────────────────────────────
+
+export const usageAnomaliesQuerySchema = z.object({
+  locationId: z.string().uuid(),
+});
+
+export const posDepletionRatiosQuerySchema = z.object({
+  locationId: z.string().uuid(),
+});
+
+export const varianceForecastsQuerySchema = z.object({
+  locationId: z.string().uuid(),
+});
+
+export const analyticsSummaryQuerySchema = z.object({
+  locationId: z.string().uuid(),
+});

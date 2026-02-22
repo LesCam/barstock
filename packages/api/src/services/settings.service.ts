@@ -42,6 +42,8 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
     largeAdjustment: { enabled: true, threshold: 20 },
     shrinkagePattern: { enabled: true, threshold: 3 },
     parReorderAlert: { enabled: false, threshold: 3 },
+    usageSpike: { enabled: true, threshold: 2.5 },
+    depletionMismatch: { enabled: true, threshold: 1.5 },
   },
   lastAlertEvaluation: undefined,
   endOfDayTime: "04:00",
