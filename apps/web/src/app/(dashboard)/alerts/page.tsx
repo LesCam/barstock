@@ -4,6 +4,8 @@ import { useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
+import { PageTip } from "@/components/page-tip";
+import { HelpLink } from "@/components/help-link";
 import {
   BarChart,
   Bar,
@@ -135,7 +137,10 @@ export default function AlertsPage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Alert Dashboard</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Alert Dashboard</h1>
+          <HelpLink section="alerts" tooltip="Learn about alert rules" />
+        </div>
         <Link
           href="/settings"
           className="rounded-md bg-[#16283F] px-4 py-2 text-sm text-[#E9B44C] hover:bg-[#1a3050]"
@@ -143,6 +148,12 @@ export default function AlertsPage() {
           Configure Thresholds
         </Link>
       </div>
+
+      <PageTip
+        tipId="alerts"
+        title="Alert Rules"
+        description="Configure rules for variance, low stock, and stale counts."
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

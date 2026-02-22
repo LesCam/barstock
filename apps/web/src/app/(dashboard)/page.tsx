@@ -9,6 +9,8 @@ import {
 } from "recharts";
 import { useLocation } from "@/components/location-context";
 import { PortfolioOverview } from "@/components/portfolio-overview";
+import { PageTip } from "@/components/page-tip";
+import { OnboardingChecklist } from "@/components/onboarding-checklist";
 
 const TIMEZONES = [
   "America/Montreal",
@@ -283,6 +285,14 @@ export default function DashboardPage() {
           </button>
         )}
       </div>
+
+      <PageTip
+        tipId="dashboard"
+        title="Your Command Center"
+        description="KPIs, variance trends, and flagged items for your location."
+      />
+
+      {locationId && <OnboardingChecklist />}
 
       {isAdmin && <AlertBanner />}
 

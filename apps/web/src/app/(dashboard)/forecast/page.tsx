@@ -3,6 +3,8 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "@/components/location-context";
+import { PageTip } from "@/components/page-tip";
+import { HelpLink } from "@/components/help-link";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   ComposedChart, Line, ReferenceLine,
@@ -126,7 +128,16 @@ export default function ForecastPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Demand Forecast</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold">Demand Forecast</h1>
+        <HelpLink section="analytics" tooltip="Learn about forecasting" />
+      </div>
+
+      <PageTip
+        tipId="forecast"
+        title="Demand Forecasting"
+        description="Projected usage and reorder timing from historical consumption."
+      />
 
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-4">

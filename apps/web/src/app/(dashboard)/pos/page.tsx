@@ -5,6 +5,8 @@ import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import Link from "next/link";
+import { PageTip } from "@/components/page-tip";
+import { HelpLink } from "@/components/help-link";
 
 export default function POSPage() {
   const { data: session } = useSession();
@@ -40,7 +42,10 @@ export default function POSPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">POS Connections</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">POS Connections</h1>
+          <HelpLink section="pos-mapping" tooltip="Learn about POS connections" />
+        </div>
         <div className="flex gap-3">
           <button
             onClick={() => {
@@ -72,6 +77,12 @@ export default function POSPage() {
           </Link>
         </div>
       </div>
+
+      <PageTip
+        tipId="pos"
+        title="POS Integration"
+        description="Connect your POS and map menu items. Run depletion for expected stock."
+      />
 
       {depletionResult && (
         <div className="mb-4 flex items-center justify-between rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">

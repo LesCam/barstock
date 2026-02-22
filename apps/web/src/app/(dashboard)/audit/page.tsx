@@ -3,6 +3,8 @@
 import { Fragment, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
+import { PageTip } from "@/components/page-tip";
+import { HelpLink } from "@/components/help-link";
 
 const ACTION_LABELS: Record<string, string> = {
   "auth.login":                    "Login",
@@ -315,9 +317,18 @@ export default function AuditPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">
-        {isPlatform ? "Platform Audit Log" : "Audit Log"}
-      </h1>
+      <div className="mb-6 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">
+          {isPlatform ? "Platform Audit Log" : "Audit Log"}
+        </h1>
+        <HelpLink section="audit" tooltip="Learn about the audit log" />
+      </div>
+
+      <PageTip
+        tipId="audit"
+        title="Activity Trail"
+        description="Every action is logged. Filter by user, type, or date range."
+      />
 
       {/* Filter bar */}
       <div className="mb-4 flex flex-wrap gap-3">

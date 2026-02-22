@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "@/components/location-context";
+import { PageTip } from "@/components/page-tip";
+import { HelpLink } from "@/components/help-link";
 import {
   ScatterChart,
   Scatter,
@@ -97,9 +99,16 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-        Predictive Analytics
-      </h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Predictive Analytics</h1>
+        <HelpLink section="analytics" tooltip="Learn about analytics" />
+      </div>
+
+      <PageTip
+        tipId="analytics"
+        title="Predictive Insights"
+        description="Spot anomalies and risk patterns. Items scored by severity and trend."
+      />
 
       {/* Section A: Risk Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
+
+const CURRENT_VERSION = "1.8.0";
 
 interface SidebarProps {
   user: {
@@ -35,6 +38,7 @@ const navItems = [
   { href: "/art", label: "Art Gallery", icon: "🎨" },
   { href: "/guide", label: "Product Guide", icon: "📖" },
   { href: "/help", label: "Help", icon: "❓" },
+  { href: "/whats-new", label: "What's New", icon: "✨" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
@@ -54,6 +58,12 @@ function formatRole(role: string): string {
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
   const { selectedLocationId, setSelectedLocationId, locations, isAdmin } = useLocation();
+  const [whatsNewUnseen, setWhatsNewUnseen] = useState(false);
+
+  useEffect(() => {
+    const seen = localStorage.getItem("barstock-whats-new-seen");
+    setWhatsNewUnseen(seen !== CURRENT_VERSION);
+  }, []);
 
   const selectedLocationName = selectedLocationId
     ? locations.find((l) => l.id === selectedLocationId)?.name ?? "Unknown"
@@ -106,6 +116,7 @@ export function Sidebar({ user }: SidebarProps) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={item.href === "/whats-new" ? () => setWhatsNewUnseen(false) : undefined}
               className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
                 active
                   ? "bg-[#16283F] font-medium text-[#E9B44C]"
@@ -114,6 +125,9 @@ export function Sidebar({ user }: SidebarProps) {
             >
               <span>{item.icon}</span>
               {item.label}
+              {item.href === "/whats-new" && whatsNewUnseen && (
+                <span className="ml-auto h-2 w-2 rounded-full bg-[#E9B44C]" />
+              )}
             </Link>
           );
         })}

@@ -5,6 +5,8 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
+import { PageTip } from "@/components/page-tip";
+import { HelpLink } from "@/components/help-link";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -83,7 +85,10 @@ export default function OrdersPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Purchase Orders</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Purchase Orders</h1>
+          <HelpLink section="orders" tooltip="Learn about purchase orders" />
+        </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 rounded-lg bg-[#0B1623] p-1">
             <button
@@ -115,6 +120,12 @@ export default function OrdersPage() {
           </Link>
         </div>
       </div>
+
+      <PageTip
+        tipId="orders"
+        title="Purchase Orders"
+        description="Create and track orders to vendors. Link to par levels for reorder."
+      />
 
       {viewMode === "trends" ? (
         <TrendsView

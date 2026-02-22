@@ -5,6 +5,8 @@ import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "@/components/location-context";
 import Link from "next/link";
+import { PageTip } from "@/components/page-tip";
+import { HelpLink } from "@/components/help-link";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area,
 } from "recharts";
@@ -101,7 +103,10 @@ export default function BenchmarkingPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#EAF0FF]">Benchmarking</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#EAF0FF]">Benchmarking</h1>
+            <HelpLink section="benchmarking" tooltip="Learn about benchmarking" />
+          </div>
           <p className="mt-1 text-sm text-[#EAF0FF]/50">
             Compare your locations and see how you stack up against the industry
           </p>
@@ -115,6 +120,12 @@ export default function BenchmarkingPage() {
           </Link>
         )}
       </div>
+
+      <PageTip
+        tipId="benchmarking"
+        title="Industry Benchmarks"
+        description="Compare variance, COGS, and counting cadence against averages."
+      />
 
       <MyLocationsSection businessId={businessId} onSelectLocation={setSelectedLocationId} />
       <IndustryBenchmarksSection businessId={businessId} />

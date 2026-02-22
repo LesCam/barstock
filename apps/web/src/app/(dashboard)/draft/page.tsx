@@ -4,6 +4,8 @@ import { Fragment, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
+import { PageTip } from "@/components/page-tip";
+import { HelpLink } from "@/components/help-link";
 
 const ADMIN_ROLES = ["platform_admin", "business_admin", "manager"];
 
@@ -150,9 +152,16 @@ export default function DraftPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">
-        Draft Beer / Kegs
-      </h1>
+      <div className="mb-6 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Draft Beer / Kegs</h1>
+        <HelpLink section="draft-kegs" tooltip="Learn about draft & kegs" />
+      </div>
+
+      <PageTip
+        tipId="draft"
+        title="Manage Your Taps"
+        description="Track kegs from storage to tap. Assign products and monitor levels."
+      />
 
       {/* ── Tap Board ── */}
       <section className="mb-8">

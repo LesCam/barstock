@@ -29,6 +29,20 @@ const SECTION_SEARCH_TEXT: Record<string, string> = {
     "reports COGS usage variance patterns staff accountability recipe analytics pour cost",
   "settings-roles":
     "settings roles staff manager business admin platform admin permissions categories locations",
+  "draft-kegs":
+    "draft kegs tap lines keg tracking keg sizes storage tapped empty returned tap board beer",
+  alerts:
+    "alerts monitoring rules variance low stock stale count keg near empty shrinkage pattern evaluation notifications",
+  analytics:
+    "analytics forecasting anomaly detection risk scoring z-score POS depletion ratios variance forecast trend",
+  transfers:
+    "transfers receiving stock incoming inter-location movement consumption events ledger",
+  audit:
+    "audit accountability activity log event ledger action types actors timeline CSV export",
+  orders:
+    "orders purchasing purchase order PO vendor management fulfillment pickup trends spend",
+  benchmarking:
+    "benchmarking industry comparison portfolio metrics opt-in anonymized pour cost snapshot trend",
 };
 
 const sections: Section[] = [
@@ -373,6 +387,226 @@ const sections: Section[] = [
               and biometric settings.
             </li>
           </ul>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "draft-kegs",
+    title: "Draft & Kegs",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          The Draft / Kegs page manages your tap lines and keg inventory lifecycle.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Tap Board</h4>
+            <p>
+              See which product is on each tap at a glance. Assign kegs to empty taps or swap out
+              finished kegs. Tap assignments automatically update POS depletion routing.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Keg Lifecycle</h4>
+            <p>
+              Kegs move through four statuses: <strong>In Storage</strong> (received but not tapped),{" "}
+              <strong>In Service</strong> (currently on a tap), <strong>Empty</strong> (kicked), and{" "}
+              <strong>Returned</strong> (sent back to distributor). Receive new kegs with a product,
+              size, and volume.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Keg Sizes</h4>
+            <p>
+              Standard sizes (half barrel, sixth barrel, etc.) are preconfigured. Each size defines a
+              total volume used for tracking remaining beer.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "alerts",
+    title: "Alerts & Monitoring",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          The alert system evaluates configurable rules against your data and generates
+          notifications when thresholds are exceeded.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Rule Types</h4>
+            <p>
+              Available rules: variance percent, low stock, stale count days, keg near empty,
+              login failures, large adjustment, shrinkage pattern, and par reorder. Enable or
+              disable each rule and set custom thresholds in Settings.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Evaluation & Notifications</h4>
+            <p>
+              Rules are evaluated periodically and on demand. Triggered alerts appear as
+              notifications on the dashboard and in the alert history. The Alert Dashboard shows
+              frequency charts and top triggered items.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "analytics",
+    title: "Analytics & Forecasting",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Predictive analytics help you spot problems before they become costly.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Anomaly Detection</h4>
+            <p>
+              Usage anomalies are detected using z-score analysis against rolling averages. Spikes
+              or drops more than 2 standard deviations from the mean are flagged. Day-of-week
+              anomalies highlight unusual patterns on specific days.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Risk Scoring</h4>
+            <p>
+              Each location receives an overall risk score based on anomaly count, depletion
+              mismatches, and variance forecast risk. Scores range from 0 (low) to 100 (critical).
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Demand Forecasting</h4>
+            <p>
+              The Forecast page projects daily usage using historical consumption with day-of-week
+              weighting. Items show projected days to stockout, reorder dates, and forecast accuracy
+              validated against actual counts.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "transfers",
+    title: "Transfers & Receiving",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Stock movements are recorded as consumption events, feeding into the expected inventory
+          model.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Stock Receiving</h4>
+            <p>
+              When inventory arrives from vendors, record it as a receiving event. This increases the
+              predicted level for the item. Receiving can also be recorded through purchase order
+              pickups.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Inter-Location Transfers</h4>
+            <p>
+              Move stock between sub-areas or locations. Transfers create paired consumption events
+              — one negative (source) and one positive (destination) — keeping the ledger balanced.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "audit",
+    title: "Audit & Accountability",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Every significant action in Barstock is logged to the audit trail for accountability and
+          compliance.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Activity Log</h4>
+            <p>
+              The Audit Log page shows a filterable, paginated feed of all actions: logins,
+              inventory changes, session events, settings updates, and more. Filter by actor, action
+              type, object type, or date range. Export to CSV for external analysis.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Event Ledger</h4>
+            <p>
+              The consumption events ledger is append-only and immutable. Corrections are made by
+              creating a reversal event followed by a replacement, preserving a complete history of
+              all stock movements.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "orders",
+    title: "Orders & Purchasing",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Create and track purchase orders from par-level reorder suggestions through to vendor
+          fulfillment.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">PO Workflow</h4>
+            <p>
+              Generate orders from the Par Levels page when items fall below reorder thresholds.
+              Orders track line items with ordered quantities, received quantities, and fulfillment
+              progress. Copy the order as text to send to vendors.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Vendor Management</h4>
+            <p>
+              Track spend by vendor, view monthly purchasing trends, and see top ordered items. The
+              Trends view shows total spend, order count, average fulfillment time, and vendor
+              breakdowns over configurable time periods.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "benchmarking",
+    title: "Benchmarking",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Compare your performance against industry averages with opt-in anonymized benchmarking.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Opt-In Comparisons</h4>
+            <p>
+              Enable benchmarking in Settings to contribute anonymized metrics and receive industry
+              percentile rankings. Metrics include pour cost %, variance impact, mapping coverage,
+              count frequency, and more. Your data is never shared individually.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Portfolio Metrics</h4>
+            <p>
+              Multi-location businesses can compare performance across their own locations in the My
+              Locations table. See on-hand value, COGS, variance, pour cost, and mapping coverage
+              side by side. The Trend view tracks your business vs. industry median over time.
+            </p>
+          </div>
         </div>
       </div>
     ),
