@@ -10,7 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { useNetwork } from "@/lib/network-context";
@@ -46,15 +46,23 @@ interface LoggedTransfer {
 export default function TransferScreen() {
   const { selectedLocationId } = useAuth();
   const { isOnline } = useNetwork();
+  const params = useLocalSearchParams<{
+    itemId?: string;
+    itemName?: string;
+    quantity?: string;
+    fromSubAreaId?: string;
+    toSubAreaId?: string;
+  }>();
 
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [fromSubAreaId, setFromSubAreaId] = useState<string | null>(null);
-  const [toSubAreaId, setToSubAreaId] = useState<string | null>(null);
+  const [fromSubAreaId, setFromSubAreaId] = useState<string | null>(params.fromSubAreaId ?? null);
+  const [toSubAreaId, setToSubAreaId] = useState<string | null>(params.toSubAreaId ?? null);
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
-  const [quantity, setQuantity] = useState("");
+  const [quantity, setQuantity] = useState(params.quantity ?? "");
   const [loggedTransfers, setLoggedTransfers] = useState<LoggedTransfer[]>([]);
   const [showReview, setShowReview] = useState(false);
   const sessionCreating = useRef(false);
+  const prefillApplied = useRef(false);
 
   const utils = trpc.useUtils();
 
@@ -130,6 +138,27 @@ export default function TransferScreen() {
       }))
     );
   }, [areas]);
+
+  // Pre-fill item from voice command route params
+  const { data: prefillItem } = trpc.inventory.getById.useQuery(
+    { id: params.itemId! },
+    { enabled: !!params.itemId && !prefillApplied.current },
+  );
+
+  useEffect(() => {
+    if (prefillItem && !prefillApplied.current) {
+      prefillApplied.current = true;
+      setSelectedItem({
+        id: prefillItem.id,
+        name: prefillItem.name,
+        barcode: prefillItem.barcode ?? null,
+        packSize: prefillItem.packSize,
+        containerSize: prefillItem.containerSize,
+        baseUom: prefillItem.baseUom,
+        category: prefillItem.category ?? null,
+      });
+    }
+  }, [prefillItem]);
 
   const fromLabel = subAreaOptions.find((o) => o.id === fromSubAreaId)?.label ?? "Select";
   const toLabel = subAreaOptions.find((o) => o.id === toSubAreaId)?.label ?? "Select";

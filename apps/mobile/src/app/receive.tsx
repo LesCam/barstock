@@ -10,7 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { useNetwork } from "@/lib/network-context";
@@ -37,13 +37,19 @@ export default function ReceiveStockScreen() {
   const { selectedLocationId, user } = useAuth();
   const { isOnline } = useNetwork();
   const businessId = user?.businessId;
+  const params = useLocalSearchParams<{
+    itemId?: string;
+    itemName?: string;
+    quantity?: string;
+  }>();
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [countType, setCountType] = useState<"individual" | "pack">("individual");
-  const [quantity, setQuantity] = useState("");
+  const [quantity, setQuantity] = useState(params.quantity ?? "");
   const [notes, setNotes] = useState("");
+  const prefillApplied = useRef(false);
   const [vendorSearch, setVendorSearch] = useState("");
   const [showVendorPicker, setShowVendorPicker] = useState(false);
   const [showNewVendor, setShowNewVendor] = useState(false);
@@ -107,6 +113,27 @@ export default function ReceiveStockScreen() {
       router.back();
     });
   }, [selectedLocationId]);
+
+  // Pre-fill item from voice command route params
+  const { data: prefillItem } = trpc.inventory.getById.useQuery(
+    { id: params.itemId! },
+    { enabled: !!params.itemId && !prefillApplied.current },
+  );
+
+  useEffect(() => {
+    if (prefillItem && !prefillApplied.current) {
+      prefillApplied.current = true;
+      setSelectedItem({
+        id: prefillItem.id,
+        name: prefillItem.name,
+        barcode: prefillItem.barcode ?? null,
+        packSize: prefillItem.packSize,
+        containerSize: prefillItem.containerSize,
+        baseUom: prefillItem.baseUom,
+        category: prefillItem.category ?? null,
+      });
+    }
+  }, [prefillItem]);
 
   const { data: vendors } = trpc.vendors.list.useQuery(
     { businessId: businessId!, activeOnly: true },
