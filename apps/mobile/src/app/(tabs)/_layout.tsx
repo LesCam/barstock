@@ -65,6 +65,14 @@ function TabsLayout() {
           }}
         />
         <Tabs.Screen
+          name="usage"
+          options={{
+            title: "Usage",
+            tabBarLabel: "Usage",
+            href: canAccessInventory ? undefined : null,
+          }}
+        />
+        <Tabs.Screen
           name="guide"
           options={{
             title: "Product Guide",

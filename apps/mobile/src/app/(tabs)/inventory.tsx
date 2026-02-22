@@ -2,6 +2,8 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet } from "react-native
 import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
+import { BarSparkline } from "@/components/charts/BarSparkline";
+import { useUsageSparklines } from "@/lib/use-usage-sparklines";
 
 function formatStock(
   qty: number | null,
@@ -36,6 +38,7 @@ export default function InventoryTab() {
     { locationId: selectedLocationId! },
     { enabled: !!selectedLocationId }
   );
+  const { sparklineMap } = useUsageSparklines(selectedLocationId ?? null);
 
   return (
     <View style={styles.container}>
@@ -52,6 +55,11 @@ export default function InventoryTab() {
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.type}>{item.category?.name ?? "Uncategorized"}</Text>
             </View>
+            {sparklineMap.get(item.id) && (
+              <View style={styles.sparklineWrap}>
+                <BarSparkline data={sparklineMap.get(item.id)!} />
+              </View>
+            )}
             <Text style={styles.stock}>
               {formatStock(
                 item.onHandQty,
@@ -80,6 +88,7 @@ const styles = StyleSheet.create({
   info: { flex: 1, marginRight: 12 },
   name: { fontSize: 15, fontWeight: "500", color: "#EAF0FF" },
   type: { fontSize: 12, color: "#5A6A7A", marginTop: 2, textTransform: "capitalize" },
+  sparklineWrap: { marginRight: 12 },
   stock: { fontSize: 14, fontWeight: "600", color: "#4FC3F7" },
   empty: { textAlign: "center", color: "#5A6A7A", marginTop: 40, fontSize: 14 },
 });

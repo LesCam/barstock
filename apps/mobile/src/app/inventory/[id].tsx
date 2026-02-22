@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { trpc } from "@/lib/trpc";
+import { UsageChartCard } from "@/components/charts/UsageChartCard";
 
 function formatStock(
   qty: number | null,
@@ -90,6 +91,8 @@ export default function InventoryItemDetailScreen() {
         />
         <DetailRow label="Last Location" value={locationText} />
       </View>
+
+      <UsageChartCard itemId={id!} locationId={item.locationId} />
     </ScrollView>
   );
 }
