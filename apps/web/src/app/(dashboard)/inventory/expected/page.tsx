@@ -4,6 +4,7 @@ import { useState, useMemo, Fragment } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
+import { HelpLink } from "@/components/help-link";
 
 type SortKey =
   | "itemName"
@@ -171,7 +172,10 @@ export default function ExpectedOnHandPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">Expected On-Hand</h1>
+      <div className="mb-6 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Expected On-Hand</h1>
+        <HelpLink section="expected-inventory" tooltip="Learn about expected inventory" />
+      </div>
 
       {/* Summary cards */}
       <div className="mb-6 grid gap-4 sm:grid-cols-4">

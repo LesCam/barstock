@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import Link from "next/link";
+import { HelpLink } from "@/components/help-link";
 import { UOM } from "@barstock/types";
 
 const UOM_LABELS: Record<string, string> = {
@@ -324,7 +325,10 @@ export default function RecipesPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#EAF0FF]">Recipes</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#EAF0FF]">Recipes</h1>
+            <HelpLink section="recipes" tooltip="Learn about recipes & split ratios" />
+          </div>
           <p className="mt-1 text-sm text-[#EAF0FF]/60">
             Define cocktail and drink recipes for multi-ingredient POS depletion.
           </p>

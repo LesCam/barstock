@@ -31,6 +31,7 @@ const navItems = [
   { href: "/notifications", label: "Notifications", icon: "🔔" },
   { href: "/art", label: "Art Gallery", icon: "🎨" },
   { href: "/guide", label: "Product Guide", icon: "📖" },
+  { href: "/help", label: "Help", icon: "❓" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 

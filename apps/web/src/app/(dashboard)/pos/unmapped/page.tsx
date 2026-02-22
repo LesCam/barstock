@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { useState, useMemo } from "react";
+import { HelpLink } from "@/components/help-link";
 import { MappingMode } from "@barstock/types";
 
 const MODE_OPTIONS = [
@@ -136,7 +137,10 @@ export default function UnmappedPage() {
 
   return (
     <div>
-      <h1 className="mb-2 text-2xl font-bold text-[#EAF0FF]">Unmapped POS Items</h1>
+      <div className="mb-2 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Unmapped POS Items</h1>
+        <HelpLink section="pos-mapping" tooltip="Learn about POS mapping" />
+      </div>
       <p className="mb-6 text-sm text-[#EAF0FF]/60">
         Items sold in the last 7 days that have no inventory mapping. Map them to start tracking depletion.
       </p>

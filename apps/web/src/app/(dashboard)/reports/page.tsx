@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
+import { HelpLink } from "@/components/help-link";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend,
@@ -791,7 +792,10 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">Reports</h1>
+      <div className="mb-6 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Reports</h1>
+        <HelpLink section="reports" tooltip="Learn about available reports" />
+      </div>
 
       {/* Date range picker */}
       <div className="mb-6 flex gap-3">

@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
+import { HelpLink } from "@/components/help-link";
 
 const ADMIN_ROLES = ["platform_admin", "business_admin"];
 
@@ -39,7 +40,10 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-[#EAF0FF]">Settings</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Settings</h1>
+        <HelpLink section="settings-roles" tooltip="Learn about settings & roles" />
+      </div>
 
       {/* Quick links */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

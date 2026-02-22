@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
+import { HelpLink } from "@/components/help-link";
 import { UOM } from "@barstock/types";
 
 type SortKey = "name" | "category";
@@ -141,7 +142,10 @@ export default function InventoryPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Inventory Catalog</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Inventory Catalog</h1>
+          <HelpLink section="counting-methods" tooltip="Learn about counting methods" />
+        </div>
         <button
           onClick={() => setShowCreate((v) => !v)}
           className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"

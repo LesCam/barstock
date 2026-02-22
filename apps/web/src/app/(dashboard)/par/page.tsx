@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
+import { HelpLink } from "@/components/help-link";
 
 const ADMIN_ROLES = ["platform_admin", "business_admin", "manager"];
 
@@ -204,7 +205,10 @@ export default function ParLevelsPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Par Levels</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Par Levels</h1>
+          <HelpLink section="par-levels" tooltip="Learn about par levels & reorder" />
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => setView("manage")}
