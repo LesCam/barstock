@@ -66,32 +66,53 @@ export default function InventoryTab() {
         data={items}
         keyExtractor={(i) => i.id}
         ListHeaderComponent={
-          posCoverage && posCoverage.totalItems > 0 ? (
-            <View style={styles.coverageCard}>
-              <View style={styles.coverageHeader}>
-                <Text style={styles.coverageTitle}>POS Coverage</Text>
-                <Text style={[styles.coveragePercent, { color: coverageColor }]}>
-                  {posCoverage.mappedPercent}%
+          <>
+            {posCoverage && posCoverage.totalItems > 0 && (
+              <View style={styles.coverageCard}>
+                <View style={styles.coverageHeader}>
+                  <Text style={styles.coverageTitle}>POS Coverage</Text>
+                  <Text style={[styles.coveragePercent, { color: coverageColor }]}>
+                    {posCoverage.mappedPercent}%
+                  </Text>
+                </View>
+                <View style={styles.coverageBar}>
+                  <View
+                    style={[
+                      styles.coverageBarFill,
+                      { width: `${posCoverage.mappedPercent}%`, backgroundColor: coverageColor },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.coverageDetail}>
+                  {posCoverage.mappedItems} of {posCoverage.totalItems} POS items mapped
                 </Text>
+                {posCoverage.totalItems - posCoverage.mappedItems > 0 && (
+                  <Text style={styles.coverageWarning}>
+                    {posCoverage.totalItems - posCoverage.mappedItems} unmapped items — map on web to enable depletion tracking
+                  </Text>
+                )}
               </View>
-              <View style={styles.coverageBar}>
-                <View
-                  style={[
-                    styles.coverageBarFill,
-                    { width: `${posCoverage.mappedPercent}%`, backgroundColor: coverageColor },
-                  ]}
-                />
-              </View>
-              <Text style={styles.coverageDetail}>
-                {posCoverage.mappedItems} of {posCoverage.totalItems} POS items mapped
-              </Text>
-              {posCoverage.totalItems - posCoverage.mappedItems > 0 && (
-                <Text style={styles.coverageWarning}>
-                  {posCoverage.totalItems - posCoverage.mappedItems} unmapped items — map on web to enable depletion tracking
-                </Text>
-              )}
-            </View>
-          ) : null
+            )}
+            {(() => {
+              const belowMinCount = Array.from(parMap.values()).filter(
+                (p) => p.status === "red"
+              ).length;
+              return (
+                <TouchableOpacity
+                  style={styles.parCard}
+                  onPress={() => router.push("/par-levels" as any)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.parCardTitle}>Par Levels</Text>
+                  <Text style={styles.parCardMeta}>
+                    {belowMinCount > 0
+                      ? `${belowMinCount} item${belowMinCount !== 1 ? "s" : ""} below min`
+                      : "View par levels & days to stockout"}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })()}
+          </>
         }
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -174,4 +195,15 @@ const styles = StyleSheet.create({
   coverageBarFill: { height: 6, borderRadius: 3 },
   coverageDetail: { fontSize: 12, color: "#EAF0FF", opacity: 0.7 },
   coverageWarning: { fontSize: 11, color: "#FBBF24", marginTop: 6 },
+  parCard: {
+    backgroundColor: "#16283F",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+    marginHorizontal: 12,
+    marginBottom: 12,
+    padding: 14,
+  },
+  parCardTitle: { fontSize: 14, fontWeight: "600", color: "#E9B44C" },
+  parCardMeta: { fontSize: 12, color: "#8899AA", marginTop: 4 },
 });

@@ -12,7 +12,7 @@ import {
   LineChart, Line, ComposedChart,
 } from "recharts";
 
-type ActiveTab = "variance" | "cogs" | "usage" | "patterns" | "staff" | "recipes" | "pourCost";
+type ActiveTab = "variance" | "cogs" | "usage" | "patterns" | "staff" | "recipes" | "pourCost" | "orders";
 type VarianceSortKey = "itemName" | "categoryName" | "variance" | "variancePercent" | "valueImpact";
 type UsageSortKey = "name" | "categoryName" | "quantityUsed" | "unitCost" | "totalCost";
 type PatternSortKey = "itemName" | "categoryName" | "sessionsAppeared" | "avgVariance" | "totalEstimatedLoss" | "trend";
@@ -781,6 +781,43 @@ export default function ReportsPage() {
     { enabled: !!locationId && activeTab === "pourCost" }
   );
 
+  // Orders tab queries
+  const { data: orderTrends, isLoading: orderTrendsLoading } = trpc.purchaseOrders.orderTrends.useQuery(
+    { locationId: locationId!, monthsBack: 6 },
+    { enabled: !!locationId && activeTab === "orders" }
+  );
+  const { data: parLevelsList } = trpc.parLevels.list.useQuery(
+    { locationId: locationId! },
+    { enabled: !!locationId && activeTab === "orders" }
+  );
+  const { data: ordersList } = trpc.purchaseOrders.list.useQuery(
+    { locationId: locationId! },
+    { enabled: !!locationId && activeTab === "orders" }
+  );
+
+  const ordersSummary = useMemo(() => {
+    if (!parLevelsList || !ordersList) return null;
+    const totalItems = parLevelsList.length;
+    const withPar = parLevelsList.filter((i: any) => i.parLevelId).length;
+    const parCoverage = totalItems > 0 ? (withPar / totalItems) * 100 : 0;
+    const belowMin = parLevelsList.filter((i: any) => i.needsReorder).length;
+    const daysArr = parLevelsList
+      .map((i: any) => i.daysToStockout)
+      .filter((d: any) => d != null) as number[];
+    const avgDays = daysArr.length > 0 ? daysArr.reduce((s, d) => s + d, 0) / daysArr.length : null;
+    const openPOs = ordersList.filter((po: any) => po.status !== "closed").length;
+    return { parCoverage, belowMin, avgDays, openPOs };
+  }, [parLevelsList, ordersList]);
+
+  const ordersMonthlyChart = useMemo(() => {
+    if (!orderTrends?.monthlySpend) return [];
+    return orderTrends.monthlySpend.map((m: any) => ({
+      label: new Date(m.month).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      spend: m.totalSpend,
+      orders: m.orderCount,
+    }));
+  }, [orderTrends]);
+
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: "variance", label: "Variance" },
     { key: "cogs", label: "COGS" },
@@ -789,6 +826,7 @@ export default function ReportsPage() {
     { key: "staff", label: "Staff" },
     { key: "recipes", label: "Recipes" },
     { key: "pourCost", label: "Pour Cost" },
+    { key: "orders", label: "Orders" },
   ];
 
   const exportCurrentTab = useCallback(() => {
@@ -888,8 +926,19 @@ export default function ReportsPage() {
         downloadCsv(headers, rows, `pour-cost-${dateSuffix}.csv`);
         break;
       }
+      case "orders": {
+        const headers = ["Vendor", "Orders", "Total Spend", "Last Order"];
+        const rows = (orderTrends?.byVendor ?? []).map((v: any) => [
+          v.vendorName,
+          String(v.orderCount),
+          v.totalSpend.toFixed(2),
+          new Date(v.lastOrder).toLocaleDateString(),
+        ]);
+        downloadCsv(headers, rows, `orders-${dateSuffix}.csv`);
+        break;
+      }
     }
-  }, [activeTab, dateRange, sortedVarianceItems, cogs, sortedUsageItems, sortedPatternItems, sortedStaff, sortedRecipes, pourCostData]);
+  }, [activeTab, dateRange, sortedVarianceItems, cogs, sortedUsageItems, sortedPatternItems, sortedStaff, sortedRecipes, pourCostData, orderTrends]);
 
   return (
     <div>
@@ -2157,6 +2206,138 @@ export default function ReportsPage() {
             </>
           ) : (
             <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No data available.</p>
+          )}
+        </section>
+      )}
+
+      {/* ── Orders tab ── */}
+      {activeTab === "orders" && (
+        <section>
+          <h2 className="mb-4 text-lg font-semibold">Ordering & Par Analytics</h2>
+
+          {orderTrendsLoading ? (
+            <div className="space-y-4">
+              <div className="h-20 animate-pulse rounded-lg bg-white/5" />
+              <div className="h-64 animate-pulse rounded-lg bg-white/5" />
+            </div>
+          ) : (
+            <>
+              {/* Summary cards */}
+              {ordersSummary && (
+                <div className="mb-6 grid gap-4 sm:grid-cols-4">
+                  <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                    <p className="text-sm text-[#EAF0FF]/60">Par Coverage</p>
+                    <p className="text-2xl font-bold">{ordersSummary.parCoverage.toFixed(0)}%</p>
+                  </div>
+                  <div className={`rounded-lg border p-4 ${ordersSummary.belowMin > 0 ? "border-red-500/30 bg-[#16283F]" : "border-white/10 bg-[#16283F]"}`}>
+                    <p className={`text-sm ${ordersSummary.belowMin > 0 ? "text-red-400" : "text-[#EAF0FF]/60"}`}>Below Min Level</p>
+                    <p className={`text-2xl font-bold ${ordersSummary.belowMin > 0 ? "text-red-400" : ""}`}>{ordersSummary.belowMin}</p>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                    <p className="text-sm text-[#EAF0FF]/60">Avg Days to Stockout</p>
+                    <p className="text-2xl font-bold">
+                      {ordersSummary.avgDays != null ? `${ordersSummary.avgDays.toFixed(1)}d` : "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-[#E9B44C]/30 bg-[#16283F] p-4">
+                    <p className="text-sm text-[#E9B44C]">Open POs</p>
+                    <p className="text-2xl font-bold text-[#E9B44C]">{ordersSummary.openPOs}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Monthly spend chart */}
+              {orderTrends && (
+                <div className="mb-8">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-base font-semibold">Monthly Spend</h3>
+                    <div className="flex gap-4 text-xs text-[#EAF0FF]/50">
+                      <span>Total: <strong className="text-[#EAF0FF]">${(orderTrends.totalSpend ?? 0).toFixed(2)}</strong></span>
+                      <span>Orders: <strong className="text-[#EAF0FF]">{orderTrends.totalOrders ?? 0}</strong></span>
+                      <span>Avg Fulfillment: <strong className="text-[#EAF0FF]">{orderTrends.avgFulfillmentDays != null ? `${orderTrends.avgFulfillmentDays.toFixed(1)}d` : "—"}</strong></span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                    {ordersMonthlyChart.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={ordersMonthlyChart}>
+                          <XAxis dataKey="label" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                          <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                            formatter={(value, name) => [
+                              name === "spend" ? `$${Number(value ?? 0).toFixed(2)}` : value,
+                              name === "spend" ? "Spend" : "Orders",
+                            ]}
+                          />
+                          <Bar dataKey="spend" fill="#E9B44C" radius={[4, 4, 0, 0]} name="spend" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="py-8 text-center text-sm text-[#EAF0FF]/40">No monthly spend data.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Vendor breakdown table */}
+              {orderTrends && (orderTrends.byVendor ?? []).length > 0 && (
+                <div className="mb-8">
+                  <h3 className="mb-3 text-base font-semibold">Vendor Breakdown</h3>
+                  <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                        <tr>
+                          <th className="px-4 py-3 font-medium">Vendor</th>
+                          <th className="px-4 py-3 font-medium">Orders</th>
+                          <th className="px-4 py-3 font-medium">Total Spend</th>
+                          <th className="px-4 py-3 font-medium">Last Order</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {orderTrends.byVendor.map((v: any) => (
+                          <tr key={v.vendorId} className="hover:bg-[#0B1623]/60">
+                            <td className="px-4 py-3 font-medium">{v.vendorName}</td>
+                            <td className="px-4 py-3">{v.orderCount}</td>
+                            <td className="px-4 py-3">${v.totalSpend.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-xs text-[#EAF0FF]/60">
+                              {new Date(v.lastOrder).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Top ordered items */}
+              {orderTrends && (orderTrends.topItems ?? []).length > 0 && (
+                <div>
+                  <h3 className="mb-3 text-base font-semibold">Top Ordered Items</h3>
+                  <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                        <tr>
+                          <th className="px-4 py-3 font-medium">Item</th>
+                          <th className="px-4 py-3 font-medium text-right">Total Ordered</th>
+                          <th className="px-4 py-3 font-medium text-right">Times Ordered</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {orderTrends.topItems.map((item: any) => (
+                          <tr key={item.itemId} className="hover:bg-[#0B1623]/60">
+                            <td className="px-4 py-3 font-medium">{item.itemName}</td>
+                            <td className="px-4 py-3 text-right">{item.totalOrdered.toFixed(1)}</td>
+                            <td className="px-4 py-3 text-right">{item.timesOrdered}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
       )}

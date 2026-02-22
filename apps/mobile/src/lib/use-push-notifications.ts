@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { trpcVanilla } from "./trpc";
 import { mapNotificationRoute } from "./notification-route-map";
 
-let Notifications: typeof import("expo-notifications") | null = null;
+let Notifications: any = null;
 try {
   Notifications = require("expo-notifications");
 } catch {
@@ -77,7 +77,7 @@ export function usePushNotifications(isAuthenticated: boolean) {
     // Handle notification taps
     try {
       responseListener.current =
-        Notifications!.addNotificationResponseReceivedListener((response) => {
+        Notifications!.addNotificationResponseReceivedListener((response: any) => {
           const data = response.notification.request.content.data;
           const linkUrl = data?.linkUrl as string | undefined;
           const notificationId = data?.notificationId as string | undefined;

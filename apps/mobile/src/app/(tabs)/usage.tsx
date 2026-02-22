@@ -5,6 +5,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
   StyleSheet,
 } from "react-native";
 import { router } from "expo-router";
@@ -31,9 +32,15 @@ function formatBucketLabel(dateStr: string, period: Period): string {
 }
 
 export default function UsageTab() {
-  const { selectedLocationId } = useAuth();
+  const { selectedLocationId, user } = useAuth();
   const [period, setPeriod] = useState<Period>("7d");
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const { fromDate, toDate } = useMemo(() => getDateRange(period), [period]);
+
+  const { data: categories } = trpc.itemCategories.list.useQuery(
+    { businessId: user?.businessId! },
+    { enabled: !!user?.businessId }
+  );
 
   const { data, isLoading } = trpc.reports.usageOverTime.useQuery(
     {
@@ -41,6 +48,7 @@ export default function UsageTab() {
       fromDate,
       toDate,
       granularity: "day",
+      categoryId: categoryId || undefined,
     },
     {
       enabled: !!selectedLocationId,
@@ -103,6 +111,54 @@ export default function UsageTab() {
               ))}
             </View>
 
+            {/* Category filter chips */}
+            {categories && categories.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.categoryScroll}
+                contentContainerStyle={styles.categoryScrollContent}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.categoryChip,
+                    categoryId === null && styles.categoryChipActive,
+                  ]}
+                  onPress={() => setCategoryId(null)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      categoryId === null && styles.categoryChipTextActive,
+                    ]}
+                  >
+                    All
+                  </Text>
+                </TouchableOpacity>
+                {categories.map((cat: any) => (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[
+                      styles.categoryChip,
+                      categoryId === cat.id && styles.categoryChipActive,
+                    ]}
+                    onPress={() =>
+                      setCategoryId(categoryId === cat.id ? null : cat.id)
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        categoryId === cat.id && styles.categoryChipTextActive,
+                      ]}
+                    >
+                      {cat.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
             {/* Aggregate chart */}
             <View style={styles.chartCard}>
               <Text style={styles.sectionTitle}>Daily Usage</Text>
@@ -159,7 +215,7 @@ const styles = StyleSheet.create({
   toggleRow: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   pill: {
     paddingHorizontal: 16,
@@ -176,6 +232,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   pillTextActive: {
+    color: "#0B1623",
+  },
+  categoryScroll: {
+    marginBottom: 16,
+  },
+  categoryScrollContent: {
+    gap: 8,
+  },
+  categoryChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "#16283F",
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  categoryChipActive: {
+    backgroundColor: "#E9B44C",
+    borderColor: "#E9B44C",
+  },
+  categoryChipText: {
+    fontSize: 12,
+    color: "#8899AA",
+    fontWeight: "600",
+  },
+  categoryChipTextActive: {
     color: "#0B1623",
   },
   chartCard: {
