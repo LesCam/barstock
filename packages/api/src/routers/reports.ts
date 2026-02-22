@@ -1,7 +1,8 @@
-import { router, protectedProcedure, requireRole } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema } from "@barstock/validators";
+import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
+import { BenchmarkService } from "../services/benchmark.service";
 
 export const reportsRouter = router({
   variance: protectedProcedure
@@ -192,5 +193,50 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new ReportService(ctx.prisma);
       return svc.getForecastItemDetail(input.locationId, input.itemId);
+    }),
+
+  // ─── Benchmark Endpoints ──────────────────────────────────
+
+  captureSnapshots: protectedProcedure
+    .use(requireRole("platform_admin"))
+    .input(captureSnapshotsSchema)
+    .mutation(({ ctx }) => {
+      const svc = new BenchmarkService(ctx.prisma);
+      return svc.captureAllSnapshots();
+    }),
+
+  captureBusinessSnapshot: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(captureBusinessSnapshotSchema)
+    .mutation(({ ctx, input }) => {
+      const svc = new BenchmarkService(ctx.prisma);
+      return svc.captureBusinessSnapshots(input.businessId);
+    }),
+
+  industryBenchmarks: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(industryBenchmarksSchema)
+    .query(({ ctx, input }) => {
+      const svc = new BenchmarkService(ctx.prisma);
+      return svc.getIndustryPercentiles(input.businessId, input.snapshotDate);
+    }),
+
+  benchmarkTrend: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(benchmarkTrendSchema)
+    .query(({ ctx, input }) => {
+      const svc = new BenchmarkService(ctx.prisma);
+      return svc.getBenchmarkTrend(input.businessId, input.weeks);
+    }),
+
+  platformBenchmarks: protectedProcedure
+    .use(requireRole("platform_admin"))
+    .input(platformBenchmarksSchema)
+    .query(({ ctx }) => {
+      const svc = new BenchmarkService(ctx.prisma);
+      return svc.getPlatformBenchmarks();
     }),
 });

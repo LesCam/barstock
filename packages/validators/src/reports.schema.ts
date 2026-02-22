@@ -155,3 +155,23 @@ export const forecastItemDetailQuerySchema = z.object({
   locationId: z.string().uuid(),
   itemId: z.string().uuid(),
 });
+
+// ─── Benchmark Schemas ──────────────────────────────────────
+
+export const captureSnapshotsSchema = z.object({});
+
+export const captureBusinessSnapshotSchema = z.object({
+  businessId: z.string().uuid(),
+});
+
+export const industryBenchmarksSchema = z.object({
+  businessId: z.string().uuid(),
+  snapshotDate: z.coerce.date().optional(),
+});
+
+export const benchmarkTrendSchema = z.object({
+  businessId: z.string().uuid(),
+  weeks: z.number().int().min(2).max(52).default(12),
+});
+
+export const platformBenchmarksSchema = z.object({});

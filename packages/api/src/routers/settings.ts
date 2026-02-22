@@ -63,6 +63,7 @@ export const settingsRouter = router({
         autoLock: input.autoLock,
         alertRules: input.alertRules,
         endOfDayTime: input.endOfDayTime,
+        benchmarking: input.benchmarking,
       });
 
       await auditService.log({

@@ -68,6 +68,7 @@ export default function SettingsPage() {
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
       <AutoLockPolicySection businessId={businessId} canEdit={canEdit} />
       <AlertRulesSection businessId={businessId} canEdit={canEdit} />
+      <BenchmarkingSection businessId={businessId} canEdit={canEdit} />
       {locationId && <ScaleProfilesSection locationId={locationId} canEdit={canEdit} />}
     </div>
   );
@@ -663,6 +664,69 @@ function AutoLockPolicySection({ businessId, canEdit }: { businessId: string; ca
         )}
       </div>
 
+      {updateMutation.error && (
+        <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
+      )}
+    </div>
+  );
+}
+
+function BenchmarkingSection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {
+  const { data: settings, isLoading } = trpc.settings.get.useQuery({ businessId });
+  const updateMutation = trpc.settings.update.useMutation();
+  const utils = trpc.useUtils();
+
+  if (isLoading || !settings) return <div className="text-[#EAF0FF]/60">Loading benchmarking settings...</div>;
+
+  const optedIn = settings.benchmarking?.optedIn ?? false;
+
+  function handleToggle() {
+    const newOptedIn = !optedIn;
+    updateMutation.mutate(
+      {
+        businessId,
+        benchmarking: {
+          optedIn: newOptedIn,
+          optedInAt: newOptedIn ? new Date().toISOString() : null,
+        },
+      },
+      { onSuccess: () => utils.settings.get.invalidate({ businessId }) }
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <h2 className="mb-4 text-lg font-semibold">Benchmarking</h2>
+      <div className="flex items-start gap-4">
+        <button
+          type="button"
+          disabled={!canEdit || updateMutation.isPending}
+          onClick={handleToggle}
+          className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+            optedIn ? "bg-[#E9B44C]" : "bg-white/10"
+          } ${!canEdit ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+        >
+          <span
+            className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+              optedIn ? "translate-x-5" : "translate-x-0"
+            }`}
+          />
+        </button>
+        <div className="flex-1">
+          <span className="text-sm text-[#EAF0FF]/80">
+            Share anonymized data for industry benchmarking
+          </span>
+          <p className="mt-1 text-xs text-[#EAF0FF]/40">
+            Your data is anonymized — other businesses never see your name or specifics.
+            You&apos;ll gain access to industry percentile comparisons on the Benchmarking dashboard.
+          </p>
+          {optedIn && settings.benchmarking?.optedInAt && (
+            <p className="mt-1 text-xs text-[#E9B44C]/60">
+              Opted in {new Date(settings.benchmarking.optedInAt).toLocaleDateString()}
+            </p>
+          )}
+        </div>
+      </div>
       {updateMutation.error && (
         <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
       )}

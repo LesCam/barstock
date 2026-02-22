@@ -192,9 +192,10 @@ model Business {
   kegSizes         KegSize[]
   bottleTemplates  BottleTemplate[]
   auditLogs        AuditLog[]
-  businessSettings BusinessSettings?
-  notifications    Notification[]
-  artists          Artist[]
+  businessSettings    BusinessSettings?
+  benchmarkSnapshots  BenchmarkSnapshot[]
+  notifications       Notification[]
+  artists             Artist[]
   artworks         Artwork[]
   artSales         ArtSale[]
   vendors          Vendor[]
@@ -237,8 +238,9 @@ model Location {
   barAreas         BarArea[]
   guideCategories  ProductGuideCategory[]
   guideItems       ProductGuideItem[]
-  scaleProfiles    ScaleProfile[]
-  recipes          Recipe[]
+  scaleProfiles      ScaleProfile[]
+  benchmarkSnapshots BenchmarkSnapshot[]
+  recipes            Recipe[]
   parLevels        ParLevel[]
   purchaseOrders   PurchaseOrder[]
   csvImports       CSVImport[]
@@ -976,6 +978,23 @@ model BusinessSettings {
   business Business @relation(fields: [businessId], references: [id])
 
   @@map("business_settings")
+}
+
+model BenchmarkSnapshot {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId   String   @map("business_id") @db.Uuid
+  locationId   String   @map("location_id") @db.Uuid
+  snapshotDate DateTime @map("snapshot_date") @db.Date
+  metricsJson  Json     @map("metrics_json")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  business Business @relation(fields: [businessId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@unique([locationId, snapshotDate], map: "uq_benchmark_snapshots_loc_date")
+  @@index([snapshotDate], map: "ix_benchmark_snapshots_date")
+  @@index([locationId], map: "ix_benchmark_snapshots_location")
+  @@map("benchmark_snapshots")
 }
 
 model Notification {

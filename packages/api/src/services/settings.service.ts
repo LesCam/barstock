@@ -1,12 +1,18 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
 import type { CapabilityToggles, AutoLockPolicy, AlertRules } from "@barstock/validators";
 
+export interface BenchmarkingSettings {
+  optedIn: boolean;
+  optedInAt: string | null;
+}
+
 export interface BusinessSettingsData {
   capabilities: CapabilityToggles;
   autoLock: AutoLockPolicy;
   alertRules: AlertRules;
   lastAlertEvaluation?: string;
   endOfDayTime: string;
+  benchmarking: BenchmarkingSettings;
 }
 
 const DEFAULT_SETTINGS: BusinessSettingsData = {
@@ -39,6 +45,10 @@ const DEFAULT_SETTINGS: BusinessSettingsData = {
   },
   lastAlertEvaluation: undefined,
   endOfDayTime: "04:00",
+  benchmarking: {
+    optedIn: false,
+    optedInAt: null,
+  },
 };
 
 export class SettingsService {
@@ -67,6 +77,10 @@ export class SettingsService {
       },
       lastAlertEvaluation: stored.lastAlertEvaluation,
       endOfDayTime: stored.endOfDayTime ?? DEFAULT_SETTINGS.endOfDayTime,
+      benchmarking: {
+        ...DEFAULT_SETTINGS.benchmarking,
+        ...stored.benchmarking,
+      },
     };
   }
 
@@ -78,6 +92,7 @@ export class SettingsService {
       alertRules?: Partial<AlertRules>;
       lastAlertEvaluation?: string;
       endOfDayTime?: string;
+      benchmarking?: Partial<BenchmarkingSettings>;
     }
   ): Promise<BusinessSettingsData> {
     const current = await this.getSettings(businessId);
@@ -96,6 +111,10 @@ export class SettingsService {
       },
       lastAlertEvaluation: patch.lastAlertEvaluation ?? current.lastAlertEvaluation,
       endOfDayTime: patch.endOfDayTime ?? current.endOfDayTime,
+      benchmarking: {
+        ...current.benchmarking,
+        ...patch.benchmarking,
+      },
     };
 
     await this.prisma.businessSettings.upsert({

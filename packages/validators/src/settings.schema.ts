@@ -42,6 +42,13 @@ export const alertRulesSchema = z.object({
 
 export type AlertRules = z.infer<typeof alertRulesSchema>;
 
+export const benchmarkingSettingsSchema = z.object({
+  optedIn: z.boolean().default(false),
+  optedInAt: z.string().datetime().nullable().default(null),
+});
+
+export type BenchmarkingSettings = z.infer<typeof benchmarkingSettingsSchema>;
+
 export const settingsUpdateSchema = z.object({
   businessId: z.string().uuid(),
   capabilities: capabilityTogglesSchema.partial().optional(),
@@ -49,6 +56,7 @@ export const settingsUpdateSchema = z.object({
   alertRules: alertRulesSchema.partial().optional(),
   lastAlertEvaluation: z.string().datetime().optional(),
   endOfDayTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  benchmarking: benchmarkingSettingsSchema.partial().optional(),
 });
 
 export const settingsGetSchema = z.object({

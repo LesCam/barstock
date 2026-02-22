@@ -613,3 +613,19 @@ ALTER TABLE inventory_session_lines ADD COLUMN IF NOT EXISTS counted_by UUID REF
 
 -- v1.15 PATCH: UPDATED_AT for conflict detection on session lines
 ALTER TABLE inventory_session_lines ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- ===========================
+-- v1.16 PATCH: BENCHMARK SNAPSHOTS
+-- ===========================
+
+CREATE TABLE IF NOT EXISTS benchmark_snapshots (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id   UUID NOT NULL REFERENCES businesses(id),
+  location_id   UUID NOT NULL REFERENCES locations(id),
+  snapshot_date DATE NOT NULL,
+  metrics_json  JSONB NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_benchmark_snapshots_date ON benchmark_snapshots(snapshot_date);
+CREATE INDEX IF NOT EXISTS ix_benchmark_snapshots_location ON benchmark_snapshots(location_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_benchmark_snapshots_loc_date ON benchmark_snapshots(location_id, snapshot_date);
