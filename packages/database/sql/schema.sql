@@ -639,3 +639,21 @@ ALTER TABLE businesses
   ADD COLUMN IF NOT EXISTS subscription_tier subscription_tier_t NOT NULL DEFAULT 'starter';
 
 CREATE INDEX IF NOT EXISTS ix_businesses_tier ON businesses(subscription_tier);
+
+-- v1.18: Master product catalog (cross-tenant, crowdsourced)
+CREATE TABLE IF NOT EXISTS master_products (
+  id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  barcode                   TEXT NOT NULL UNIQUE,
+  name                      TEXT NOT NULL,
+  category_hint             TEXT,
+  base_uom                  uom_t NOT NULL DEFAULT 'oz',
+  container_size_ml         NUMERIC,
+  empty_bottle_weight_g     NUMERIC,
+  full_bottle_weight_g      NUMERIC,
+  density_g_per_ml          NUMERIC,
+  contribution_count        INT NOT NULL DEFAULT 1,
+  last_contributed_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_contributed_by_business_id UUID REFERENCES businesses(id),
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_master_products_barcode ON master_products(barcode);

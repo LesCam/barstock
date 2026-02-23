@@ -62,6 +62,15 @@ export default function InventoryTab() {
 
   return (
     <View style={styles.container}>
+      {/* Scan to Import FAB */}
+      <TouchableOpacity
+        style={styles.scanFab}
+        onPress={() => router.push("/scan-import" as any)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.scanFabText}>Scan Import</Text>
+      </TouchableOpacity>
+
       <FlatList
         data={items}
         keyExtractor={(i) => i.id}
@@ -206,4 +215,20 @@ const styles = StyleSheet.create({
   },
   parCardTitle: { fontSize: 14, fontWeight: "600", color: "#E9B44C" },
   parCardMeta: { fontSize: 12, color: "#8899AA", marginTop: 4 },
+  scanFab: {
+    position: "absolute",
+    bottom: 92,
+    right: 16,
+    backgroundColor: "#E9B44C",
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    zIndex: 1000,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  scanFabText: { color: "#0B1623", fontSize: 13, fontWeight: "700" },
 });

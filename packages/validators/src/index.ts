@@ -19,3 +19,4 @@ export * from "./item-category.schema";
 export * from "./recipe.schema";
 export * from "./par-level.schema";
 export * from "./purchase-order.schema";
+export * from "./master-product.schema";

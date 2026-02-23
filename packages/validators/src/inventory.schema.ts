@@ -56,6 +56,33 @@ export const onHandQuerySchema = z.object({
   asOf: z.coerce.date().optional(),
 });
 
+export const inventoryItemBulkCreateSchema = z.object({
+  locationId: z.string().uuid(),
+  items: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(255),
+        categoryId: z.string().uuid(),
+        barcode: z.string().optional(),
+        baseUom: z.nativeEnum(UOM),
+        packSize: z.number().positive().optional(),
+        packUom: z.nativeEnum(UOM).optional(),
+        containerSize: z.number().positive().optional(),
+        containerUom: z.nativeEnum(UOM).optional(),
+        containerSizeMl: z.number().positive().optional(),
+        emptyBottleWeightG: z.number().positive().optional(),
+        fullBottleWeightG: z.number().positive().optional(),
+        densityGPerMl: z.number().positive().optional(),
+      })
+    )
+    .min(1)
+    .max(500),
+});
+
+export type InventoryItemBulkCreateInput = z.infer<
+  typeof inventoryItemBulkCreateSchema
+>;
+
 export const setItemVendorsSchema = z.object({
   inventoryItemId: z.string().uuid(),
   vendors: z.array(

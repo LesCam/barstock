@@ -209,7 +209,8 @@ model Business {
   artSales         ArtSale[]
   vendors          Vendor[]
   itemCategories   InventoryItemCategory[]
-  staffInvites     StaffInvite[]
+  staffInvites              StaffInvite[]
+  masterProductContributions MasterProduct[]
 
   @@map("businesses")
 }
@@ -959,6 +960,29 @@ model PurchaseOrderLine {
 
   @@unique([purchaseOrderId, inventoryItemId], map: "ux_po_line_item")
   @@map("purchase_order_lines")
+}
+
+// ─── Master Product Catalog (cross-tenant) ──────────────────
+
+model MasterProduct {
+  id                          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  barcode                     String    @unique
+  name                        String
+  categoryHint                String?   @map("category_hint")
+  baseUom                     UomT      @default(oz) @map("base_uom")
+  containerSizeMl             Decimal?  @map("container_size_ml")
+  emptyBottleWeightG          Decimal?  @map("empty_bottle_weight_g")
+  fullBottleWeightG           Decimal?  @map("full_bottle_weight_g")
+  densityGPerMl               Decimal?  @map("density_g_per_ml")
+  contributionCount           Int       @default(1) @map("contribution_count")
+  lastContributedAt           DateTime  @default(now()) @map("last_contributed_at") @db.Timestamptz()
+  lastContributedByBusinessId String?   @map("last_contributed_by_business_id") @db.Uuid
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  lastContributedByBusiness Business? @relation(fields: [lastContributedByBusinessId], references: [id])
+
+  @@index([barcode], map: "ix_master_products_barcode")
+  @@map("master_products")
 }
 
 // ─── Platform Infrastructure ────────────────────────────────

@@ -55,6 +55,13 @@ export const benchmarkingSettingsSchema = z.object({
 
 export type BenchmarkingSettings = z.infer<typeof benchmarkingSettingsSchema>;
 
+export const masterProductSharingSchema = z.object({
+  optedIn: z.boolean().default(false),
+  optedInAt: z.string().datetime().nullable().default(null),
+});
+
+export type MasterProductSharingSettings = z.infer<typeof masterProductSharingSchema>;
+
 export const subscriptionOverridesSchema = z.object({
   maxLocations: z.number().int().min(1).nullable().optional(),
   maxUsers: z.number().int().min(1).nullable().optional(),
@@ -70,6 +77,7 @@ export const settingsUpdateSchema = z.object({
   lastAlertEvaluation: z.string().datetime().optional(),
   endOfDayTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   benchmarking: benchmarkingSettingsSchema.partial().optional(),
+  masterProductSharing: masterProductSharingSchema.partial().optional(),
   subscriptionOverrides: subscriptionOverridesSchema.optional(),
 });
 

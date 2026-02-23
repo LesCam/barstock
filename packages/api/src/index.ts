@@ -28,6 +28,8 @@ import { recipesRouter } from "./routers/recipes";
 import { parLevelsRouter } from "./routers/par-levels";
 import { purchaseOrdersRouter } from "./routers/purchase-orders";
 import { subscriptionRouter } from "./routers/subscription";
+import { masterProductsRouter } from "./routers/master-products";
+import { scanImportRouter } from "./routers/scan-import";
 
 export const appRouter = router({
   auth: authRouter,
@@ -59,6 +61,8 @@ export const appRouter = router({
   parLevels: parLevelsRouter,
   purchaseOrders: purchaseOrdersRouter,
   subscription: subscriptionRouter,
+  masterProducts: masterProductsRouter,
+  scanImport: scanImportRouter,
 });
 
 export type AppRouter = typeof appRouter;

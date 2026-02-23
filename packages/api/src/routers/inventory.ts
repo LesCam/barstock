@@ -1,5 +1,5 @@
-import { router, protectedProcedure } from "../trpc";
-import { inventoryItemCreateSchema, inventoryItemUpdateSchema, priceHistoryCreateSchema, onHandQuerySchema, setItemVendorsSchema } from "@barstock/validators";
+import { router, protectedProcedure, requireRole } from "../trpc";
+import { inventoryItemCreateSchema, inventoryItemUpdateSchema, inventoryItemBulkCreateSchema, priceHistoryCreateSchema, onHandQuerySchema, setItemVendorsSchema } from "@barstock/validators";
 import { InventoryService } from "../services/inventory.service";
 import { AuditService } from "../services/audit.service";
 import { z } from "zod";
@@ -19,6 +19,100 @@ export const inventoryRouter = router({
         metadata: { name: input.name, categoryId: input.categoryId },
       });
       return item;
+    }),
+
+  bulkCreate: protectedProcedure
+    .use(requireRole("manager"))
+    .input(inventoryItemBulkCreateSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { locationId, items } = input;
+
+      // Find existing items by name in this location for dedup
+      const existingItems = await ctx.prisma.inventoryItem.findMany({
+        where: { locationId, active: true },
+        select: { name: true },
+      });
+      const existingNames = new Set(
+        existingItems.map((i) => i.name.toLowerCase())
+      );
+
+      const toCreate = items.filter(
+        (item) => !existingNames.has(item.name.toLowerCase())
+      );
+      const skipped = items.length - toCreate.length;
+
+      let created = 0;
+      if (toCreate.length > 0) {
+        const result = await ctx.prisma.inventoryItem.createMany({
+          data: toCreate.map((item) => ({
+            locationId,
+            name: item.name,
+            categoryId: item.categoryId,
+            barcode: item.barcode ?? null,
+            baseUom: item.baseUom,
+            packSize: item.packSize ?? null,
+            packUom: item.packUom ?? null,
+            containerSize: item.containerSize ?? null,
+            containerUom: item.containerUom ?? null,
+          })),
+        });
+        created = result.count;
+
+        // Create bottle templates for items with weight data
+        const itemsWithWeightData = toCreate.filter(
+          (item) => item.containerSizeMl && item.emptyBottleWeightG
+        );
+        if (itemsWithWeightData.length > 0) {
+          // Query just-created items to get their IDs
+          const createdItems = await ctx.prisma.inventoryItem.findMany({
+            where: {
+              locationId,
+              name: { in: itemsWithWeightData.map((i) => i.name) },
+              active: true,
+            },
+            select: { id: true, name: true },
+          });
+          const nameToId = new Map(createdItems.map((i) => [i.name.toLowerCase(), i.id]));
+
+          const templateData = itemsWithWeightData
+            .map((item) => {
+              const itemId = nameToId.get(item.name.toLowerCase());
+              if (!itemId) return null;
+              return {
+                businessId: ctx.user.businessId,
+                inventoryItemId: itemId,
+                containerSizeMl: item.containerSizeMl!,
+                emptyBottleWeightG: item.emptyBottleWeightG ?? null,
+                fullBottleWeightG: item.fullBottleWeightG ?? null,
+                densityGPerMl: item.densityGPerMl ?? null,
+              };
+            })
+            .filter(Boolean) as {
+              businessId: string;
+              inventoryItemId: string;
+              containerSizeMl: number;
+              emptyBottleWeightG: number | null;
+              fullBottleWeightG: number | null;
+              densityGPerMl: number | null;
+            }[];
+
+          if (templateData.length > 0) {
+            await ctx.prisma.bottleTemplate.createMany({ data: templateData });
+          }
+        }
+      }
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "inventory_item.bulk_created",
+        objectType: "inventory_item",
+        objectId: locationId,
+        metadata: { created, skipped, total: items.length },
+      });
+
+      return { created, skipped };
     }),
 
   list: protectedProcedure

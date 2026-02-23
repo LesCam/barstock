@@ -6,6 +6,11 @@ export interface BenchmarkingSettings {
   optedInAt: string | null;
 }
 
+export interface MasterProductSharingSettings {
+  optedIn: boolean;
+  optedInAt: string | null;
+}
+
 export interface BusinessSettingsData {
   capabilities: CapabilityToggles;
   autoLock: AutoLockPolicy;
@@ -13,6 +18,7 @@ export interface BusinessSettingsData {
   lastAlertEvaluation?: string;
   endOfDayTime: string;
   benchmarking: BenchmarkingSettings;
+  masterProductSharing: MasterProductSharingSettings;
   subscriptionOverrides?: SubscriptionOverrides;
 }
 
@@ -56,6 +62,10 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     optedIn: false,
     optedInAt: null,
   },
+  masterProductSharing: {
+    optedIn: false,
+    optedInAt: null,
+  },
 };
 
 export class SettingsService {
@@ -88,6 +98,10 @@ export class SettingsService {
         ...DEFAULT_SETTINGS.benchmarking,
         ...stored.benchmarking,
       },
+      masterProductSharing: {
+        ...DEFAULT_SETTINGS.masterProductSharing,
+        ...stored.masterProductSharing,
+      },
       subscriptionOverrides: stored.subscriptionOverrides,
     };
   }
@@ -101,6 +115,7 @@ export class SettingsService {
       lastAlertEvaluation?: string;
       endOfDayTime?: string;
       benchmarking?: Partial<BenchmarkingSettings>;
+      masterProductSharing?: Partial<MasterProductSharingSettings>;
       subscriptionOverrides?: SubscriptionOverrides;
     }
   ): Promise<BusinessSettingsData> {
@@ -123,6 +138,10 @@ export class SettingsService {
       benchmarking: {
         ...current.benchmarking,
         ...patch.benchmarking,
+      },
+      masterProductSharing: {
+        ...current.masterProductSharing,
+        ...patch.masterProductSharing,
       },
       subscriptionOverrides: patch.subscriptionOverrides ?? current.subscriptionOverrides,
     };
