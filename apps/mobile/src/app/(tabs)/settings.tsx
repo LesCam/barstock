@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, Switch, StyleSheet, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, Switch, StyleSheet, ScrollView, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useAuth, usePermission } from "@/lib/auth-context";
@@ -125,7 +125,7 @@ export default function SettingsTab() {
                 disabled={!biometricAvailable}
               >
                 <Text style={[styles.rowText, !biometricAvailable && styles.disabledText]}>
-                  Unlock with Face ID
+                  {Platform.OS === "ios" ? "Unlock with Face ID" : "Unlock with biometrics"}
                 </Text>
                 {userUnlockMethod === "biometric" && biometricAvailable && (
                   <Text style={styles.checkmark}>✓</Text>

@@ -1,8 +1,8 @@
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
-import { useRef, useState } from "react";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { useState, useRef } from "react";
+import * as ImagePicker from "expo-image-picker";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 
@@ -10,9 +10,9 @@ export default function ArtworkPhotoScreen() {
   const { artworkId } = useLocalSearchParams<{ artworkId: string }>();
   const { user } = useAuth();
   const utils = trpc.useUtils();
-  const cameraRef = useRef<CameraView>(null);
-  const [permission, requestPermission] = useCameraPermissions();
   const [preview, setPreview] = useState<{ uri: string; base64: string } | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const launchingRef = useRef(false);
 
   const addPhoto = trpc.artworks.addPhoto.useMutation({
     onSuccess: () => {
@@ -25,23 +25,53 @@ export default function ArtworkPhotoScreen() {
     },
   });
 
-  async function handleCapture() {
-    if (!cameraRef.current) return;
+  async function handleLaunchCamera() {
+    if (launchingRef.current) return;
+    launchingRef.current = true;
+    setLaunching(true);
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({ base64: true });
-      if (!photo?.base64 || !photo?.uri) {
-        Alert.alert("Error", "Failed to capture photo.");
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Camera permission is needed to take photos.");
+        router.back();
         return;
       }
-      setPreview({ uri: photo.uri, base64: photo.base64 });
-    } catch {
-      Alert.alert("Error", "Failed to capture photo.");
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        // User cancelled — go back
+        router.back();
+        return;
+      }
+
+      const asset = result.assets[0];
+      let base64 = asset.base64;
+
+      if (!base64) {
+        Alert.alert("Error", "Could not read photo data.");
+        router.back();
+        return;
+      }
+
+      setPreview({ uri: asset.uri, base64 });
+    } catch (err: any) {
+      Alert.alert("Error", `Failed to capture photo: ${err?.message ?? "Unknown error"}`);
+      router.back();
+    } finally {
+      launchingRef.current = false;
+      setLaunching(false);
     }
   }
 
   function handleRetake() {
     setPreview(null);
+    handleLaunchCamera();
   }
 
   function handleUsePhoto() {
@@ -52,24 +82,6 @@ export default function ArtworkPhotoScreen() {
       base64Data: preview.base64,
       filename: `artwork-${artworkId}-${Date.now()}.jpg`,
     });
-  }
-
-  if (!permission) return null;
-
-  if (!permission.granted) {
-    return (
-      <View style={styles.permissionContainer}>
-        <Text style={styles.permissionText}>
-          Camera permission is required to take photos.
-        </Text>
-        <TouchableOpacity style={styles.grantButton} onPress={requestPermission}>
-          <Text style={styles.grantButtonText}>Grant Permission</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()}>
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
-    );
   }
 
   // Preview mode — show captured photo with Use / Retake
@@ -111,26 +123,27 @@ export default function ArtworkPhotoScreen() {
     );
   }
 
-  // Camera mode
+  // Launch screen — tap to open camera
   return (
-    <View style={styles.container}>
-      <CameraView ref={cameraRef} style={styles.camera} facing="back" />
-
-      <View style={styles.controls}>
-        <TouchableOpacity
-          style={styles.captureButton}
-          onPress={handleCapture}
-          activeOpacity={0.7}
-        >
-          <View style={styles.captureInner} />
-        </TouchableOpacity>
-      </View>
-
+    <View style={styles.launchContainer}>
       <TouchableOpacity
-        style={styles.closeButton}
-        onPress={() => router.back()}
+        style={[styles.launchButton, launching && { opacity: 0.6 }]}
+        onPress={handleLaunchCamera}
+        disabled={launching}
+        activeOpacity={0.7}
       >
-        <Text style={styles.closeText}>Cancel</Text>
+        {launching ? (
+          <ActivityIndicator color="#0B1623" size="large" />
+        ) : (
+          <>
+            <Text style={styles.launchEmoji}>📷</Text>
+            <Text style={styles.launchText}>Take Photo</Text>
+          </>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()}>
+        <Text style={styles.cancelText}>Cancel</Text>
       </TouchableOpacity>
     </View>
   );
@@ -138,44 +151,7 @@ export default function ArtworkPhotoScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
-  camera: { flex: 1 },
-  controls: {
-    position: "absolute",
-    bottom: 40,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
-  captureButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "#FFF",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  captureInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#FFF",
-    borderWidth: 3,
-    borderColor: "#0B1623",
-  },
-  closeButton: {
-    position: "absolute",
-    top: 60,
-    left: 20,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  closeText: { color: "#FFF", fontSize: 15, fontWeight: "500" },
-  // Preview
-  previewImage: {
-    flex: 1,
-  },
+  previewImage: { flex: 1 },
   previewControls: {
     position: "absolute",
     bottom: 40,
@@ -192,11 +168,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  retakeText: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#FFF",
-  },
+  retakeText: { fontSize: 17, fontWeight: "600", color: "#FFF" },
   usePhotoButton: {
     flex: 1,
     backgroundColor: "#E9B44C",
@@ -205,33 +177,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   usePhotoButtonDisabled: { opacity: 0.6 },
-  usePhotoText: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#0B1623",
-  },
-  // Permission
-  permissionContainer: {
+  usePhotoText: { fontSize: 17, fontWeight: "700", color: "#0B1623" },
+  launchContainer: {
     flex: 1,
     backgroundColor: "#0B1623",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
   },
-  permissionText: {
-    color: "#EAF0FF",
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  grantButton: {
+  launchButton: {
     backgroundColor: "#E9B44C",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginBottom: 12,
+    paddingHorizontal: 48,
+    paddingVertical: 24,
+    borderRadius: 16,
+    alignItems: "center",
+    gap: 8,
   },
-  grantButtonText: { color: "#0B1623", fontSize: 16, fontWeight: "600" },
-  cancelButton: { padding: 14 },
+  launchEmoji: { fontSize: 48 },
+  launchText: { fontSize: 18, fontWeight: "700", color: "#0B1623" },
+  cancelButton: { marginTop: 24, padding: 14 },
   cancelText: { color: "#5A6A7A", fontSize: 14 },
 });

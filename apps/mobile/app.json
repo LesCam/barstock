@@ -25,6 +25,7 @@
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/images/barstock-icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.barstock.app",

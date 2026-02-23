@@ -7,6 +7,7 @@ import {
   Dimensions,
   Animated,
   Image,
+  Platform,
 } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -244,7 +245,7 @@ export default function LockScreen() {
           {mode === "switch"
             ? "Enter any staff PIN to sign in"
             : mode === "biometric"
-              ? "Tap to unlock with Face ID"
+              ? Platform.OS === "ios" ? "Tap to unlock with Face ID" : "Tap to unlock with biometrics"
               : "Enter your PIN to unlock"}
         </Text>
 
@@ -327,7 +328,7 @@ export default function LockScreen() {
             style={styles.switchLink}
             onPress={() => setMode("biometric")}
           >
-            <Text style={styles.switchText}>Use Face ID instead</Text>
+            <Text style={styles.switchText}>{Platform.OS === "ios" ? "Use Face ID instead" : "Use biometrics instead"}</Text>
           </TouchableOpacity>
         )}
         {canSwitchToPin && (

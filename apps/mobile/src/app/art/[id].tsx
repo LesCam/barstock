@@ -261,21 +261,30 @@ export default function ArtworkDetailScreen() {
         )}
       </View>
 
-      {/* Add Photo button — max 3 photos */}
-      {photos.length < 3 && (
+      {/* Add Photo & Show QR buttons */}
+      <View style={styles.actionButtonsRow}>
+        {photos.length < 3 && (
+          <TouchableOpacity
+            style={[styles.addPhotoButton, { flex: 1 }]}
+            onPress={() =>
+              router.push({
+                pathname: "/art/photo" as any,
+                params: { artworkId: artwork.id },
+              })
+            }
+            activeOpacity={0.7}
+          >
+            <Text style={styles.addPhotoButtonText}>Add Photo</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
-          style={styles.addPhotoButton}
-          onPress={() =>
-            router.push({
-              pathname: "/art/photo" as any,
-              params: { artworkId: artwork.id },
-            })
-          }
+          style={[styles.showQrButton, { flex: 1 }]}
+          onPress={() => router.push({ pathname: "/art/qr" as any, params: { artworkId: artwork.id } })}
           activeOpacity={0.7}
         >
-          <Text style={styles.addPhotoButtonText}>Add Photo</Text>
+          <Text style={styles.showQrButtonText}>Show QR</Text>
         </TouchableOpacity>
-      )}
+      </View>
 
       {/* Status actions */}
       <StatusActions
@@ -566,10 +575,14 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 13, color: "#5A6A7A" },
   infoValue: { fontSize: 13, color: "#EAF0FF", fontWeight: "500" },
-  addPhotoButton: {
-    backgroundColor: "#16283F",
+  actionButtonsRow: {
+    flexDirection: "row",
     marginHorizontal: 16,
     marginTop: 16,
+    gap: 10,
+  },
+  addPhotoButton: {
+    backgroundColor: "#16283F",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
@@ -577,6 +590,13 @@ const styles = StyleSheet.create({
     borderColor: "#1E3550",
   },
   addPhotoButtonText: { fontSize: 15, fontWeight: "600", color: "#E9B44C" },
+  showQrButton: {
+    backgroundColor: "#E9B44C",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  showQrButtonText: { fontSize: 15, fontWeight: "600", color: "#0B1623" },
   actionsColumn: {
     marginHorizontal: 16,
     marginTop: 16,

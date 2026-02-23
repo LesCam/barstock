@@ -50,13 +50,21 @@ export default function ArtLabelsPage() {
               Select artworks to generate printable wall labels with QR codes
             </p>
           </div>
-          <button
-            onClick={() => window.print()}
-            disabled={selected.size === 0}
-            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Print Labels ({selected.size})
-          </button>
+          <div className="flex items-center gap-3">
+            <a
+              href="/art"
+              className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-[#EAF0FF]/60 hover:text-[#EAF0FF] hover:border-white/20"
+            >
+              Back
+            </a>
+            <button
+              onClick={() => window.print()}
+              disabled={selected.size === 0}
+              className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Print Labels ({selected.size})
+            </button>
+          </div>
         </div>
 
         <div className="mb-4 flex items-center gap-3">

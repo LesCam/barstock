@@ -373,8 +373,9 @@ const styles = StyleSheet.create({
   },
   scanFab: {
     position: "absolute",
-    bottom: 20,
-    right: 88,
+    bottom: 160,
+    right: 20,
+    zIndex: 1000,
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -396,8 +397,9 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    bottom: 20,
+    bottom: 92,
     right: 20,
+    zIndex: 1000,
     width: 56,
     height: 56,
     borderRadius: 28,
