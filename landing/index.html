@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Barstock — Smart Inventory Management for Bars & Restaurants</title>
+  <meta name="description" content="Real-time inventory tracking with Bluetooth scales, multi-user counting, POS integration, and variance analytics. Built for bars and restaurants.">
+  <link rel="icon" href="/assets/brand/barstock-icon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --gold: #E9B44C;
+      --gold-dark: #C8922E;
+      --gold-glow: rgba(233,180,76,0.25);
+      --navy: #0B1623;
+      --navy-card: #16283F;
+      --navy-light: #1E3550;
+      --teal: #2BA8A0;
+      --text: #EAF0FF;
+      --text-muted: rgba(234,240,255,0.6);
+      --text-dim: #5A6A7A;
+      --red: #EF4444;
+      --green: #4CAF50;
+      --yellow: #FBBF24;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--navy);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Nav */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 40px;
+      background: rgba(11,22,35,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo img { height: 32px; }
+    .nav-logo span { font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--gold); }
+    .btn-nav {
+      background: var(--gold); color: var(--navy); font-weight: 700; font-size: 14px;
+      padding: 10px 24px; border-radius: 10px; text-decoration: none;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .btn-nav:hover { background: var(--gold-dark); transform: translateY(-1px); }
+
+    /* Sections */
+    section { padding: 24px 40px; max-width: 1200px; margin: 0 auto; }
+
+    /* Hero */
+    .hero { padding-top: 140px; display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+    .hero h1 {
+      font-size: 48px; font-weight: 800; line-height: 1.1; letter-spacing: -1.5px;
+      background: linear-gradient(135deg, var(--text) 0%, var(--gold) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p { font-size: 18px; color: var(--text-muted); margin-top: 20px; line-height: 1.7; }
+    .hero-buttons { display: flex; gap: 16px; margin-top: 32px; }
+    .btn-primary {
+      background: var(--gold); color: var(--navy); font-weight: 700; font-size: 16px;
+      padding: 14px 32px; border-radius: 12px; text-decoration: none; border: none; cursor: pointer;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 20px var(--gold-glow);
+    }
+    .btn-primary:hover { background: var(--gold-dark); transform: translateY(-2px); box-shadow: 0 8px 30px var(--gold-glow); }
+    .btn-secondary {
+      background: transparent; color: var(--text); font-weight: 600; font-size: 16px;
+      padding: 14px 32px; border-radius: 12px; text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.15); cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .btn-secondary:hover { border-color: var(--gold); background: rgba(233,180,76,0.06); }
+    .hero-visual {
+      position: relative; display: flex; align-items: center; justify-content: center;
+    }
+    .hero-visual .glow {
+      position: absolute; width: 400px; height: 400px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(233,180,76,0.12) 0%, transparent 70%);
+      filter: blur(60px);
+    }
+    .hero-mockup {
+      position: relative; background: var(--navy-card); border-radius: 16px;
+      border: 1px solid var(--navy-light); padding: 20px; width: 100%;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+    }
+    .mockup-bar { display: flex; gap: 6px; margin-bottom: 16px; }
+    .mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .mockup-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    .mockup-kpi {
+      background: rgba(255,255,255,0.04); border-radius: 10px; padding: 12px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .mockup-kpi .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .mockup-kpi .value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .mockup-chart {
+      background: rgba(255,255,255,0.03); border-radius: 10px; padding: 16px; height: 120px;
+      border: 1px solid rgba(255,255,255,0.06);
+      display: flex; align-items: flex-end; gap: 8px;
+    }
+    .chart-bar {
+      flex: 1; border-radius: 4px 4px 0 0; transition: height 0.6s ease;
+    }
+
+    /* Feature cards */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    .feature-card {
+      background: var(--navy-card); border: 1px solid var(--navy-light);
+      border-radius: 16px; overflow: hidden; transition: border-color 0.3s, transform 0.2s;
+    }
+    .feature-card:hover { border-color: var(--gold); transform: translateY(-4px); }
+    .feature-card-img {
+      width: 100%; height: 180px; object-fit: cover;
+      display: block; filter: brightness(0.7);
+    }
+    .feature-card-body { padding: 24px 28px 28px; }
+    .feature-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+    .feature-card .check-list { list-style: none; }
+    .feature-card .check-list li {
+      font-size: 14px; color: var(--text-muted); padding: 4px 0;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .check { color: var(--teal); font-weight: 700; font-size: 16px; }
+    .feature-icon {
+      width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      font-size: 24px; margin-bottom: 16px;
+    }
+
+    /* Wide cards */
+    .wide-card {
+      background: var(--navy-card); border: 1px solid var(--navy-light);
+      border-radius: 16px; padding: 40px; margin-bottom: 24px;
+    }
+    .wide-card h3 { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+    .wide-card p { color: var(--text-muted); font-size: 15px; }
+
+    /* Ledger */
+    .ledger-section { display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px; align-items: center; }
+    .ledger-entries { display: flex; flex-direction: column; gap: 10px; }
+    .ledger-entry {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(255,255,255,0.03); border-radius: 10px; padding: 12px 16px;
+      border: 1px solid rgba(255,255,255,0.06); font-size: 14px;
+    }
+    .ledger-badge {
+      width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; flex-shrink: 0;
+    }
+    .badge-sale { background: rgba(239,68,68,0.15); color: var(--red); }
+    .badge-receive { background: rgba(43,168,160,0.15); color: var(--teal); }
+    .badge-adjust { background: rgba(233,180,76,0.15); color: var(--gold); }
+
+    /* Two-col */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+    /* POS logos */
+    .pos-logos { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+    .pos-logo {
+      background: rgba(255,255,255,0.06); border-radius: 8px; padding: 8px 16px;
+      font-size: 13px; font-weight: 600; color: var(--text-muted);
+    }
+
+    /* Analytics */
+    .analytics-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .analytics-kpi {
+      background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px; padding: 24px 20px; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .analytics-kpi::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .analytics-kpi:nth-child(1)::before { background: var(--gold); }
+    .analytics-kpi:nth-child(2)::before { background: var(--teal); }
+    .analytics-kpi:nth-child(3)::before { background: var(--yellow); }
+    .analytics-kpi:nth-child(4)::before { background: var(--red); }
+    .analytics-kpi .kpi-value { font-size: 32px; font-weight: 800; }
+    .analytics-kpi:nth-child(1) .kpi-value { color: var(--gold); }
+    .analytics-kpi:nth-child(2) .kpi-value { color: var(--teal); }
+    .analytics-kpi:nth-child(3) .kpi-value { color: var(--yellow); }
+    .analytics-kpi:nth-child(4) .kpi-value { color: var(--red); }
+    .analytics-kpi .kpi-label { font-size: 11px; color: var(--text-dim); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+    .analytics-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .chart-card {
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px; padding: 20px; position: relative;
+    }
+    .chart-card-title {
+      font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .chart-card-badge {
+      font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .mini-chart {
+      height: 140px; display: flex; align-items: flex-end; gap: 3px;
+    }
+    .mini-chart .bar {
+      flex: 1; border-radius: 4px 4px 0 0; transition: height 0.8s ease;
+      position: relative;
+    }
+    .mini-chart .bar:hover { filter: brightness(1.3); }
+    /* SVG line chart */
+    .line-chart { width: 100%; height: 140px; }
+    .line-chart polyline {
+      fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .line-chart .area { stroke: none; opacity: 0.15; }
+    .line-chart .grid-line { stroke: rgba(255,255,255,0.05); stroke-width: 1; }
+
+    /* Heatmap */
+    .heatmap { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; max-width: 280px; }
+    .heatmap-cell { width: 100%; aspect-ratio: 1; border-radius: 3px; max-width: 36px; }
+
+    /* CTA */
+    .cta-section {
+      text-align: center; padding: 80px 40px 60px; max-width: 100%; position: relative;
+      background: linear-gradient(rgba(11,22,35,0.85), rgba(11,22,35,0.92)), url('images/cocktail.jpg') center/cover no-repeat;
+    }
+    .cta-section h2 { font-size: 36px; font-weight: 800; margin-bottom: 24px; }
+    .cta-section .btn-primary { display: inline-block; font-size: 18px; padding: 16px 48px; }
+
+    /* Tiers */
+    .tiers { display: flex; justify-content: center; gap: 32px; margin-top: 40px; }
+    .tier { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500; }
+    .tier-icon { font-size: 18px; }
+
+    /* Email form */
+    .email-form { display: flex; gap: 12px; justify-content: center; margin-top: 24px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    .email-form input {
+      flex: 1; padding: 14px 20px; border-radius: 12px; border: 1px solid var(--navy-light);
+      background: var(--navy-card); color: var(--text); font-size: 15px; font-family: inherit;
+      outline: none; transition: border-color 0.2s;
+    }
+    .email-form input::placeholder { color: var(--text-dim); }
+    .email-form input:focus { border-color: var(--gold); }
+    .email-form button { white-space: nowrap; }
+
+    /* Footer */
+    footer {
+      text-align: center; padding: 40px; border-top: 1px solid rgba(255,255,255,0.06);
+      color: var(--text-dim); font-size: 13px;
+    }
+
+    /* Section headers */
+    .section-label {
+      font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--gold); margin-bottom: 12px;
+    }
+    .section-title { font-size: 32px; font-weight: 800; margin-bottom: 16px; letter-spacing: -0.5px; }
+    .section-subtitle { color: var(--text-muted); font-size: 16px; margin-bottom: 32px; max-width: 600px; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      nav { padding: 12px 20px; }
+      .nav-links { display: none; }
+      section { padding: 60px 20px; }
+      .hero { grid-template-columns: 1fr; padding-top: 100px; gap: 40px; }
+      .hero h1 { font-size: 32px; }
+      .hero-visual { order: -1; }
+      .features-grid { grid-template-columns: 1fr; }
+      .two-col { grid-template-columns: 1fr; }
+      .ledger-section { grid-template-columns: 1fr; }
+      .analytics-kpis { grid-template-columns: repeat(2, 1fr); }
+      .analytics-charts { grid-template-columns: 1fr !important; }
+      .mockup-kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .email-form { flex-direction: column; }
+    }
+
+    /* Animations */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate { opacity: 0; animation: fadeInUp 0.6s ease forwards; }
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <a href="#" class="nav-logo">
+      <img src="/assets/brand/barstock-icon.png" alt="Barstock" onerror="this.style.display='none'">
+      <span>barstock</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#analytics">Analytics</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#cta" class="btn-nav">Get Started</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div>
+      <h1 class="animate">Smart Inventory Management for Bars & Restaurants</h1>
+      <p class="animate delay-1">Real-time, multi-user counting with Bluetooth scale integration, POS-driven depletion, and an immutable audit ledger. Know exactly what you have, what you're losing, and why.</p>
+      <div class="hero-buttons animate delay-2">
+        <a href="#cta" class="btn-primary">Get Started</a>
+        <a href="#features" class="btn-secondary">Learn More</a>
+      </div>
+    </div>
+    <div class="hero-visual animate delay-3">
+      <div class="glow"></div>
+      <div class="hero-mockup">
+        <div class="mockup-bar">
+          <div class="mockup-dot" style="background:#EF4444"></div>
+          <div class="mockup-dot" style="background:#FBBF24"></div>
+          <div class="mockup-dot" style="background:#4CAF50"></div>
+        </div>
+        <div class="mockup-kpi-row">
+          <div class="mockup-kpi">
+            <div class="label">On Hand</div>
+            <div class="value" style="color:var(--gold)">$24,350</div>
+          </div>
+          <div class="mockup-kpi">
+            <div class="label">7d COGS</div>
+            <div class="value" style="color:var(--teal)">$8,720</div>
+          </div>
+          <div class="mockup-kpi">
+            <div class="label">Variance</div>
+            <div class="value" style="color:var(--yellow)">12.5%</div>
+          </div>
+          <div class="mockup-kpi">
+            <div class="label">Alerts</div>
+            <div class="value" style="color:var(--red)">3</div>
+          </div>
+        </div>
+        <div class="mockup-chart">
+          <div class="chart-bar" style="height:40%;background:var(--teal)"></div>
+          <div class="chart-bar" style="height:65%;background:var(--teal)"></div>
+          <div class="chart-bar" style="height:35%;background:var(--teal)"></div>
+          <div class="chart-bar" style="height:80%;background:var(--gold)"></div>
+          <div class="chart-bar" style="height:55%;background:var(--teal)"></div>
+          <div class="chart-bar" style="height:45%;background:var(--teal)"></div>
+          <div class="chart-bar" style="height:70%;background:var(--gold)"></div>
+          <div class="chart-bar" style="height:50%;background:var(--teal)"></div>
+          <div class="chart-bar" style="height:30%;background:var(--teal)"></div>
+          <div class="chart-bar" style="height:60%;background:var(--gold)"></div>
+          <div class="chart-bar" style="height:75%;background:var(--teal)"></div>
+          <div class="chart-bar" style="height:40%;background:var(--teal)"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Everything You Need to Control Your Bar</h2>
+    <p class="section-subtitle">From counting bottles to catching shrinkage, Barstock gives your team the tools to manage inventory with precision.</p>
+
+    <div class="features-grid">
+      <div class="feature-card animate">
+        <img src="images/beer-taps.jpg" alt="Bar taps" class="feature-card-img">
+        <div class="feature-card-body">
+          <h3>Real-Time Counting</h3>
+          <ul class="check-list">
+            <li><span class="check">&#10003;</span> Multi-user sessions with live activity</li>
+            <li><span class="check">&#10003;</span> Packaged, weight & keg methods</li>
+            <li><span class="check">&#10003;</span> Barcode scanning</li>
+            <li><span class="check">&#10003;</span> Offline-first with auto-sync</li>
+          </ul>
+        </div>
+      </div>
+      <div class="feature-card animate delay-1">
+        <img src="images/whiskey-bottles.jpg" alt="Bottles on scale" class="feature-card-img">
+        <div class="feature-card-body">
+          <h3>Bluetooth Scale Integration</h3>
+          <ul class="check-list">
+            <li><span class="check">&#10003;</span> Skale 2 & standard BLE support</li>
+            <li><span class="check">&#10003;</span> Precision weighing to 0.1g</li>
+            <li><span class="check">&#10003;</span> Bottle templates with tare weights</li>
+            <li><span class="check">&#10003;</span> Auto-reconnect</li>
+          </ul>
+        </div>
+      </div>
+      <div class="feature-card animate delay-2">
+        <img src="images/bar-atmosphere.jpg" alt="Bar atmosphere" class="feature-card-img">
+        <div class="feature-card-body">
+          <h3>Voice Commands</h3>
+          <ul class="check-list">
+            <li><span class="check">&#10003;</span> Hands-free counting actions</li>
+            <li><span class="check">&#10003;</span> Continuous listen mode</li>
+            <li><span class="check">&#10003;</span> "Add item", "connect scale"</li>
+            <li><span class="check">&#10003;</span> Works mid-count</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Immutable Ledger -->
+  <section>
+    <div class="wide-card">
+      <div class="ledger-section">
+        <div>
+          <div class="section-label">Audit Trail</div>
+          <h3 style="font-size:26px;margin-bottom:16px">Immutable Ledger</h3>
+          <p>Every transaction is an append-only event. POS sales, count adjustments, transfers, receiving &mdash; all recorded permanently. Corrections use reversal + replacement, never overwrite. Your data integrity is guaranteed.</p>
+        </div>
+        <div class="ledger-entries">
+          <div class="ledger-entry">
+            <div class="ledger-badge badge-sale">&#8722;</div>
+            <div>
+              <div style="font-weight:600">Martini Sale</div>
+              <div style="font-size:12px;color:var(--text-dim)">POS &middot; Toast &middot; 2 oz vodka depleted</div>
+            </div>
+          </div>
+          <div class="ledger-entry">
+            <div class="ledger-badge badge-receive">+</div>
+            <div>
+              <div style="font-weight:600">Received: Tequila Blanco (12 bottles)</div>
+              <div style="font-size:12px;color:var(--text-dim)">Receiving &middot; PO #1042 &middot; $384.00</div>
+            </div>
+          </div>
+          <div class="ledger-entry">
+            <div class="ledger-badge badge-adjust">&#x25B2;</div>
+            <div>
+              <div style="font-weight:600">Count Adjustment: Vodka</div>
+              <div style="font-size:12px;color:var(--text-dim)">Variance: &minus;1.2 bottles &middot; Reason: waste/foam</div>
+            </div>
+          </div>
+          <div class="ledger-entry">
+            <div class="ledger-badge badge-sale">&#8722;</div>
+            <div>
+              <div style="font-weight:600">Old Fashioned Sale</div>
+              <div style="font-size:12px;color:var(--text-dim)">Recipe depletion &middot; bourbon, bitters, simple</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- POS + Recipes -->
+  <section>
+    <div class="two-col">
+      <div class="wide-card" style="margin-bottom:0;overflow:hidden;padding:0">
+        <img src="images/bar-inventory.jpg" alt="Bar inventory" style="width:100%;height:160px;object-fit:cover;filter:brightness(0.5)">
+        <div style="padding:28px 32px 32px">
+          <div class="section-label">Integrations</div>
+          <h3>POS Integration & Depletion</h3>
+          <p style="margin-bottom:16px">Connect your POS system and Barstock automatically depletes inventory as drinks sell. No more guessing what went where.</p>
+          <div class="pos-logos">
+            <div class="pos-logo" style="color:#EF4444;border:1px solid rgba(239,68,68,0.2)">Toast</div>
+            <div class="pos-logo">Square</div>
+            <div class="pos-logo">Lightspeed</div>
+            <div class="pos-logo">Clover</div>
+            <div class="pos-logo">CSV Import</div>
+          </div>
+          <ul class="check-list" style="margin-top:16px">
+            <li><span class="check">&#10003;</span> Automatic daily depletion</li>
+            <li><span class="check">&#10003;</span> Unmapped item queue</li>
+            <li><span class="check">&#10003;</span> POS-agnostic &mdash; no vendor lock-in</li>
+          </ul>
+        </div>
+      </div>
+      <div class="wide-card" style="margin-bottom:0;overflow:hidden;padding:0">
+        <img src="images/cocktail-making.jpg" alt="Cocktail making" style="width:100%;height:160px;object-fit:cover;filter:brightness(0.5)">
+        <div style="padding:28px 32px 32px">
+          <div class="section-label">Recipes</div>
+          <h3>Recipe Management</h3>
+          <p style="margin-bottom:16px">Define cocktail recipes with exact ingredients. When a drink sells, every ingredient depletes automatically. Barstock even learns your team's real pour patterns.</p>
+          <ul class="check-list">
+            <li><span class="check">&#10003;</span> Multi-ingredient recipe depletion</li>
+            <li><span class="check">&#10003;</span> Auto-learning pour ratios</li>
+            <li><span class="check">&#10003;</span> Split ratios for ambiguous items</li>
+            <li><span class="check">&#10003;</span> Over/under-pour trend detection</li>
+            <li><span class="check">&#10003;</span> Recipe cost tracking</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Analytics -->
+  <section id="analytics">
+    <div class="wide-card" style="padding:36px 40px 40px">
+      <div class="section-label">Analytics</div>
+      <h3 style="font-size:28px;margin-bottom:8px">Powerful Analytics & Alerts</h3>
+      <p style="color:var(--text-muted);font-size:15px;margin-bottom:28px">Your dashboard shows what matters. Drill into variance, track COGS, and catch shrinkage before it hurts.</p>
+
+      <div class="analytics-kpis">
+        <div class="analytics-kpi">
+          <div class="kpi-value">$24,350</div>
+          <div class="kpi-label">On-Hand Value</div>
+        </div>
+        <div class="analytics-kpi">
+          <div class="kpi-value">$8,720</div>
+          <div class="kpi-label">7-Day COGS</div>
+        </div>
+        <div class="analytics-kpi">
+          <div class="kpi-value">12.5%</div>
+          <div class="kpi-label">Variance</div>
+        </div>
+        <div class="analytics-kpi">
+          <div class="kpi-value">3</div>
+          <div class="kpi-label">Shrinkage Alerts</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px" class="analytics-charts">
+        <!-- Usage trend line chart -->
+        <div class="chart-card">
+          <div class="chart-card-title">
+            <span>Usage Trend</span>
+            <span class="chart-card-badge" style="background:rgba(43,168,160,0.15);color:var(--teal)">7d</span>
+          </div>
+          <svg class="line-chart" viewBox="0 0 320 120" preserveAspectRatio="none">
+            <line class="grid-line" x1="0" y1="40" x2="320" y2="40"/>
+            <line class="grid-line" x1="0" y1="80" x2="320" y2="80"/>
+            <polyline class="area" points="0,80 46,62 92,70 138,40 184,52 230,35 276,48 320,25 320,120 0,120" style="fill:var(--teal)"/>
+            <polyline points="0,80 46,62 92,70 138,40 184,52 230,35 276,48 320,25" style="stroke:var(--teal)"/>
+            <polyline class="area" points="0,100 46,88 92,92 138,78 184,70 230,82 276,65 320,58 320,120 0,120" style="fill:var(--gold)"/>
+            <polyline points="0,100 46,88 92,92 138,78 184,70 230,82 276,65 320,58" style="stroke:var(--gold)"/>
+            <circle cx="320" cy="25" r="3" fill="var(--teal)"/>
+            <circle cx="320" cy="58" r="3" fill="var(--gold)"/>
+          </svg>
+          <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text-dim)">
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-right:3px"></span>Spirits</span>
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-right:3px"></span>Beer</span>
+          </div>
+        </div>
+
+        <!-- Variance bar chart -->
+        <div class="chart-card">
+          <div class="chart-card-title">
+            <span>Variance</span>
+            <span class="chart-card-badge" style="background:rgba(233,180,76,0.15);color:var(--gold)">4w</span>
+          </div>
+          <div class="mini-chart" style="height:120px">
+            <div class="bar" style="height:25%;background:var(--teal)"></div>
+            <div class="bar" style="height:55%;background:var(--teal)"></div>
+            <div class="bar" style="height:40%;background:var(--teal)"></div>
+            <div class="bar" style="height:75%;background:var(--gold)"></div>
+            <div class="bar" style="height:35%;background:var(--teal)"></div>
+            <div class="bar" style="height:60%;background:var(--gold)"></div>
+            <div class="bar" style="height:90%;background:var(--red)"></div>
+            <div class="bar" style="height:45%;background:var(--teal)"></div>
+            <div class="bar" style="height:30%;background:var(--teal)"></div>
+            <div class="bar" style="height:70%;background:var(--gold)"></div>
+            <div class="bar" style="height:50%;background:var(--teal)"></div>
+            <div class="bar" style="height:85%;background:var(--red)"></div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:8px;font-size:10px;color:var(--text-dim)">
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:2px;background:var(--teal);margin-right:3px"></span>OK</span>
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:2px;background:var(--gold);margin-right:3px"></span>Watch</span>
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:2px;background:var(--red);margin-right:3px"></span>Alert</span>
+          </div>
+        </div>
+
+        <!-- Heatmap -->
+        <div class="chart-card">
+          <div class="chart-card-title">
+            <span>Heatmap</span>
+            <span class="chart-card-badge" style="background:rgba(239,68,68,0.12);color:var(--red)">Live</span>
+          </div>
+          <div class="heatmap" id="heatmap"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:9px;color:var(--text-dim)">
+            <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px;font-size:10px;color:var(--text-dim)">
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:2px;background:rgba(43,168,160,0.2);margin-right:3px"></span>Low</span>
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:2px;background:rgba(233,180,76,0.6);margin-right:3px"></span>Med</span>
+            <span><span style="display:inline-block;width:6px;height:6px;border-radius:2px;background:rgba(239,68,68,0.6);margin-right:3px"></span>High</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature checklist -->
+      <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.06)">
+        <ul class="check-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 32px;">
+          <li><span class="check">&#10003;</span> Variance trend charts & flagged items</li>
+          <li><span class="check">&#10003;</span> Staff accountability scorecards</li>
+          <li><span class="check">&#10003;</span> Shrinkage pattern detection</li>
+          <li><span class="check">&#10003;</span> Real-time email & push alerts</li>
+          <li><span class="check">&#10003;</span> COGS tracking by recipe</li>
+          <li><span class="check">&#10003;</span> Days-to-stockout predictions</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section" id="cta">
+    <h2>Start Optimizing Your Inventory Today</h2>
+    <p style="color:var(--text-muted);font-size:16px;margin-bottom:8px;">Join the waitlist for early access. Be the first to know when we launch.</p>
+    <form class="email-form" onsubmit="handleSubmit(event)">
+      <input type="email" placeholder="Enter your email" required>
+      <button type="submit" class="btn-primary">Get Early Access</button>
+    </form>
+    <div id="form-success" style="display:none;color:var(--teal);margin-top:16px;font-weight:600;">Thanks! We'll be in touch.</div>
+
+    <div class="tiers" id="pricing">
+      <div class="tier">
+        <span class="tier-icon">&#x1F4E6;</span>
+        <span>Starter</span>
+      </div>
+      <div class="tier">
+        <span class="tier-icon" style="color:var(--gold)">&#x1F4BC;</span>
+        <span>Pro</span>
+      </div>
+      <div class="tier">
+        <span class="tier-icon" style="color:var(--gold)">&#x1F3E2;</span>
+        <span>Enterprise</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    &copy; 2026 Barstock. All rights reserved.
+  </footer>
+
+  <script>
+    // Generate heatmap
+    const heatmap = document.getElementById('heatmap');
+    const colors = ['rgba(43,168,160,0.1)', 'rgba(43,168,160,0.25)', 'rgba(43,168,160,0.45)', 'rgba(233,180,76,0.4)', 'rgba(233,180,76,0.6)', 'rgba(239,68,68,0.4)', 'rgba(239,68,68,0.6)'];
+    for (let i = 0; i < 21; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'heatmap-cell';
+      cell.style.background = colors[Math.floor(Math.random() * colors.length)];
+      heatmap.appendChild(cell);
+    }
+
+    // Intersection observer for animations
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.animationPlayState = 'running';
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.animate').forEach(el => {
+      el.style.animationPlayState = 'paused';
+      observer.observe(el);
+    });
+
+    // Form handler
+    function handleSubmit(e) {
+      e.preventDefault();
+      const input = e.target.querySelector('input');
+      // TODO: Send email to your backend/Mailchimp/etc.
+      console.log('Waitlist signup:', input.value);
+      e.target.style.display = 'none';
+      document.getElementById('form-success').style.display = 'block';
+    }
+  </script>
+
+</body>
+</html>
