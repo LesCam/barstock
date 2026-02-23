@@ -31,6 +31,19 @@ export type VoiceCommandResult =
   | { action: "navigate"; screen: string }
   | { action: "stop-listening" };
 
+// ── Tens words (twenty → ninety) ──────────────────────────────────────
+
+const TENS_WORDS: Record<string, number> = {
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
+};
+
 // ── Number word map (one → twenty) ────────────────────────────────────
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -203,6 +216,82 @@ function extractSubAreas(
   }
 
   return { fromSubAreaId, toSubAreaId };
+}
+
+// ── Spoken weight parser ───────────────────────────────────────────────
+
+const ALL_NUMBER_WORDS: Record<string, number> = { ...NUMBER_WORDS, ...TENS_WORDS };
+
+/**
+ * Parse a spoken weight transcript into grams.
+ * Handles: "720", "seven hundred twenty", "seven twenty", "three fifty",
+ * "seven hundred and twenty grams", etc.
+ * Returns null if unparseable or outside 1–9999 range.
+ */
+export function parseSpokenWeight(transcript: string): number | null {
+  const text = transcript
+    .toLowerCase()
+    .replace(/[.,!?]/g, "")
+    .replace(/\b(grams?|gram|g)\b/g, "")
+    .replace(/\b(um|uh|like|about|approximately|around)\b/g, "")
+    .replace(/\band\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return null;
+
+  // 1. Direct digit string: "720", "1200"
+  const digitMatch = text.match(/^\d+$/);
+  if (digitMatch) {
+    const n = parseInt(text, 10);
+    return n >= 1 && n <= 9999 ? n : null;
+  }
+
+  const words = text.split(/\s+/);
+
+  // 2. Informal shorthand: "seven twenty" → 720, "three fifty" → 350
+  //    Pattern: <ones/teens> <tens> where first word * 100 + second word
+  //    Must check before compound words, otherwise "seven twenty" → 7+20=27
+  if (words.length === 2) {
+    const first = ALL_NUMBER_WORDS[words[0]];
+    const second = ALL_NUMBER_WORDS[words[1]];
+    if (first !== undefined && second !== undefined && first >= 1 && first <= 19 && second >= 20 && second <= 90) {
+      const result = first * 100 + second;
+      if (result >= 1 && result <= 9999) return result;
+    }
+  }
+
+  // 3. Try to parse as compound number words
+  let total = 0;
+  let current = 0;
+  let parsed = false;
+
+  for (const w of words) {
+    if (w === "hundred") {
+      current = current === 0 ? 100 : current * 100;
+      parsed = true;
+    } else if (w === "thousand") {
+      current = current === 0 ? 1000 : current * 1000;
+      total += current;
+      current = 0;
+      parsed = true;
+    } else if (NUMBER_WORDS[w] !== undefined) {
+      current += NUMBER_WORDS[w];
+      parsed = true;
+    } else if (TENS_WORDS[w] !== undefined) {
+      current += TENS_WORDS[w];
+      parsed = true;
+    } else {
+      // Unknown word — skip
+    }
+  }
+
+  if (parsed) {
+    total += current;
+    if (total >= 1 && total <= 9999) return total;
+  }
+
+  return null;
 }
 
 // ── Main parser ────────────────────────────────────────────────────────

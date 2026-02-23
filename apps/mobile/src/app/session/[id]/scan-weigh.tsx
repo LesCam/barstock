@@ -24,6 +24,7 @@ import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { CreateItemFromScanModal } from "@/components/CreateItemFromScanModal";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
+import { useVoiceWeight } from "@/lib/voice/use-voice-weight";
 
 const AUTO_SUBMIT_DELAY_MS = 2000;
 
@@ -72,6 +73,12 @@ export default function ScanWeighScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [unitCount, setUnitCount] = useState("");
   const searchInputRef = useRef<TextInput>(null);
+
+  const { status: voiceStatus, startListening: startVoiceWeight, cancelListening: cancelVoiceWeight } =
+    useVoiceWeight({
+      onWeight: (grams) => setManualWeight(String(grams)),
+      hapticEnabled,
+    });
 
   const successOpacity = useRef(new Animated.Value(0)).current;
 
@@ -503,6 +510,7 @@ export default function ScanWeighScreen() {
 
   function resetToScanning() {
     cancelAutoSubmit();
+    cancelVoiceWeight();
     autoSubmitSuppressedRef.current = false;
     setPhase("scanning");
     setMatchedItem(null);
@@ -837,6 +845,33 @@ export default function ScanWeighScreen() {
                   </Text>
                   <Text style={styles.manualDisplayUnit}>g</Text>
                 </View>
+                <TouchableOpacity
+                  style={[
+                    styles.voiceWeightBtn,
+                    voiceStatus !== "idle" && styles.voiceWeightBtnActive,
+                  ]}
+                  onPress={() => {
+                    if (voiceStatus !== "idle") {
+                      cancelVoiceWeight();
+                    } else {
+                      startVoiceWeight();
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.voiceWeightBtnText,
+                      voiceStatus !== "idle" && styles.voiceWeightBtnTextActive,
+                    ]}
+                  >
+                    {voiceStatus === "listening"
+                      ? "Listening..."
+                      : voiceStatus === "processing"
+                        ? "Processing..."
+                        : "Say Weight"}
+                  </Text>
+                </TouchableOpacity>
                 <NumericKeypad
                   value={manualWeight}
                   onChange={setManualWeight}
@@ -1326,6 +1361,27 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#5A6A7A",
     marginLeft: 6,
+  },
+  voiceWeightBtn: {
+    borderWidth: 1.5,
+    borderColor: "#2BA8A0",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginBottom: 10,
+    backgroundColor: "rgba(43,168,160,0.08)",
+  },
+  voiceWeightBtnActive: {
+    borderColor: "#dc2626",
+    backgroundColor: "rgba(220,38,38,0.1)",
+  },
+  voiceWeightBtnText: {
+    color: "#2BA8A0",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  voiceWeightBtnTextActive: {
+    color: "#dc2626",
   },
   modeToggle: {
     paddingVertical: 10,
