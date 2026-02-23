@@ -14,6 +14,7 @@ import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
+import { VoiceButton } from "@/components/VoiceButton";
 import { useCountingPreferences } from "@/lib/counting-preferences";
 import { useNetwork } from "@/lib/network-context";
 import { subscribe, type QueueEntry } from "@/lib/offline-queue";
@@ -96,6 +97,12 @@ export default function SessionDetailScreen() {
     setSortMode(next);
     AsyncStorage.setItem("@barstock/countSortMode", next);
   }, [sortMode]);
+
+  // Voice capabilities query (session routes are outside tabs tree)
+  const { data: capabilities } = trpc.settings.capabilities.useQuery(
+    { businessId: authUser?.businessId ?? "" },
+    { enabled: !!authUser?.businessId, staleTime: 5 * 60 * 1000 },
+  );
 
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
     { id: id! },
@@ -1522,6 +1529,15 @@ export default function SessionDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Voice Button — session-aware */}
+      {isOpen && capabilities?.voiceCommandsEnabled && (
+        <VoiceButton
+          sessionId={id}
+          subAreaId={selectedSubAreaId ?? undefined}
+          areaName={areaLabel}
+        />
+      )}
 
       {/* Conflict Resolution Overlay */}
       {conflictData && (

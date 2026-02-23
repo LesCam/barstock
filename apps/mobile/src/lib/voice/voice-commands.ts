@@ -28,7 +28,8 @@ export type VoiceCommandResult =
       itemName: string | null;
       quantity: number | null;
     }
-  | { action: "navigate"; screen: string };
+  | { action: "navigate"; screen: string }
+  | { action: "stop-listening" };
 
 // ── Number word map (one → twenty) ────────────────────────────────────
 
@@ -211,6 +212,11 @@ export function parseVoiceCommand(
   context: VoiceContext,
 ): VoiceCommandResult | null {
   const text = normalize(transcript);
+
+  // ── 0. Stop listening ────────────────────────────────────────────
+  if (text === "stop" || text === "stop listening") {
+    return { action: "stop-listening" };
+  }
 
   // ── 1. Connect to scale ──────────────────────────────────────────
   if (text.includes("connect") && text.includes("scale")) {
