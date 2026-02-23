@@ -9,6 +9,9 @@ const config = getDefaultConfig(projectRoot);
 // Monorepo: watch the whole workspace
 config.watchFolders = [monorepoRoot];
 
+// pnpm uses symlinks — follow them so Metro can resolve packages
+config.resolver.unstable_enableSymlinks = true;
+
 // Resolve from both project and root node_modules
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),

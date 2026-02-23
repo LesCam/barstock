@@ -54,13 +54,14 @@ export default function LoginPage() {
       >
         {/* Logo */}
         <header className="mb-4 flex flex-col items-center text-center">
-          <div className="mb-2 h-24 w-40 overflow-hidden">
+          <div className="mb-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/assets/brand/barstock-master.png"
+              src="/assets/brand/barstock-full-logo.png"
               alt="Barstock"
-              className="h-full w-full object-contain"
-              style={{ transform: "scale(1.76)" }}
+              width={160}
+              height={160}
+              className="object-contain"
             />
           </div>
           <h1

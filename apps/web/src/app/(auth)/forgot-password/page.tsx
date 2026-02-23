@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
         {/* Logo */}
         <div className="mb-6 flex justify-center">
 {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/brand/barstock-master.png" alt="Barstock" width={80} height={80} />
+          <img src="/assets/brand/barstock-icon.png" alt="Barstock" width={80} height={80} />
         </div>
 
         {submitted ? (

@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "barstock",
+    "icon": "./assets/images/barstock-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "ios": {
