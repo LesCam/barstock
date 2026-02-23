@@ -226,25 +226,37 @@ const ALL_NUMBER_WORDS: Record<string, number> = { ...NUMBER_WORDS, ...TENS_WORD
  * Parse a spoken weight transcript into grams.
  * Handles: "720", "seven hundred twenty", "seven twenty", "three fifty",
  * "seven hundred and twenty grams", etc.
- * Returns null if unparseable or outside 1–9999 range.
+ * Returns null if unparseable or outside 1–19999 range.
  */
 export function parseSpokenWeight(transcript: string): number | null {
-  const text = transcript
+  const raw = transcript
     .toLowerCase()
-    .replace(/[.,!?]/g, "")
+    .replace(/[,!?]/g, "")
     .replace(/\b(grams?|gram|g)\b/g, "")
     .replace(/\b(um|uh|like|about|approximately|around)\b/g, "")
     .replace(/\band\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
 
+  if (!raw) return null;
+
+  // 1. Decimal number: "1890.9" → 1891 (round to nearest gram)
+  const decimalMatch = raw.match(/^\d+\.\d+$/);
+  if (decimalMatch) {
+    const n = Math.round(parseFloat(raw));
+    return n >= 1 && n <= 19999 ? n : null;
+  }
+
+  // Strip remaining dots for non-decimal cases
+  const text = raw.replace(/\./g, "");
+
   if (!text) return null;
 
-  // 1. Direct digit string: "720", "1200"
+  // 2. Direct digit string: "720", "1200"
   const digitMatch = text.match(/^\d+$/);
   if (digitMatch) {
     const n = parseInt(text, 10);
-    return n >= 1 && n <= 9999 ? n : null;
+    return n >= 1 && n <= 19999 ? n : null;
   }
 
   const words = text.split(/\s+/);
@@ -257,7 +269,7 @@ export function parseSpokenWeight(transcript: string): number | null {
     const second = ALL_NUMBER_WORDS[words[1]];
     if (first !== undefined && second !== undefined && first >= 1 && first <= 19 && second >= 20 && second <= 90) {
       const result = first * 100 + second;
-      if (result >= 1 && result <= 9999) return result;
+      if (result >= 1 && result <= 19999) return result;
     }
   }
 
@@ -288,7 +300,7 @@ export function parseSpokenWeight(transcript: string): number | null {
 
   if (parsed) {
     total += current;
-    if (total >= 1 && total <= 9999) return total;
+    if (total >= 1 && total <= 19999) return total;
   }
 
   return null;

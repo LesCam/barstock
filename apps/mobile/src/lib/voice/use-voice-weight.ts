@@ -4,29 +4,59 @@ import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 import * as Haptics from "expo-haptics";
 import { parseSpokenWeight } from "./voice-commands";
 
-type VoiceWeightStatus = "idle" | "listening" | "processing";
+type VoiceWeightStatus = "idle" | "listening" | "processing" | "confirming";
+
+const CONFIRM_WORDS = new Set([
+  "submit", "accept", "yes", "confirm", "ok", "okay", "done", "send",
+]);
+
+const RETRY_WORDS = new Set([
+  "retry", "redo", "again", "reweigh", "re-weigh",
+]);
+
+const WEIGHT_CONTEXT_STRINGS = [
+  "100", "150", "200", "250", "300", "350", "400", "450",
+  "500", "550", "600", "650", "700", "750", "800", "850",
+  "900", "950", "1000", "1100", "1200", "1500",
+  "one hundred", "two hundred", "three hundred", "four hundred",
+  "five hundred", "six hundred", "seven hundred", "eight hundred",
+  "seven twenty", "seven fifty", "three fifty", "four fifty",
+  "grams",
+];
+
+const CONFIRM_CONTEXT_STRINGS = [
+  "submit", "accept", "yes", "confirm", "ok", "okay", "done",
+  "retry", "redo", "again",
+];
 
 interface UseVoiceWeightOptions {
   onWeight: (grams: number) => void;
+  onConfirm?: () => void;
   hapticEnabled?: boolean;
 }
 
-export function useVoiceWeight({ onWeight, hapticEnabled = true }: UseVoiceWeightOptions) {
+export function useVoiceWeight({ onWeight, onConfirm, hapticEnabled = true }: UseVoiceWeightOptions) {
   const [status, setStatus] = useState<VoiceWeightStatus>("idle");
   const subsRef = useRef<(() => void)[]>([]);
   const statusRef = useRef<VoiceWeightStatus>("idle");
   const onWeightRef = useRef(onWeight);
+  const onConfirmRef = useRef(onConfirm);
   onWeightRef.current = onWeight;
+  onConfirmRef.current = onConfirm;
 
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
 
-  const cleanup = useCallback(() => {
+  const cleanupListeners = useCallback(() => {
     subsRef.current.forEach((unsub) => unsub());
     subsRef.current.length = 0;
-    setStatus("idle");
   }, []);
+
+  const cleanup = useCallback(() => {
+    cleanupListeners();
+    setStatus("idle");
+  }, [cleanupListeners]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -36,26 +66,13 @@ export function useVoiceWeight({ onWeight, hapticEnabled = true }: UseVoiceWeigh
     };
   }, []);
 
-  const startListening = useCallback(async () => {
-    if (statusRef.current !== "idle") return;
+  // Forward declarations via refs so the two phases can call each other
+  const startWeightListenRef = useRef<() => void>(() => {});
+  const startConfirmListenRef = useRef<() => void>(() => {});
 
-    const permResult = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!permResult.granted) {
-      Alert.alert(
-        "Permission Required",
-        "Microphone permission is needed for voice weight input.",
-      );
-      return;
-    }
-
-    // Clean up any stale listeners
-    subsRef.current.forEach((unsub) => unsub());
-    subsRef.current.length = 0;
-
+  const startWeightListen = useCallback(() => {
+    cleanupListeners();
     setStatus("listening");
-    if (hapticEnabled) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
 
     subsRef.current.push(
       ExpoSpeechRecognitionModule.addListener("result", (event) => {
@@ -69,14 +86,19 @@ export function useVoiceWeight({ onWeight, hapticEnabled = true }: UseVoiceWeigh
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
           onWeightRef.current(grams);
-          cleanup();
+
+          if (onConfirmRef.current) {
+            setTimeout(() => startConfirmListenRef.current(), 300);
+          } else {
+            cleanup();
+          }
         } else {
           if (hapticEnabled) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           }
           Alert.alert(
             "Didn't Catch That",
-            `Heard: "${transcript}"\n\nTry saying a number like "720" or "three fifty".`,
+            `Heard: "${transcript}"\n\nTry saying a number like "720" or "1890.9".`,
           );
           cleanup();
         }
@@ -97,32 +119,118 @@ export function useVoiceWeight({ onWeight, hapticEnabled = true }: UseVoiceWeigh
 
     subsRef.current.push(
       ExpoSpeechRecognitionModule.addListener("end", () => {
-        // If still listening (no result/error triggered cleanup), just reset
         if (statusRef.current !== "idle") {
           cleanup();
         }
       }).remove,
     );
 
-    // Common weight strings to prime recognition
-    const contextualStrings = [
-      "100", "150", "200", "250", "300", "350", "400", "450",
-      "500", "550", "600", "650", "700", "750", "800", "850",
-      "900", "950", "1000", "1100", "1200", "1500",
-      "one hundred", "two hundred", "three hundred", "four hundred",
-      "five hundred", "six hundred", "seven hundred", "eight hundred",
-      "seven twenty", "seven fifty", "three fifty", "four fifty",
-      "grams",
-    ];
-
     ExpoSpeechRecognitionModule.start({
       lang: "en-US",
       interimResults: false,
       continuous: false,
       requiresOnDeviceRecognition: false,
-      contextualStrings,
+      contextualStrings: WEIGHT_CONTEXT_STRINGS,
     });
-  }, [hapticEnabled, cleanup]);
+  }, [hapticEnabled, cleanup, cleanupListeners]);
+
+  const startConfirmListen = useCallback(() => {
+    cleanupListeners();
+    setStatus("confirming");
+
+    // Track whether we already acted (interim results can fire multiple times)
+    let acted = false;
+
+    subsRef.current.push(
+      ExpoSpeechRecognitionModule.addListener("result", (event) => {
+        if (acted) return;
+        const transcript = (event.results[0]?.transcript ?? "").toLowerCase().trim();
+        const words = transcript.split(/\s+/);
+        const isConfirm = words.some((w) => CONFIRM_WORDS.has(w));
+        const isRetry = words.some((w) => RETRY_WORDS.has(w));
+
+        if (isConfirm) {
+          acted = true;
+          if (hapticEnabled) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+          ExpoSpeechRecognitionModule.stop();
+          cleanupListeners();
+          setStatus("idle");
+          setTimeout(() => {
+            onConfirmRef.current?.();
+          }, 50);
+        } else if (isRetry) {
+          acted = true;
+          if (hapticEnabled) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }
+          ExpoSpeechRecognitionModule.stop();
+          onWeightRef.current(0);
+          setTimeout(() => startWeightListenRef.current(), 300);
+        } else if (event.isFinal) {
+          // Only try weight parse on final result
+          const newWeight = parseSpokenWeight(transcript);
+          if (newWeight !== null) {
+            acted = true;
+            if (hapticEnabled) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+            onWeightRef.current(newWeight);
+            setTimeout(() => startConfirmListenRef.current(), 300);
+          } else {
+            acted = true;
+            cleanup();
+          }
+        }
+      }).remove,
+    );
+
+    subsRef.current.push(
+      ExpoSpeechRecognitionModule.addListener("error", () => {
+        cleanup();
+      }).remove,
+    );
+
+    subsRef.current.push(
+      ExpoSpeechRecognitionModule.addListener("end", () => {
+        if (statusRef.current !== "idle") {
+          cleanup();
+        }
+      }).remove,
+    );
+
+    ExpoSpeechRecognitionModule.start({
+      lang: "en-US",
+      interimResults: true,
+      continuous: false,
+      requiresOnDeviceRecognition: false,
+      contextualStrings: CONFIRM_CONTEXT_STRINGS,
+    });
+  }, [hapticEnabled, cleanup, cleanupListeners]);
+
+  // Keep refs in sync
+  startWeightListenRef.current = startWeightListen;
+  startConfirmListenRef.current = startConfirmListen;
+
+  const startListening = useCallback(async () => {
+    if (statusRef.current !== "idle") return;
+
+    const permResult = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!permResult.granted) {
+      Alert.alert(
+        "Permission Required",
+        "Microphone permission is needed for voice weight input.",
+      );
+      return;
+    }
+
+    if (hapticEnabled) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    startWeightListen();
+  }, [hapticEnabled, startWeightListen]);
 
   const cancelListening = useCallback(() => {
     if (statusRef.current === "idle") return;

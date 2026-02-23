@@ -77,6 +77,7 @@ export default function ScanWeighScreen() {
   const { status: voiceStatus, startListening: startVoiceWeight, cancelListening: cancelVoiceWeight } =
     useVoiceWeight({
       onWeight: (grams) => setManualWeight(String(grams)),
+      onConfirm: () => handleSubmitRef.current(),
       hapticEnabled,
     });
 
@@ -869,7 +870,9 @@ export default function ScanWeighScreen() {
                       ? "Listening..."
                       : voiceStatus === "processing"
                         ? "Processing..."
-                        : "Say Weight"}
+                        : voiceStatus === "confirming"
+                          ? "Submit / Retry?"
+                          : "Say Weight"}
                   </Text>
                 </TouchableOpacity>
                 <NumericKeypad
