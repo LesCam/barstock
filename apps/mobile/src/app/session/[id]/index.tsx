@@ -106,7 +106,7 @@ export default function SessionDetailScreen() {
 
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
     { id: id! },
-    { refetchOnMount: "always", refetchInterval: 60_000 }
+    { staleTime: 10_000, refetchInterval: 60_000 }
   );
 
   // --- Cache warming: prefetch data needed for offline counting ---
@@ -272,7 +272,7 @@ export default function SessionDetailScreen() {
 
   const { data: areas } = trpc.areas.listBarAreas.useQuery(
     { locationId: selectedLocationId! },
-    { enabled: !!selectedLocationId }
+    { enabled: !!selectedLocationId, staleTime: 5 * 60 * 1000 }
   );
 
   // Live expected items for currently selected area
@@ -283,13 +283,13 @@ export default function SessionDetailScreen() {
       subAreaId: selectedSubAreaId ?? undefined,
       sortMode,
     },
-    { enabled: !!selectedLocationId && !!selectedAreaId && !fullLocationMode }
+    { enabled: !!selectedLocationId && !!selectedAreaId && !fullLocationMode, staleTime: 15_000 }
   );
 
   // Full location expected items (always fetched — used for progress indicators)
   const { data: expectedItemsForLocation } = trpc.sessions.expectedItemsForLocation.useQuery(
     { locationId: selectedLocationId!, sortMode },
-    { enabled: !!selectedLocationId }
+    { enabled: !!selectedLocationId, staleTime: 15_000 }
   );
 
   const expectedItems = fullLocationMode ? expectedItemsForLocation : expectedItemsForArea;

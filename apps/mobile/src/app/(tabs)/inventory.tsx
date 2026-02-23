@@ -43,7 +43,7 @@ export default function InventoryTab() {
   const { selectedLocationId } = useAuth();
   const { data: items } = trpc.inventory.listWithStock.useQuery(
     { locationId: selectedLocationId! },
-    { enabled: !!selectedLocationId }
+    { enabled: !!selectedLocationId, staleTime: 30_000 }
   );
   const { sparklineMap } = useUsageSparklines(selectedLocationId ?? null);
   const { parMap } = useParStatus(selectedLocationId ?? null);

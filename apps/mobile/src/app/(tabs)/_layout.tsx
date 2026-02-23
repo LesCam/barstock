@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { View, Text } from "react-native";
 import { Tabs } from "expo-router";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import LocationPicker from "@/components/LocationPicker";
@@ -45,6 +45,9 @@ function TabsLayout() {
           options={{
             title: "Sessions",
             tabBarLabel: "Sessions",
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 22, color }}>📋</Text>
+            ),
             href: canAccessSessions ? undefined : null,
           }}
         />
@@ -53,6 +56,9 @@ function TabsLayout() {
           options={{
             title: "Art",
             tabBarLabel: "Art",
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 22, color }}>🎨</Text>
+            ),
             href: canAccessArt ? undefined : null,
           }}
         />
@@ -61,6 +67,9 @@ function TabsLayout() {
           options={{
             title: "Inventory",
             tabBarLabel: "Inventory",
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 22, color }}>🍾</Text>
+            ),
             href: canAccessInventory ? undefined : null,
           }}
         />
@@ -69,6 +78,9 @@ function TabsLayout() {
           options={{
             title: "Usage",
             tabBarLabel: "Usage",
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 22, color }}>📊</Text>
+            ),
             href: canAccessInventory ? undefined : null,
           }}
         />
@@ -77,12 +89,21 @@ function TabsLayout() {
           options={{
             title: "Product Guide",
             tabBarLabel: "Guide",
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 22, color }}>🍸</Text>
+            ),
             href: canAccessGuide ? undefined : null,
           }}
         />
         <Tabs.Screen
           name="settings"
-          options={{ title: "Settings", tabBarLabel: "Settings" }}
+          options={{
+            title: "Settings",
+            tabBarLabel: "Settings",
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 22, color }}>⚙️</Text>
+            ),
+          }}
         />
       </Tabs>
       {capabilities?.voiceCommandsEnabled && voiceUserEnabled && <VoiceButton />}

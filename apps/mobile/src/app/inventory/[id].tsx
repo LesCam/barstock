@@ -49,15 +49,18 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 export default function InventoryItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const { data: item, isLoading } = trpc.inventory.getById.useQuery({ id: id! });
+  const { data: item, isLoading } = trpc.inventory.getById.useQuery(
+    { id: id! },
+    { staleTime: 30_000 }
+  );
   const { data: location } = trpc.inventory.lastLocation.useQuery(
     { inventoryItemId: id! },
-    { enabled: !!id }
+    { enabled: !!id, staleTime: 30_000 }
   );
 
   const { data: stockRows } = trpc.inventory.listWithStock.useQuery(
     { locationId: item?.locationId! },
-    { enabled: !!item?.locationId }
+    { enabled: !!item?.locationId, staleTime: 30_000 }
   );
 
   const onHandQty = stockRows?.find((r) => r.id === id)?.onHandQty ?? null;

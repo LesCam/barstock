@@ -122,8 +122,16 @@ const links = [
   httpBatchLink({
     url: `${API_URL}/api/trpc`,
     transformer: superjson,
+    maxURLLength: 2083,
     headers() {
       return authToken ? { authorization: `Bearer ${authToken}` } : {};
+    },
+    fetch(url, options) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15_000);
+      return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+        clearTimeout(timer)
+      );
     },
   }),
 ];
