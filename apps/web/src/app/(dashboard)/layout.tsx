@@ -19,7 +19,7 @@ export default async function DashboardLayout({
     <div className="flex h-screen">
       <Sidebar user={session.user as any} />
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-end border-b border-white/10 px-6 py-3">
+        <header className="print-hide flex items-center justify-end border-b border-white/10 px-6 py-3">
           <NotificationBell />
         </header>
         <main className="flex-1 overflow-y-auto bg-[var(--navy-bg)] text-[var(--text-primary)] p-6">{children}</main>

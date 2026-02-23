@@ -62,13 +62,15 @@ export default function ArtworkQRScreen() {
       <View style={styles.qrWrapper}>
         <QRCode
           value={publicUrl}
-          size={180}
+          size={220}
           backgroundColor="#FFFFFF"
           color="#000000"
+          ecl="H"
         />
       </View>
 
       <Text style={styles.scanHint}>Scan for more details</Text>
+      <Text style={styles.urlText} selectable>{publicUrl}</Text>
 
       {/* Close button */}
       <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
@@ -153,5 +155,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFF",
+  },
+  urlText: {
+    fontSize: 10,
+    color: "#BBB",
+    marginTop: 4,
+    textAlign: "center" as const,
   },
 });

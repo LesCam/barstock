@@ -70,7 +70,7 @@ export function Sidebar({ user }: SidebarProps) {
     : "All Locations";
 
   return (
-    <aside className="flex w-64 flex-col border-r border-white/10 bg-[var(--navy-bg)]">
+    <aside className="print-hide flex w-64 flex-col border-r border-white/10 bg-[var(--navy-bg)]">
       <div className="border-b border-white/10 p-4">
         <h2 className="text-lg font-bold text-[var(--text-primary)]">{user.businessName || "Dashboard"}</h2>
         <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{user.email}</p>

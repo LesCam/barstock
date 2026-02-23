@@ -23,4 +23,8 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  /* Hide sidebar, header, and non-print UI when printing */
+  .print-hide {
+    display: none !important;
+  }
 }
