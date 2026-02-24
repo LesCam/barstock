@@ -51,6 +51,7 @@ export const masterProductsRouter = router({
               : null,
             categoryHint: masterProduct.categoryHint,
             brand: null as string | null,
+            imageUrl: null as string | null,
           },
         };
       }
@@ -71,6 +72,7 @@ export const masterProductsRouter = router({
             containerSizeMl: offResult.containerSizeMl,
             categoryHint: offResult.categoryHint,
             brand: offResult.brand,
+            imageUrl: offResult.imageUrl,
           },
         };
       }

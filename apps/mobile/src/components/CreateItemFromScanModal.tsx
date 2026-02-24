@@ -12,6 +12,7 @@ import {
   Platform,
   Switch,
   Alert,
+  Image,
 } from "react-native";
 import { useAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
@@ -26,6 +27,7 @@ export interface BarcodeSuggestion {
   containerSizeMl: number | null;
   categoryHint: string | null;
   brand: string | null;
+  imageUrl?: string | null;
 }
 
 interface Props {
@@ -231,6 +233,13 @@ export function CreateItemFromScanModal({
             {/* Pre-filled banner */}
             {suggestion && (
               <View style={styles.suggestionBanner}>
+                {suggestion.imageUrl && (
+                  <Image
+                    source={{ uri: suggestion.imageUrl }}
+                    style={styles.productImage}
+                    resizeMode="contain"
+                  />
+                )}
                 <Text style={styles.suggestionBannerText}>
                   Pre-filled from product database
                 </Text>
@@ -724,6 +733,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: "#bfdbfe",
+    alignItems: "center",
+  },
+  productImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 8,
   },
   suggestionBannerText: {
     color: "#2563eb",

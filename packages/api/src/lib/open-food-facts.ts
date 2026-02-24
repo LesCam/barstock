@@ -11,6 +11,7 @@ export interface OpenFoodFactsResult {
   brand: string | null;
   containerSizeMl: number | null;
   categoryHint: string | null;
+  imageUrl: string | null;
 }
 
 /** Parse quantity strings like "750 ml", "1.75 L", "70 cl" to ml */
@@ -45,7 +46,7 @@ export async function lookupOpenFoodFacts(
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
-    const url = `${OFF_BASE_URL}/${encodeURIComponent(barcode)}?fields=product_name,brands,quantity,categories_tags`;
+    const url = `${OFF_BASE_URL}/${encodeURIComponent(barcode)}?fields=product_name,brands,quantity,categories_tags,image_front_url`;
     const res = await fetch(url, {
       signal: controller.signal,
       headers: { "User-Agent": "Barstock/1.0 (barcode-lookup)" },
@@ -60,6 +61,7 @@ export async function lookupOpenFoodFacts(
         brands?: string;
         quantity?: string;
         categories_tags?: string[];
+        image_front_url?: string;
       };
     };
     if (data.status !== 1 || !data.product) return null;
@@ -87,7 +89,9 @@ export async function lookupOpenFoodFacts(
       }
     }
 
-    return { name, brand, containerSizeMl, categoryHint };
+    const imageUrl = product.image_front_url?.trim() || null;
+
+    return { name, brand, containerSizeMl, categoryHint, imageUrl };
   } catch {
     // Timeout, network error, parse error — all return null
     return null;
