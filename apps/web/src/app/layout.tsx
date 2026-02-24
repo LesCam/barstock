@@ -5,6 +5,8 @@ import { Providers } from "@/components/providers";
 export const metadata: Metadata = {
   title: "BarStock — Beverage Inventory Platform",
   description: "Real-time inventory tracking for bars and restaurants",
+  manifest: "/manifest.json",
+  themeColor: "#0B1623",
 };
 
 export default function RootLayout({

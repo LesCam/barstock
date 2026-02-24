@@ -4,6 +4,8 @@ import { use, useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
+import { useNetwork } from "@/lib/network-context";
+import { enqueue, subscribe, type QueueEntry } from "@/lib/offline-queue";
 import Link from "next/link";
 import { VarianceReason } from "@barstock/types";
 
@@ -87,6 +89,15 @@ export default function SessionDetailPage({
   const user = authSession?.user as any;
   const { selectedLocationId: locationId } = useLocation();
   const utils = trpc.useUtils();
+  const { isOnline } = useNetwork();
+
+  // --- Offline queue count ---
+  const [pendingQueueCount, setPendingQueueCount] = useState(0);
+  useEffect(() => {
+    return subscribe((queue) => {
+      setPendingQueueCount(queue.filter((e) => e.status === "pending" || e.status === "syncing").length);
+    });
+  }, []);
 
   // --- Data fetching (SSE handles live updates; 60s fallback poll) ---
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
@@ -154,9 +165,9 @@ export default function SessionDetailPage({
   // --- Duplicate warning state ---
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
 
-  // --- SSE listener for real-time session updates ---
+  // --- SSE listener for real-time session updates (network-aware) ---
   useEffect(() => {
-    if (!session || session.endedTs) return;
+    if (!session || session.endedTs || !isOnline) return;
     const es = new EventSource(`/api/sessions/${id}/stream`);
     es.onmessage = (event) => {
       try {
@@ -179,7 +190,18 @@ export default function SessionDetailPage({
       }
     };
     return () => es.close();
-  }, [id, session?.endedTs, utils]);
+  }, [id, session?.endedTs, isOnline, utils]);
+
+  // Re-establish data when coming back online
+  const wasOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    if (isOnline && !wasOnlineRef.current) {
+      utils.sessions.getById.invalidate({ id });
+      utils.sessions.listParticipants.invalidate({ sessionId: id });
+      utils.sessions.previewClose.invalidate({ sessionId: id });
+    }
+    wasOnlineRef.current = isOnline;
+  }, [isOnline, id, utils]);
 
   // --- Claim/Release mutations ---
   const claimSubAreaMut = trpc.sessions.claimSubArea.useMutation({
@@ -316,14 +338,34 @@ export default function SessionDetailPage({
   function handleAddLine() {
     if (!selectedItemId) return;
     const value = countInput ? Number(countInput) : undefined;
-    addLineMut.mutate({
+    const input = {
       sessionId: id,
       inventoryItemId: selectedItemId,
       subAreaId: selectedSubAreaId || undefined,
       ...(useWeight
         ? { grossWeightGrams: value }
         : { countUnits: value }),
-    });
+    };
+
+    if (!isOnline) {
+      // Check cached session data for duplicate items
+      const alreadyCounted = session?.lines.some(
+        (l) => l.inventoryItemId === selectedItemId,
+      );
+      if (alreadyCounted) {
+        setDuplicateWarning("This item has already been counted in this session (queued offline).");
+        setTimeout(() => setDuplicateWarning(null), 5000);
+      }
+      enqueue("sessions.addLine", input);
+      setSelectedItemId("");
+      setCountInput("");
+      setItemSearch("");
+      setSelectedSubAreaId("");
+      setUseWeight(false);
+      return;
+    }
+
+    addLineMut.mutate(input);
   }
 
   async function handleClose() {
@@ -395,6 +437,11 @@ export default function SessionDetailPage({
           >
             {isOpen ? "Open" : "Closed"}
           </span>
+          {!isOnline && (
+            <span className="rounded-full bg-gray-500/20 px-2 py-0.5 text-xs font-medium text-gray-400">
+              Offline
+            </span>
+          )}
         </div>
 
         <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-[#EAF0FF]/60">
@@ -584,8 +631,13 @@ export default function SessionDetailPage({
                       value={line.countUnits != null ? Number(line.countUnits) : null}
                       disabled={!isOpen}
                       onSave={(v) => {
+                        const expectedUpdatedAt = line.updatedAt ? new Date(line.updatedAt).toISOString() : undefined;
+                        if (!isOnline) {
+                          enqueue("sessions.updateLine", { id: line.id, countUnits: v, expectedUpdatedAt });
+                          return;
+                        }
                         setConflict({ lineId: line.id, myField: "countUnits", myValue: v, theirValues: { countUnits: null, grossWeightGrams: null, percentRemaining: null }, theirName: "", currentUpdatedAt: "" });
-                        updateLineMut.mutate({ id: line.id, countUnits: v, expectedUpdatedAt: line.updatedAt ? new Date(line.updatedAt).toISOString() : undefined });
+                        updateLineMut.mutate({ id: line.id, countUnits: v, expectedUpdatedAt });
                       }}
                     />
                   </td>
@@ -598,8 +650,13 @@ export default function SessionDetailPage({
                       }
                       disabled={!isOpen}
                       onSave={(v) => {
+                        const expectedUpdatedAt = line.updatedAt ? new Date(line.updatedAt).toISOString() : undefined;
+                        if (!isOnline) {
+                          enqueue("sessions.updateLine", { id: line.id, grossWeightGrams: v, expectedUpdatedAt });
+                          return;
+                        }
                         setConflict({ lineId: line.id, myField: "grossWeightGrams", myValue: v, theirValues: { countUnits: null, grossWeightGrams: null, percentRemaining: null }, theirName: "", currentUpdatedAt: "" });
-                        updateLineMut.mutate({ id: line.id, grossWeightGrams: v, expectedUpdatedAt: line.updatedAt ? new Date(line.updatedAt).toISOString() : undefined });
+                        updateLineMut.mutate({ id: line.id, grossWeightGrams: v, expectedUpdatedAt });
                       }}
                     />
                   </td>
@@ -612,8 +669,13 @@ export default function SessionDetailPage({
                       }
                       disabled={!isOpen}
                       onSave={(v) => {
+                        const expectedUpdatedAt = line.updatedAt ? new Date(line.updatedAt).toISOString() : undefined;
+                        if (!isOnline) {
+                          enqueue("sessions.updateLine", { id: line.id, percentRemaining: v, expectedUpdatedAt });
+                          return;
+                        }
                         setConflict({ lineId: line.id, myField: "percentRemaining", myValue: v, theirValues: { countUnits: null, grossWeightGrams: null, percentRemaining: null }, theirName: "", currentUpdatedAt: "" });
-                        updateLineMut.mutate({ id: line.id, percentRemaining: v, expectedUpdatedAt: line.updatedAt ? new Date(line.updatedAt).toISOString() : undefined });
+                        updateLineMut.mutate({ id: line.id, percentRemaining: v, expectedUpdatedAt });
                       }}
                     />
                   </td>
@@ -635,7 +697,11 @@ export default function SessionDetailPage({
                       <button
                         onClick={() => {
                           if (confirm(`Remove ${line.inventoryItem.name}?`)) {
-                            deleteLineMut.mutate({ id: line.id });
+                            if (!isOnline) {
+                              enqueue("sessions.deleteLine", { id: line.id });
+                            } else {
+                              deleteLineMut.mutate({ id: line.id });
+                            }
                           }
                         }}
                         className="text-xs text-red-400 hover:text-red-300"
@@ -655,7 +721,14 @@ export default function SessionDetailPage({
       {/* Add item section (open sessions only) */}
       {isOpen && (
         <div className="mt-4 rounded-lg border border-white/10 bg-[#16283F] p-4">
-          <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]">Add Item</h2>
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-[#EAF0FF]">Add Item</h2>
+            {pendingQueueCount > 0 && (
+              <span className="rounded-full bg-blue-600/20 px-2 py-0.5 text-xs font-medium text-blue-400">
+                {pendingQueueCount} queued
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[200px]">
               <label className="mb-1 flex items-center gap-2 text-xs text-[#EAF0FF]/60">
@@ -823,11 +896,15 @@ export default function SessionDetailPage({
         <div className="mt-4">
           <button
             onClick={handleClose}
-            disabled={closeMut.isPending}
+            disabled={closeMut.isPending || !isOnline}
             className="rounded-md bg-[#E9B44C] px-6 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+            title={!isOnline ? "Cannot close session while offline" : undefined}
           >
             {closeMut.isPending ? "Closing..." : "Close Session"}
           </button>
+          {!isOnline && (
+            <p className="mt-2 text-sm text-[#EAF0FF]/40">Session closing requires a network connection.</p>
+          )}
           {closeMut.error && !showVarianceDialog && (
             <p className="mt-2 text-sm text-red-400">{closeMut.error.message}</p>
           )}
