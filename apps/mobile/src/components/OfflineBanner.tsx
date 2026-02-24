@@ -62,9 +62,9 @@ export function OfflineBanner() {
     }).start();
   }, [bannerState, slideAnim]);
 
-  if (bannerState === "hidden") return null;
-
   const [retrying, setRetrying] = useState(false);
+
+  if (bannerState === "hidden") return null;
 
   function handleRetry() {
     setRetrying(true);

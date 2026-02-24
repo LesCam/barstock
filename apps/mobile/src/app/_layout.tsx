@@ -200,7 +200,8 @@ export default function RootLayout() {
     persister: asyncStoragePersister,
     dehydrateOptions: {
       shouldDehydrateQuery: (query: any) => {
-        // Only persist session, inventory, and area queries — not auth
+        // Only persist successful session, inventory, and area queries — not auth
+        if (query.state.status !== "success") return false;
         const key = query.queryKey?.[0]?.[0] ?? "";
         return (
           key === "sessions" ||
