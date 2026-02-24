@@ -33,6 +33,7 @@ const navItems = [
   { href: "/sessions", label: "Sessions", icon: "📋" },
   { href: "/analytics", label: "Analytics", icon: "\uD83E\uDDE0" },
   { href: "/reports", label: "Reports", icon: "📈" },
+  { href: "/usage-trends", label: "Usage Trends", icon: "📉" },
   { href: "/audit", label: "Audit Log", icon: "🔍" },
   { href: "/alerts", label: "Alerts", icon: "🚨" },
   { href: "/notifications", label: "Notifications", icon: "🔔" },
