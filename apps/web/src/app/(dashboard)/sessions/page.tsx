@@ -7,7 +7,6 @@ import { useLocation } from "@/components/location-context";
 import { useRouter } from "next/navigation";
 import { HelpLink } from "@/components/help-link";
 import { SessionType } from "@barstock/types";
-import { useNetwork } from "@/lib/network-context";
 
 export default function SessionsPage() {
   const { data: session } = useSession();
@@ -15,7 +14,6 @@ export default function SessionsPage() {
   const { selectedLocationId: locationId } = useLocation();
   const router = useRouter();
   const utils = trpc.useUtils();
-  const { isOnline } = useNetwork();
 
   const [showNewForm, setShowNewForm] = useState(false);
   const [sessionType, setSessionType] = useState<SessionType>("shift");
@@ -56,9 +54,7 @@ export default function SessionsPage() {
         </div>
         <button
           onClick={() => setShowNewForm((v) => !v)}
-          disabled={!isOnline}
-          className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
-          title={!isOnline ? "Cannot create sessions while offline" : undefined}
+          className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
         >
           {showNewForm ? "Cancel" : "New Session"}
         </button>
