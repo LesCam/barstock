@@ -1,7 +1,8 @@
 import { router, protectedProcedure } from "../trpc";
-import { masterProductLookupSchema, masterProductContributeSchema } from "@barstock/validators";
+import { masterProductLookupSchema, masterProductContributeSchema, chainedLookupSchema } from "@barstock/validators";
 import { SettingsService } from "../services/settings.service";
 import { TRPCError } from "@trpc/server";
+import { lookupOpenFoodFacts } from "../lib/open-food-facts";
 
 export const masterProductsRouter = router({
   lookup: protectedProcedure
@@ -11,6 +12,72 @@ export const masterProductsRouter = router({
         where: { barcode: input.barcode },
       })
     ),
+
+  /** Chained lookup: local inventory → master products → Open Food Facts */
+  chainedLookup: protectedProcedure
+    .input(chainedLookupSchema)
+    .query(async ({ ctx, input }) => {
+      // 1. Check local inventory
+      const localItem = await ctx.prisma.inventoryItem.findFirst({
+        where: {
+          locationId: input.locationId,
+          barcode: input.barcode,
+          active: true,
+        },
+        include: {
+          category: {
+            select: { id: true, name: true, countingMethod: true, defaultDensity: true },
+          },
+        },
+      });
+
+      if (localItem) {
+        return { source: "local" as const, localItem, suggestion: null };
+      }
+
+      // 2. Check master products
+      const masterProduct = await ctx.prisma.masterProduct.findUnique({
+        where: { barcode: input.barcode },
+      });
+
+      if (masterProduct) {
+        return {
+          source: "master" as const,
+          localItem: null,
+          suggestion: {
+            name: masterProduct.name,
+            containerSizeMl: masterProduct.containerSizeMl
+              ? Number(masterProduct.containerSizeMl)
+              : null,
+            categoryHint: masterProduct.categoryHint,
+            brand: null as string | null,
+          },
+        };
+      }
+
+      // 3. Check Open Food Facts (external API, 3s timeout)
+      const offResult = await lookupOpenFoodFacts(input.barcode);
+
+      if (offResult) {
+        const displayName = offResult.brand
+          ? `${offResult.brand} ${offResult.name}`
+          : offResult.name;
+
+        return {
+          source: "openfoodfacts" as const,
+          localItem: null,
+          suggestion: {
+            name: displayName,
+            containerSizeMl: offResult.containerSizeMl,
+            categoryHint: offResult.categoryHint,
+            brand: offResult.brand,
+          },
+        };
+      }
+
+      // 4. Not found anywhere
+      return { source: "none" as const, localItem: null, suggestion: null };
+    }),
 
   contribute: protectedProcedure
     .input(masterProductContributeSchema)

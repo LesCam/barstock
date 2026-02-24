@@ -16,5 +16,11 @@ export const masterProductContributeSchema = z.object({
   densityGPerMl: z.number().positive().optional(),
 });
 
+export const chainedLookupSchema = z.object({
+  barcode: z.string().min(1),
+  locationId: z.string().uuid(),
+});
+
 export type MasterProductLookupInput = z.infer<typeof masterProductLookupSchema>;
 export type MasterProductContributeInput = z.infer<typeof masterProductContributeSchema>;
+export type ChainedLookupInput = z.infer<typeof chainedLookupSchema>;

@@ -22,7 +22,7 @@ import { useCountingPreferences } from "@/lib/counting-preferences";
 import { useNetwork } from "@/lib/network-context";
 import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
-import { CreateItemFromScanModal } from "@/components/CreateItemFromScanModal";
+import { CreateItemFromScanModal, type BarcodeSuggestion } from "@/components/CreateItemFromScanModal";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
 import { useVoiceWeight } from "@/lib/voice/use-voice-weight";
 
@@ -68,7 +68,7 @@ export default function ScanWeighScreen() {
   const [manualWeight, setManualWeight] = useState("");
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
-  const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
+  const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string; suggestion?: BarcodeSuggestion | null } | null>(null);
   const [lastSubmittedName, setLastSubmittedName] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [unitCount, setUnitCount] = useState("");
@@ -305,7 +305,7 @@ export default function ScanWeighScreen() {
     })();
   }, [preselectedItemId, utils]);
 
-  // Handle barcode scan
+  // Handle barcode scan — chained lookup: local → master → Open Food Facts
   const handleBarcodeScan = useCallback(
     async (barcode: string) => {
       if (phaseRef.current !== "scanning") return;
@@ -319,18 +319,26 @@ export default function ScanWeighScreen() {
       setShowManualEntry(false);
 
       try {
-        const item = await utils.inventory.getByBarcode.fetch({
+        const result = await utils.masterProducts.chainedLookup.fetch({
           locationId: selectedLocationId!,
           barcode,
         });
-        if (item) {
-          const typedItem = item as MatchedItem;
+
+        if (result.source === "local" && result.localItem) {
+          const typedItem = result.localItem as MatchedItem;
           setMatchedItem(typedItem);
-              if (typedItem.category?.countingMethod !== "weighable") {
+          if (typedItem.category?.countingMethod !== "weighable") {
             setPhase("counting");
           } else {
             setPhase("weighing");
           }
+        } else if (
+          (result.source === "master" || result.source === "openfoodfacts") &&
+          result.suggestion
+        ) {
+          // Found in master/OFF — open create modal with pre-filled suggestion
+          setCreatingFromScan({ barcode, suggestion: result.suggestion });
+          setPhase("scanning"); // Reset phase so camera stays ready after modal closes
         } else {
           setPhase("not_found");
         }
@@ -1032,6 +1040,7 @@ export default function ScanWeighScreen() {
         <CreateItemFromScanModal
           barcode={creatingFromScan.barcode}
           locationId={selectedLocationId!}
+          suggestion={creatingFromScan.suggestion}
           onSuccess={() => {
             utils.scale.listTemplates.invalidate({ locationId: selectedLocationId! });
             setCreatingFromScan(null);

@@ -21,9 +21,17 @@ const DEFAULT_DENSITY = 0.95;
 
 type WeightKind = "full" | "tare";
 
+export interface BarcodeSuggestion {
+  name: string;
+  containerSizeMl: number | null;
+  categoryHint: string | null;
+  brand: string | null;
+}
+
 interface Props {
   barcode: string;
   locationId: string;
+  suggestion?: BarcodeSuggestion | null;
   onSuccess: (result: { guideItemId?: string }) => void;
   onCancel: () => void;
 }
@@ -31,6 +39,7 @@ interface Props {
 export function CreateItemFromScanModal({
   barcode,
   locationId,
+  suggestion,
   onSuccess,
   onCancel,
 }: Props) {
@@ -52,9 +61,11 @@ export function CreateItemFromScanModal({
     { enabled: !!locationId }
   );
 
-  // Form state
-  const [name, setName] = useState("");
-  const [containerSizeMl, setContainerSizeMl] = useState("750");
+  // Form state — pre-fill from suggestion if available
+  const [name, setName] = useState(suggestion?.name ?? "");
+  const [containerSizeMl, setContainerSizeMl] = useState(
+    suggestion?.containerSizeMl ? String(suggestion.containerSizeMl) : "750"
+  );
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [newVendorName, setNewVendorName] = useState("");
@@ -64,12 +75,23 @@ export function CreateItemFromScanModal({
   const [addToGuide, setAddToGuide] = useState(false);
   const [guideCategoryId, setGuideCategoryId] = useState<string>("");
 
-  // Auto-select first weighable category
+  // Auto-select category: fuzzy-match suggestion categoryHint, or fall back to first weighable
   useEffect(() => {
-    if (!selectedCategoryId && weighableCategories?.length) {
-      setSelectedCategoryId(weighableCategories[0].id);
+    if (selectedCategoryId || !weighableCategories?.length) return;
+
+    if (suggestion?.categoryHint) {
+      const hint = suggestion.categoryHint.toLowerCase();
+      const match = weighableCategories.find((c) =>
+        hint.includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(hint)
+      );
+      if (match) {
+        setSelectedCategoryId(match.id);
+        return;
+      }
     }
-  }, [weighableCategories, selectedCategoryId]);
+
+    setSelectedCategoryId(weighableCategories[0].id);
+  }, [weighableCategories, selectedCategoryId, suggestion]);
 
   // Auto-select first guide category when toggled on
   useEffect(() => {
@@ -97,6 +119,7 @@ export function CreateItemFromScanModal({
   // Create mutations
   const createMutation = trpc.scale.createItemWithTemplate.useMutation();
   const guideCreateMutation = trpc.productGuide.createItem.useMutation();
+  const contributeMutation = trpc.masterProducts.contribute.useMutation();
   const isSaving = createMutation.isPending || guideCreateMutation.isPending;
 
   // Scale listener
@@ -154,6 +177,13 @@ export function CreateItemFromScanModal({
         fullBottleWeightG: finalFullG,
       });
 
+      // Fire-and-forget: contribute to master product catalog
+      contributeMutation.mutate({
+        barcode,
+        name: name.trim(),
+        containerSizeMl: sizeMl,
+      });
+
       if (addToGuide && guideCategoryId) {
         try {
           const guideItem = await guideCreateMutation.mutateAsync({
@@ -197,6 +227,15 @@ export function CreateItemFromScanModal({
                 <Text style={styles.closeBtn}>&#x2715;</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Pre-filled banner */}
+            {suggestion && (
+              <View style={styles.suggestionBanner}>
+                <Text style={styles.suggestionBannerText}>
+                  Pre-filled from product database
+                </Text>
+              </View>
+            )}
 
             {/* Barcode (read-only) */}
             <Text style={styles.label}>Barcode</Text>
@@ -675,6 +714,20 @@ const styles = StyleSheet.create({
   },
   guideCatTextActive: {
     color: "#fff",
+    fontWeight: "600",
+  },
+  suggestionBanner: {
+    backgroundColor: "#eff6ff",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  suggestionBannerText: {
+    color: "#2563eb",
+    fontSize: 13,
     fontWeight: "600",
   },
 });
