@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { View, Text, TouchableOpacity, FlatList, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as Crypto from "expo-crypto";
@@ -27,6 +27,21 @@ export default function DraftVerifyScreen() {
   const { selectedLocationId, user: authUser } = useAuth();
   const utils = trpc.useUtils();
   const { isOnline } = useNetwork();
+
+  // Bar areas (already cached from session detail screen) — used for optimistic subArea data
+  const { data: barAreas } = trpc.areas.listBarAreas.useQuery(
+    { locationId: selectedLocationId! },
+    { enabled: !!selectedLocationId, staleTime: 5 * 60 * 1000 }
+  );
+
+  const subAreaForLine = useMemo(() => {
+    if (!subAreaId || !barAreas) return null;
+    for (const area of barAreas as { id: string; name: string; subAreas: { id: string; name: string }[] }[]) {
+      const sa = area.subAreas.find((s) => s.id === subAreaId);
+      if (sa) return { id: sa.id, name: sa.name, barArea: { id: area.id, name: area.name } };
+    }
+    return null;
+  }, [subAreaId, barAreas]);
 
   const { data: tapLines, isLoading } = trpc.draft.listTapLines.useQuery(
     { locationId: selectedLocationId! },
@@ -104,7 +119,7 @@ export default function DraftVerifyScreen() {
               countedBy: authUser?.userId ?? null,
               createdAt: new Date().toISOString(),
               inventoryItem: { name: tap.productName, barcode: null, baseUom: "", category: null },
-              subArea: null,
+              subArea: subAreaForLine,
               countedByUser: authUser ? { email: authUser.email, firstName: authUser.email.split("@")[0] } : null,
               _pendingSync: true,
             }],

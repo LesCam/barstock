@@ -64,6 +64,21 @@ export default function LiquorWeighScreen() {
   );
   const hint = countHints?.[0] ?? null;
 
+  // Bar areas (already cached from session detail screen) — used for optimistic subArea data
+  const { data: barAreas } = trpc.areas.listBarAreas.useQuery(
+    { locationId: selectedLocationId! },
+    { enabled: !!selectedLocationId, staleTime: 5 * 60 * 1000 }
+  );
+
+  const subAreaForLine = useMemo(() => {
+    if (!subAreaId || !barAreas) return null;
+    for (const area of barAreas as { id: string; name: string; subAreas: { id: string; name: string }[] }[]) {
+      const sa = area.subAreas.find((s) => s.id === subAreaId);
+      if (sa) return { id: sa.id, name: sa.name, barArea: { id: area.id, name: area.name } };
+    }
+    return null;
+  }, [subAreaId, barAreas]);
+
   const { data: templates } = trpc.scale.listTemplates.useQuery(
     { locationId: selectedLocationId! },
     { enabled: !!selectedLocationId }
@@ -165,7 +180,7 @@ export default function LiquorWeighScreen() {
               baseUom: selectedItem.baseUom,
               category: selectedItem.category ?? null,
             },
-            subArea: null,
+            subArea: subAreaForLine,
             countedByUser: authUser ? {
               email: authUser.email,
               firstName: authUser.email.split("@")[0],
@@ -245,7 +260,7 @@ export default function LiquorWeighScreen() {
               baseUom: selectedItem.baseUom,
               category: selectedItem.category ?? null,
             },
-            subArea: null,
+            subArea: subAreaForLine,
             countedByUser: authUser ? {
               email: authUser.email,
               firstName: authUser.email.split("@")[0],
