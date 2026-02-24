@@ -318,6 +318,25 @@ export default function ScanWeighScreen() {
       setManualWeight("");
       setShowManualEntry(false);
 
+      // Offline fallback: match against cached inventory items
+      if (!isOnline && inventoryItems) {
+        const cachedMatch = (inventoryItems as MatchedItem[]).find(
+          (item) => item.barcode === barcode
+        );
+        if (cachedMatch) {
+          setMatchedItem(cachedMatch);
+          if (cachedMatch.category?.countingMethod !== "weighable") {
+            setPhase("counting");
+          } else {
+            setPhase("weighing");
+          }
+          return;
+        }
+        // No cached match while offline — skip network call
+        setPhase("not_found");
+        return;
+      }
+
       try {
         const result = await utils.masterProducts.chainedLookup.fetch({
           locationId: selectedLocationId!,
@@ -346,7 +365,7 @@ export default function ScanWeighScreen() {
         setPhase("not_found");
       }
     },
-    [selectedLocationId, utils, hapticEnabled]
+    [selectedLocationId, utils, hapticEnabled, isOnline, inventoryItems]
   );
 
   // Check if this item was already weighed with a similar value
