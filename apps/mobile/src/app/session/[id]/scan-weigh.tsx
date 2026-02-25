@@ -1108,6 +1108,12 @@ export default function ScanWeighScreen() {
           visible={showTareModal}
           itemName={matchedItem.name}
           containerSizeMl={Number(matchedItem.containerSize) || 750}
+          onConnectScale={() => {
+            setShowTareModal(false);
+            setTimeout(() => {
+              router.push(`/session/${sessionId}/connect-scale`);
+            }, 300);
+          }}
           onSave={async (emptyG, fullG) => {
             try {
               await createTemplateMutation.mutateAsync({

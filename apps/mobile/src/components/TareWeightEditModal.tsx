@@ -13,6 +13,8 @@ interface TareWeightEditModalProps {
   densityGPerMl?: number | null;
   /** When true, name and container size are editable (used for new template creation) */
   editable?: boolean;
+  /** Called when user wants to navigate to the full connect-scale screen */
+  onConnectScale?: () => void;
   onSave: (emptyBottleWeightG: number | null, fullBottleWeightG: number | null, name?: string, containerSizeMl?: number) => void;
   onCancel: () => void;
 }
@@ -29,6 +31,7 @@ export function TareWeightEditModal({
   containerSizeMl,
   densityGPerMl,
   editable,
+  onConnectScale,
   onSave,
   onCancel,
 }: TareWeightEditModalProps) {
@@ -45,6 +48,7 @@ export function TareWeightEditModal({
   const [scaleConnected, setScaleConnected] = useState(scaleManager.isConnected);
   const [scanning, setScanning] = useState(false);
   const [foundDevices, setFoundDevices] = useState<Array<{ id: string; name: string }>>([]);
+  const [scanEmpty, setScanEmpty] = useState(false);
 
   useEffect(() => {
     const unsubDisconnect = scaleManager.onDisconnect(() => {
@@ -78,8 +82,10 @@ export function TareWeightEditModal({
 
   async function handleScanForScale() {
     setScanning(true);
+    setScanEmpty(false);
     const found = await scaleManager.scan();
     setFoundDevices(found);
+    if (found.length === 0) setScanEmpty(true);
     setScanning(false);
   }
 
@@ -239,6 +245,16 @@ export function TareWeightEditModal({
                       )}
                     />
                   )}
+                  {scanEmpty && foundDevices.length === 0 && (
+                    <>
+                      <Text style={styles.noScalesText}>No scales found. Make sure your scale is on and nearby.</Text>
+                      {onConnectScale && (
+                        <TouchableOpacity onPress={onConnectScale}>
+                          <Text style={styles.goConnectLink}>Go to Connect Scale</Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  )}
                 </View>
               )}
             </>
@@ -356,6 +372,16 @@ export function TareWeightEditModal({
                         </TouchableOpacity>
                       )}
                     />
+                  )}
+                  {scanEmpty && foundDevices.length === 0 && (
+                    <>
+                      <Text style={styles.noScalesText}>No scales found. Make sure your scale is on and nearby.</Text>
+                      {onConnectScale && (
+                        <TouchableOpacity onPress={onConnectScale}>
+                          <Text style={styles.goConnectLink}>Go to Connect Scale</Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
                   )}
                 </View>
               )}
@@ -607,5 +633,18 @@ const styles = StyleSheet.create({
     color: "#2563eb",
     fontSize: 14,
     fontWeight: "500",
+  },
+  noScalesText: {
+    color: "#999",
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  goConnectLink: {
+    color: "#2563eb",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 8,
   },
 });

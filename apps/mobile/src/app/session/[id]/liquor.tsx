@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { View, Text, TouchableOpacity, ScrollView, Switch, Modal, StyleSheet, Alert } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
@@ -598,6 +598,12 @@ export default function LiquorWeighScreen() {
           visible={showTareModal}
           itemName={selectedItem.name}
           containerSizeMl={Number(selectedItem.containerSize) || 750}
+          onConnectScale={() => {
+            setShowTareModal(false);
+            setTimeout(() => {
+              router.push(`/session/${sessionId}/connect-scale`);
+            }, 300);
+          }}
           onSave={async (emptyG, fullG) => {
             try {
               await createTemplateMutation.mutateAsync({
