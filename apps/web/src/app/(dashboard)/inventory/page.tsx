@@ -6,7 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { HelpLink } from "@/components/help-link";
-import { UOM } from "@barstock/types";
+import { UOM, CountingMethod } from "@barstock/types";
 import { QRCodeSVG } from "qrcode.react";
 
 type SortKey = "name" | "category";
@@ -56,6 +56,20 @@ export default function InventoryPage() {
   const [newPackSize, setNewPackSize] = useState("");
   const [newContainerSize, setNewContainerSize] = useState("");
   const [newContainerUom, setNewContainerUom] = useState<string>("");
+
+  // Inline category creation
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatMethod, setNewCatMethod] = useState<string>(CountingMethod.unit_count);
+  const createCatMut = trpc.itemCategories.create.useMutation({
+    onSuccess: (created) => {
+      utils.itemCategories.list.invalidate();
+      setNewCategoryId(created.id);
+      setShowNewCategory(false);
+      setNewCatName("");
+      setNewCatMethod(CountingMethod.unit_count);
+    },
+  });
 
   const barcodeRef = useRef<HTMLInputElement>(null);
 
@@ -124,8 +138,8 @@ export default function InventoryPage() {
         }
         if (s.containerSizeMl) {
           setNewContainerSize(String(s.containerSizeMl));
-          setNewContainerUom("ml");
         }
+        setNewContainerUom("ml");
         if (s.categoryHint && categories?.length) {
           const hint = s.categoryHint.toLowerCase();
           const match = categories.find(
@@ -316,16 +330,68 @@ export default function InventoryPage() {
             </div>
             <div>
               <label className="mb-1 block text-xs text-[#EAF0FF]/60">Category</label>
-              <select
-                value={newCategoryId}
-                onChange={(e) => setNewCategoryId(e.target.value)}
-                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
-              >
-                <option value="">Select category...</option>
-                {categories?.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
+              {showNewCategory ? (
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="text"
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+                    placeholder="Category name"
+                    autoFocus
+                  />
+                  <select
+                    value={newCatMethod}
+                    onChange={(e) => setNewCatMethod(e.target.value)}
+                    className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+                  >
+                    <option value="unit_count">Unit Count</option>
+                    <option value="weighable">Weighable</option>
+                    <option value="keg">Keg</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewCategory(false); setNewCatName(""); }}
+                      className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-[#EAF0FF]/60 hover:text-[#EAF0FF]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!newCatName.trim() || !businessId || createCatMut.isPending}
+                      onClick={() => createCatMut.mutate({ businessId, name: newCatName.trim(), countingMethod: newCatMethod as any })}
+                      className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-xs font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+                    >
+                      {createCatMut.isPending ? "Adding..." : "Add"}
+                    </button>
+                  </div>
+                  {createCatMut.error && (
+                    <p className="text-xs text-red-400">{createCatMut.error.message}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <select
+                    value={newCategoryId}
+                    onChange={(e) => setNewCategoryId(e.target.value)}
+                    className="flex-1 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
+                  >
+                    <option value="">Select category...</option>
+                    {categories?.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCategory(true)}
+                    className="shrink-0 rounded-md border border-white/10 px-2 py-2 text-sm text-[#EAF0FF]/60 hover:border-[#E9B44C] hover:text-[#E9B44C]"
+                    title="Add new category"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs text-[#EAF0FF]/60">Barcode</label>

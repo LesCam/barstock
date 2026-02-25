@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
-import { router as navRouter } from "expo-router";
+import { router as navRouter, useLocalSearchParams } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
@@ -38,6 +38,7 @@ type Phase = "scanning" | "form" | "prefilled" | "pairing";
 const UOM_OPTIONS = Object.values(UOM);
 
 export default function ScanImportScreen() {
+  const { bridgeSession } = useLocalSearchParams<{ bridgeSession?: string }>();
   const { selectedLocationId, user } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const utils = trpc.useUtils();
@@ -69,6 +70,15 @@ export default function ScanImportScreen() {
   // Bridge (Phase 2)
   const [bridgeSessionId, setBridgeSessionId] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState("");
+
+  // Auto-pair if arriving via deep link
+  useEffect(() => {
+    if (bridgeSession && !bridgeSessionId) {
+      setBridgeSessionId(bridgeSession);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Paired!", "Phone is now connected to the web form.");
+    }
+  }, [bridgeSession]);
 
   const addBridgeItemMutation = trpc.scanImport.addItem.useMutation();
   const removeBridgeItemMutation = trpc.scanImport.removeItem.useMutation();
