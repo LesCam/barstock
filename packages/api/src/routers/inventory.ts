@@ -6,6 +6,7 @@ import { z } from "zod";
 
 export const inventoryRouter = router({
   create: protectedProcedure
+    .use(requireRole("manager"))
     .input(inventoryItemCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const item = await ctx.prisma.inventoryItem.create({ data: input });

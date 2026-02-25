@@ -70,13 +70,19 @@ export default function ScanImportScreen() {
   // Bridge (Phase 2)
   const [bridgeSessionId, setBridgeSessionId] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState("");
+  const [bridgeScanCount, setBridgeScanCount] = useState(0);
 
-  // Auto-pair if arriving via deep link
+  // Auto-pair if arriving via deep link (once only)
+  const didAutoPair = useRef(false);
   useEffect(() => {
-    if (bridgeSession && !bridgeSessionId) {
+    if (bridgeSession && !didAutoPair.current) {
+      didAutoPair.current = true;
       setBridgeSessionId(bridgeSession);
+      setScanEnabled(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Paired!", "Phone is now connected to the web form.");
+      Alert.alert("Paired!", "Phone is now connected to the web form.", [
+        { text: "OK", onPress: () => setScanEnabled(true) },
+      ]);
     }
   }, [bridgeSession]);
 
@@ -138,9 +144,24 @@ export default function ScanImportScreen() {
       // Check for pairing QR code
       const pairingMatch = barcode.match(/^barstock:\/\/scan-import\/(.+)$/);
       if (pairingMatch) {
+        if (bridgeSessionId === pairingMatch[1]) return; // Already paired
         setBridgeSessionId(pairingMatch[1]);
+        setScanEnabled(false);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Paired!", "Phone is now connected to the web import page.");
+        Alert.alert("Paired!", "Phone is now connected to the web import page.", [
+          { text: "OK", onPress: () => setScanEnabled(true) },
+        ]);
+        return;
+      }
+
+      // Bridge mode: fire to web, brief pause, auto-resume
+      // No permanent dedup — the web handles duplicates
+      if (bridgeSessionId) {
+        scanBarcodeMut.mutate({ scanSessionId: bridgeSessionId, barcode });
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setBridgeScanCount((c) => c + 1);
+        setScanEnabled(false);
+        setTimeout(() => setScanEnabled(true), 1500);
         return;
       }
 
@@ -149,11 +170,6 @@ export default function ScanImportScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         Alert.alert("Already Staged", `"${barcode}" is already in your import list.`);
         return;
-      }
-
-      // Fire raw barcode to web bridge (before mobile's own lookup flow)
-      if (bridgeSessionId) {
-        scanBarcodeMut.mutate({ scanSessionId: bridgeSessionId, barcode });
       }
 
       setScanEnabled(false);
@@ -435,7 +451,11 @@ export default function ScanImportScreen() {
         <View style={styles.overlay}>
           <View style={styles.crosshair} />
           {phase === "scanning" && (
-            <Text style={styles.scanHint}>Point camera at a barcode</Text>
+            <Text style={styles.scanHint}>
+              {bridgeSessionId
+                ? `Scanning to web (${bridgeScanCount} sent)`
+                : "Point camera at a barcode"}
+            </Text>
           )}
         </View>
       </View>

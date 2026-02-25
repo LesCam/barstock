@@ -81,13 +81,22 @@ export default function InventoryPage() {
   const [lookupStatus, setLookupStatus] = useState<
     | null
     | { type: "loading" }
-    | { type: "exists"; name: string }
+    | { type: "exists"; name: string; itemId: string }
     | { type: "found"; source: string; brand?: string | null }
     | { type: "not_found" }
   >(null);
   const [createdFromLookup, setCreatedFromLookup] = useState(false);
 
   const contributeMut = trpc.masterProducts.contribute.useMutation();
+
+  const updateMut = trpc.inventory.update.useMutation({
+    onSuccess: () => {
+      utils.inventory.list.invalidate();
+      utils.inventory.onHand.invalidate();
+      resetCreateForm();
+      barcodeRef.current?.focus();
+    },
+  });
 
   const createMut = trpc.inventory.create.useMutation({
     onSuccess: (_data, variables) => {
@@ -110,7 +119,7 @@ export default function InventoryPage() {
 
   function resetCreateForm() {
     setNewName("");
-    setNewCategoryId(categories?.[0]?.id ?? "");
+    setNewCategoryId("");
     setNewBarcode("");
     setNewVendorSku("");
     setNewPackSize("");
@@ -118,6 +127,7 @@ export default function InventoryPage() {
     setNewContainerUom("");
     setLookupStatus(null);
     setCreatedFromLookup(false);
+    setValidationFailed(false);
   }
 
   const doLookup = useCallback(async (barcode: string) => {
@@ -127,7 +137,14 @@ export default function InventoryPage() {
     try {
       const result = await utils.masterProducts.chainedLookup.fetch({ barcode, locationId });
       if (result.source === "local" && result.localItem) {
-        setLookupStatus({ type: "exists", name: result.localItem.name });
+        const li = result.localItem;
+        setNewName(li.name);
+        if (li.categoryId) setNewCategoryId(li.categoryId);
+        if (li.vendorSku) setNewVendorSku(li.vendorSku);
+        if (li.containerSize) setNewContainerSize(String(Number(li.containerSize)));
+        if (li.containerUom) setNewContainerUom(li.containerUom);
+        if (li.packSize) setNewPackSize(String(Number(li.packSize)));
+        setLookupStatus({ type: "exists", name: li.name, itemId: li.id });
       } else if (
         (result.source === "master" || result.source === "openfoodfacts") &&
         result.suggestion
@@ -234,8 +251,14 @@ export default function InventoryPage() {
     doLookup(newBarcode.trim());
   }
 
+  const [validationFailed, setValidationFailed] = useState(false);
+
   function handleCreate() {
-    if (!locationId || !newName.trim() || !newCategoryId) return;
+    if (!locationId || !newName.trim() || !newCategoryId) {
+      setValidationFailed(true);
+      return;
+    }
+    setValidationFailed(false);
     createMut.mutate({
       locationId,
       name: newName.trim(),
@@ -245,6 +268,24 @@ export default function InventoryPage() {
       vendorSku: newVendorSku.trim() || undefined,
       packSize: newPackSize ? Number(newPackSize) : undefined,
       packUom: newPackSize ? (UOM.units as any) : undefined,
+      containerSize: newContainerSize ? Number(newContainerSize) : undefined,
+      containerUom: newContainerUom ? (newContainerUom as any) : undefined,
+    });
+  }
+
+  function handleUpdate() {
+    if (lookupStatus?.type !== "exists" || !newName.trim() || !newCategoryId) {
+      setValidationFailed(true);
+      return;
+    }
+    setValidationFailed(false);
+    updateMut.mutate({
+      id: lookupStatus.itemId,
+      name: newName.trim(),
+      categoryId: newCategoryId,
+      barcode: newBarcode.trim() || undefined,
+      vendorSku: newVendorSku.trim() || undefined,
+      packSize: newPackSize ? Number(newPackSize) : undefined,
       containerSize: newContainerSize ? Number(newContainerSize) : undefined,
       containerUom: newContainerUom ? (newContainerUom as any) : undefined,
     });
@@ -319,17 +360,17 @@ export default function InventoryPage() {
           <h2 className="mb-3 text-sm font-semibold text-[#EAF0FF]">New Inventory Item</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Name *</label>
+              <label className={`mb-1 block text-xs ${validationFailed && !newName.trim() ? "text-red-400" : "text-[#EAF0FF]/60"}`}>Name *</label>
               <input
                 type="text"
                 value={newName}
-                onChange={(e) => setNewName(e.target.value)}
+                onChange={(e) => { setNewName(e.target.value); setValidationFailed(false); }}
                 className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
                 placeholder="Item name"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[#EAF0FF]/60">Category</label>
+              <label className={`mb-1 block text-xs ${validationFailed && !newCategoryId ? "text-red-400" : "text-[#EAF0FF]/60"}`}>Category {!newCategoryId && validationFailed ? "*" : ""}</label>
               {showNewCategory ? (
                 <div className="flex flex-col gap-2">
                   <input
@@ -374,7 +415,7 @@ export default function InventoryPage() {
                 <div className="flex gap-2">
                   <select
                     value={newCategoryId}
-                    onChange={(e) => setNewCategoryId(e.target.value)}
+                    onChange={(e) => { setNewCategoryId(e.target.value); setValidationFailed(false); }}
                     className="flex-1 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]"
                   >
                     <option value="">Select category...</option>
@@ -499,15 +540,40 @@ export default function InventoryPage() {
             </div>
           )}
           <div className="mt-3 flex items-center gap-3">
-            <button
-              onClick={handleCreate}
-              disabled={!newName.trim() || !newCategoryId || createMut.isPending}
-              className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
-            >
-              {createMut.isPending ? "Creating..." : "Create Item"}
-            </button>
+            {lookupStatus?.type === "exists" ? (
+              <button
+                onClick={handleUpdate}
+                disabled={updateMut.isPending}
+                className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-semibold text-[#0B1623] shadow-sm hover:bg-[#C8922E] disabled:opacity-50"
+              >
+                {updateMut.isPending ? "Saving..." : "Save Changes"}
+              </button>
+            ) : newName.trim() || newBarcode.trim() ? (
+              <button
+                onClick={handleCreate}
+                disabled={createMut.isPending}
+                className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-semibold text-[#0B1623] shadow-sm hover:bg-[#C8922E] disabled:opacity-50"
+              >
+                {createMut.isPending ? "Creating..." : "Create Item"}
+              </button>
+            ) : null}
+            {scanSessionId && (
+              <button
+                type="button"
+                onClick={() => { resetCreateForm(); barcodeRef.current?.focus(); }}
+                className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-semibold text-[#0B1623] shadow-sm hover:bg-[#C8922E]"
+              >
+                Scan Next
+              </button>
+            )}
+            {validationFailed && (!newName.trim() || !newCategoryId) && (
+              <p className="text-sm text-red-400">Please fill in required fields above</p>
+            )}
             {createMut.error && (
               <p className="text-sm text-red-400">{createMut.error.message}</p>
+            )}
+            {updateMut.error && (
+              <p className="text-sm text-red-400">{updateMut.error.message}</p>
             )}
           </div>
         </div>
