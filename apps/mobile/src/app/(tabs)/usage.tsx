@@ -17,6 +17,7 @@ import { BarSparkline } from "@/components/charts/BarSparkline";
 
 type Period = "7d" | "30d" | "90d";
 type Metric = "qty" | "cost";
+type GroupBy = "items" | "vendors";
 
 function getDateRange(period: Period) {
   const toDate = new Date();
@@ -45,45 +46,62 @@ export default function UsageTab() {
   const { selectedLocationId, user } = useAuth();
   const [period, setPeriod] = useState<Period>("7d");
   const [metric, setMetric] = useState<Metric>("qty");
+  const [groupBy, setGroupBy] = useState<GroupBy>("items");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const { fromDate, toDate } = useMemo(() => getDateRange(period), [period]);
+
+  const queryParams = useMemo(
+    () => ({
+      locationId: selectedLocationId!,
+      fromDate,
+      toDate,
+      granularity: getGranularity(period),
+      categoryId: categoryId || undefined,
+    }),
+    [selectedLocationId, fromDate, toDate, period, categoryId]
+  );
 
   const { data: categories } = trpc.itemCategories.list.useQuery(
     { businessId: user?.businessId! },
     { enabled: !!user?.businessId }
   );
 
-  const { data, isLoading } = trpc.reports.usageOverTime.useQuery(
-    {
-      locationId: selectedLocationId!,
-      fromDate,
-      toDate,
-      granularity: getGranularity(period),
-      categoryId: categoryId || undefined,
-    },
-    {
-      enabled: !!selectedLocationId,
+  const { data: itemData, isLoading: itemsLoading } =
+    trpc.reports.usageOverTime.useQuery(queryParams, {
+      enabled: !!selectedLocationId && groupBy === "items",
       staleTime: 5 * 60 * 1000,
-    }
-  );
+    });
+
+  const { data: vendorData, isLoading: vendorsLoading } =
+    trpc.reports.usageByVendor.useQuery(queryParams, {
+      enabled: !!selectedLocationId && groupBy === "vendors",
+      staleTime: 5 * 60 * 1000,
+    });
+
+  const isLoading = groupBy === "items" ? itemsLoading : vendorsLoading;
+  const buckets =
+    groupBy === "items" ? itemData?.buckets : vendorData?.buckets;
 
   const aggregateChartData = useMemo(() => {
-    if (!data?.buckets) return [];
-    return data.buckets.map((b) => ({
+    if (!buckets) return [];
+    return buckets.map((b: any) => ({
       label: formatBucketLabel(b.period, period),
       value: metric === "cost" ? (b.totalCost ?? 0) : b.totalQty,
     }));
-  }, [data, period, metric]);
+  }, [buckets, period, metric]);
 
   const topMovers = useMemo(() => {
-    if (!data?.itemSeries) return [];
-    return data.itemSeries
+    if (groupBy !== "items" || !itemData?.itemSeries) return [];
+    return itemData.itemSeries
       .map((s) => ({
         itemId: s.itemId,
         itemName: s.itemName,
         totalQty: s.dataPoints.reduce((sum, dp) => sum + dp.qty, 0),
-        totalCost: s.dataPoints.reduce((sum, dp) => sum + (dp.cost ?? 0), 0),
+        totalCost: s.dataPoints.reduce(
+          (sum, dp) => sum + (dp.cost ?? 0),
+          0
+        ),
         sparkline: s.dataPoints.map((dp) =>
           metric === "cost" ? (dp.cost ?? 0) : dp.qty
         ),
@@ -93,12 +111,37 @@ export default function UsageTab() {
           ? b.totalCost - a.totalCost
           : b.totalQty - a.totalQty
       );
-  }, [data, metric]);
+  }, [itemData, metric, groupBy]);
+
+  const vendorRows = useMemo(() => {
+    if (groupBy !== "vendors" || !vendorData?.vendorSeries) return [];
+    return vendorData.vendorSeries
+      .map((v: any) => ({
+        vendorId: v.vendorId,
+        vendorName: v.vendorName,
+        totalQty: v.dataPoints.reduce(
+          (sum: number, dp: any) => sum + dp.qty,
+          0
+        ),
+        totalCost: v.dataPoints.reduce(
+          (sum: number, dp: any) => sum + (dp.cost ?? 0),
+          0
+        ),
+        sparkline: v.dataPoints.map((dp: any) =>
+          metric === "cost" ? (dp.cost ?? 0) : dp.qty
+        ),
+      }))
+      .sort((a: any, b: any) =>
+        metric === "cost"
+          ? b.totalCost - a.totalCost
+          : b.totalQty - a.totalQty
+      );
+  }, [vendorData, metric, groupBy]);
+
+  const listData = groupBy === "items" ? topMovers : vendorRows;
 
   const chartTitle =
-    period === "90d"
-      ? "Weekly Usage"
-      : "Daily Usage";
+    period === "90d" ? "Weekly Usage" : "Daily Usage";
 
   if (!selectedLocationId) {
     return (
@@ -111,8 +154,10 @@ export default function UsageTab() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={topMovers}
-        keyExtractor={(item) => item.itemId}
+        data={listData}
+        keyExtractor={(item: any) =>
+          groupBy === "items" ? item.itemId : item.vendorId
+        }
         ListHeaderComponent={
           <>
             {/* Period toggle */}
@@ -135,7 +180,7 @@ export default function UsageTab() {
               ))}
             </View>
 
-            {/* Metric toggle */}
+            {/* Metric toggle + Group by toggle */}
             <View style={styles.toggleRow}>
               {([
                 { key: "qty" as Metric, label: "Quantity" },
@@ -143,7 +188,10 @@ export default function UsageTab() {
               ]).map((m) => (
                 <TouchableOpacity
                   key={m.key}
-                  style={[styles.metricPill, metric === m.key && styles.metricPillActive]}
+                  style={[
+                    styles.metricPill,
+                    metric === m.key && styles.metricPillActive,
+                  ]}
                   onPress={() => setMetric(m.key)}
                 >
                   <Text
@@ -153,6 +201,34 @@ export default function UsageTab() {
                     ]}
                   >
                     {m.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              <View style={styles.separator} />
+
+              {([
+                { key: "items" as GroupBy, label: "Items" },
+                { key: "vendors" as GroupBy, label: "Vendors" },
+              ]).map((g) => (
+                <TouchableOpacity
+                  key={g.key}
+                  style={[
+                    styles.groupPill,
+                    groupBy === g.key && styles.groupPillActive,
+                  ]}
+                  onPress={() => {
+                    setGroupBy(g.key);
+                    setExpandedItemId(null);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.groupPillText,
+                      groupBy === g.key && styles.groupPillTextActive,
+                    ]}
+                  >
+                    {g.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -225,67 +301,95 @@ export default function UsageTab() {
               )}
             </View>
 
-            {/* Top movers header */}
-            {topMovers.length > 0 && (
-              <Text style={styles.sectionTitle}>Top Movers</Text>
+            {/* List header */}
+            {listData.length > 0 && (
+              <Text style={styles.sectionTitle}>
+                {groupBy === "vendors" ? "Top Vendors" : "Top Movers"}
+              </Text>
             )}
           </>
         }
-        renderItem={({ item }) => (
-          <View>
-            <TouchableOpacity
-              style={[
-                styles.moverRow,
-                expandedItemId === item.itemId && styles.moverRowExpanded,
-              ]}
-              activeOpacity={0.7}
-              onPress={() =>
-                setExpandedItemId(
-                  expandedItemId === item.itemId ? null : item.itemId
-                )
-              }
-              onLongPress={() =>
-                router.push(`/inventory/${item.itemId}` as any)
-              }
-            >
-              <View style={styles.moverInfo}>
-                <Text style={styles.moverName} numberOfLines={1}>
-                  {item.itemName}
-                </Text>
-                <Text style={styles.moverQty}>
-                  {metric === "cost"
-                    ? `$${item.totalCost.toFixed(2)}`
-                    : `${item.totalQty.toFixed(1)} total`}
-                </Text>
-              </View>
-              <BarSparkline
-                data={item.sparkline}
-                color={metric === "cost" ? "#E9B44C" : "#4FC3F7"}
-              />
-            </TouchableOpacity>
-            {expandedItemId === item.itemId && (
-              <View style={styles.expandedCard}>
-                <UsageChartCard
-                  itemId={item.itemId}
-                  locationId={selectedLocationId!}
-                />
-                <TouchableOpacity
-                  style={styles.viewDetailBtn}
-                  onPress={() =>
-                    router.push(`/inventory/${item.itemId}` as any)
-                  }
-                >
-                  <Text style={styles.viewDetailBtnText}>
-                    View Full Detail
+        renderItem={({ item }: { item: any }) => {
+          if (groupBy === "vendors") {
+            return (
+              <View style={styles.moverRow}>
+                <View style={styles.moverInfo}>
+                  <Text style={styles.moverName} numberOfLines={1}>
+                    {item.vendorName}
                   </Text>
-                </TouchableOpacity>
+                  <Text style={styles.moverQty}>
+                    {metric === "cost"
+                      ? `$${item.totalCost.toFixed(2)}`
+                      : `${item.totalQty.toFixed(1)} total`}
+                  </Text>
+                </View>
+                <BarSparkline
+                  data={item.sparkline}
+                  color={metric === "cost" ? "#E9B44C" : "#9C27B0"}
+                />
               </View>
-            )}
-          </View>
-        )}
+            );
+          }
+
+          // Items view
+          return (
+            <View>
+              <TouchableOpacity
+                style={[
+                  styles.moverRow,
+                  expandedItemId === item.itemId && styles.moverRowExpanded,
+                ]}
+                activeOpacity={0.7}
+                onPress={() =>
+                  setExpandedItemId(
+                    expandedItemId === item.itemId ? null : item.itemId
+                  )
+                }
+                onLongPress={() =>
+                  router.push(`/inventory/${item.itemId}` as any)
+                }
+              >
+                <View style={styles.moverInfo}>
+                  <Text style={styles.moverName} numberOfLines={1}>
+                    {item.itemName}
+                  </Text>
+                  <Text style={styles.moverQty}>
+                    {metric === "cost"
+                      ? `$${item.totalCost.toFixed(2)}`
+                      : `${item.totalQty.toFixed(1)} total`}
+                  </Text>
+                </View>
+                <BarSparkline
+                  data={item.sparkline}
+                  color={metric === "cost" ? "#E9B44C" : "#4FC3F7"}
+                />
+              </TouchableOpacity>
+              {expandedItemId === item.itemId && (
+                <View style={styles.expandedCard}>
+                  <UsageChartCard
+                    itemId={item.itemId}
+                    locationId={selectedLocationId!}
+                  />
+                  <TouchableOpacity
+                    style={styles.viewDetailBtn}
+                    onPress={() =>
+                      router.push(`/inventory/${item.itemId}` as any)
+                    }
+                  >
+                    <Text style={styles.viewDetailBtnText}>
+                      View Full Detail
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          );
+        }}
         ListEmptyComponent={
           !isLoading ? (
-            <Text style={styles.emptyText}>No usage data for this period.</Text>
+            <Text style={styles.emptyText}>
+              No usage data for this period.
+            </Text>
           ) : null
         }
         contentContainerStyle={styles.listContent}
@@ -299,8 +403,10 @@ const styles = StyleSheet.create({
   listContent: { padding: 16 },
   toggleRow: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     marginBottom: 12,
+    flexWrap: "wrap",
   },
   pill: {
     paddingHorizontal: 16,
@@ -337,6 +443,31 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   metricPillTextActive: {
+    color: "#FFF",
+  },
+  separator: {
+    width: 1,
+    height: 20,
+    backgroundColor: "#1E3550",
+  },
+  groupPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "#16283F",
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  groupPillActive: {
+    backgroundColor: "#9C27B0",
+    borderColor: "#9C27B0",
+  },
+  groupPillText: {
+    fontSize: 13,
+    color: "#8899AA",
+    fontWeight: "600",
+  },
+  groupPillTextActive: {
     color: "#FFF",
   },
   categoryScroll: {
