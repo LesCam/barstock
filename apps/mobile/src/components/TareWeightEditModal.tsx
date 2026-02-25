@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, FlatList } from "react-native";
 import { NumericKeypad } from "./NumericKeypad";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
 
@@ -43,6 +43,8 @@ export function TareWeightEditModal({
   const [editContainer, setEditContainer] = useState(String(containerSizeMl));
   const [liveWeight, setLiveWeight] = useState<number | null>(null);
   const [scaleConnected, setScaleConnected] = useState(scaleManager.isConnected);
+  const [scanning, setScanning] = useState(false);
+  const [foundDevices, setFoundDevices] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     const unsubDisconnect = scaleManager.onDisconnect(() => {
@@ -72,6 +74,19 @@ export function TareWeightEditModal({
     if (liveWeight == null) return;
     setFullValue(String(Math.round(liveWeight)));
     setActiveTarget("full");
+  }
+
+  async function handleScanForScale() {
+    setScanning(true);
+    const found = await scaleManager.scan();
+    setFoundDevices(found);
+    setScanning(false);
+  }
+
+  async function handleConnectDevice(deviceId: string) {
+    await scaleManager.connect(deviceId);
+    setScaleConnected(true);
+    setFoundDevices([]);
   }
 
   const tareG = parseInt(tareValue) || 0;
@@ -170,8 +185,8 @@ export function TareWeightEditModal({
                 </Text>
               )}
 
-              {/* Read from Scale */}
-              {scaleConnected && (
+              {/* Scale section */}
+              {scaleConnected ? (
                 <View style={{ marginTop: 12 }}>
                   {liveWeight != null && (
                     <Text style={styles.scaleReading}>
@@ -194,6 +209,36 @@ export function TareWeightEditModal({
                       <Text style={styles.scaleBtnText}>Weigh Full</Text>
                     </TouchableOpacity>
                   </View>
+                </View>
+              ) : (
+                <View style={[styles.connectScaleSection, { marginTop: 12 }]}>
+                  <TouchableOpacity
+                    style={styles.connectScaleBtn}
+                    onPress={handleScanForScale}
+                    disabled={scanning}
+                  >
+                    {scanning ? (
+                      <ActivityIndicator color="#2563eb" size="small" />
+                    ) : (
+                      <Text style={styles.connectScaleBtnText}>Connect Scale</Text>
+                    )}
+                  </TouchableOpacity>
+                  {foundDevices.length > 0 && (
+                    <FlatList
+                      data={foundDevices}
+                      keyExtractor={(d) => d.id}
+                      style={styles.deviceList}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity
+                          style={styles.deviceRow}
+                          onPress={() => handleConnectDevice(item.id)}
+                        >
+                          <Text style={styles.deviceName}>{item.name}</Text>
+                          <Text style={styles.deviceConnect}>Connect</Text>
+                        </TouchableOpacity>
+                      )}
+                    />
+                  )}
                 </View>
               )}
             </>
@@ -258,8 +303,8 @@ export function TareWeightEditModal({
                 )}
               </View>
 
-              {/* Read from Scale */}
-              {scaleConnected && (
+              {/* Scale section */}
+              {scaleConnected ? (
                 <View>
                   {liveWeight != null && (
                     <Text style={styles.scaleReading}>
@@ -282,6 +327,36 @@ export function TareWeightEditModal({
                       <Text style={styles.scaleBtnText}>Weigh Full Bottle</Text>
                     </TouchableOpacity>
                   </View>
+                </View>
+              ) : (
+                <View style={styles.connectScaleSection}>
+                  <TouchableOpacity
+                    style={styles.connectScaleBtn}
+                    onPress={handleScanForScale}
+                    disabled={scanning}
+                  >
+                    {scanning ? (
+                      <ActivityIndicator color="#2563eb" size="small" />
+                    ) : (
+                      <Text style={styles.connectScaleBtnText}>Connect Scale</Text>
+                    )}
+                  </TouchableOpacity>
+                  {foundDevices.length > 0 && (
+                    <FlatList
+                      data={foundDevices}
+                      keyExtractor={(d) => d.id}
+                      style={styles.deviceList}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity
+                          style={styles.deviceRow}
+                          onPress={() => handleConnectDevice(item.id)}
+                        >
+                          <Text style={styles.deviceName}>{item.name}</Text>
+                          <Text style={styles.deviceConnect}>Connect</Text>
+                        </TouchableOpacity>
+                      )}
+                    />
+                  )}
                 </View>
               )}
 
@@ -494,6 +569,43 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     color: "#666",
     fontSize: 16,
+    fontWeight: "500",
+  },
+  connectScaleSection: {
+    marginBottom: 12,
+  },
+  connectScaleBtn: {
+    borderWidth: 1,
+    borderColor: "#2563eb",
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  connectScaleBtnText: {
+    color: "#2563eb",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  deviceList: {
+    marginTop: 8,
+    maxHeight: 120,
+  },
+  deviceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  deviceName: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1a1a1a",
+  },
+  deviceConnect: {
+    color: "#2563eb",
+    fontSize: 14,
     fontWeight: "500",
   },
 });
