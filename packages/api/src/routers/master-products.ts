@@ -3,6 +3,7 @@ import { masterProductLookupSchema, masterProductContributeSchema, chainedLookup
 import { SettingsService } from "../services/settings.service";
 import { TRPCError } from "@trpc/server";
 import { lookupOpenFoodFacts } from "../lib/open-food-facts";
+import { lookupUpcItemDb } from "../lib/upc-itemdb";
 
 export const masterProductsRouter = router({
   lookup: protectedProcedure
@@ -77,7 +78,28 @@ export const masterProductsRouter = router({
         };
       }
 
-      // 4. Not found anywhere
+      // 4. Check UPC Item DB (external API, 3s timeout — better spirits coverage)
+      const upcResult = await lookupUpcItemDb(input.barcode);
+
+      if (upcResult) {
+        const displayName = upcResult.brand
+          ? `${upcResult.brand} ${upcResult.name}`
+          : upcResult.name;
+
+        return {
+          source: "upcitemdb" as const,
+          localItem: null,
+          suggestion: {
+            name: displayName,
+            containerSizeMl: upcResult.containerSizeMl,
+            categoryHint: upcResult.categoryHint,
+            brand: upcResult.brand,
+            imageUrl: upcResult.imageUrl,
+          },
+        };
+      }
+
+      // 5. Not found anywhere
       return { source: "none" as const, localItem: null, suggestion: null };
     }),
 

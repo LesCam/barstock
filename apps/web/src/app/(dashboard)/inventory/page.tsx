@@ -154,7 +154,7 @@ export default function InventoryPage() {
         if (li.packSize) setNewPackSize(String(Number(li.packSize)));
         setLookupStatus({ type: "exists", name: li.name, itemId: li.id });
       } else if (
-        (result.source === "master" || result.source === "openfoodfacts") &&
+        (result.source === "master" || result.source === "openfoodfacts" || result.source === "upcitemdb") &&
         result.suggestion
       ) {
         const s = result.suggestion;
@@ -468,7 +468,7 @@ export default function InventoryPage() {
                 <p className="mt-1 text-xs text-amber-400">Already in inventory: {lookupStatus.name}</p>
               )}
               {lookupStatus?.type === "found" && (
-                <p className="mt-1 text-xs text-green-400">Found via {lookupStatus.source === "master" ? "master catalog" : "Open Food Facts"}</p>
+                <p className="mt-1 text-xs text-green-400">Found via {lookupStatus.source === "master" ? "master catalog" : lookupStatus.source === "upcitemdb" ? "UPC Item DB" : "Open Food Facts"}</p>
               )}
               {lookupStatus?.type === "not_found" && (
                 <p className="mt-1 text-xs text-amber-400">Not found online — please enter details manually</p>

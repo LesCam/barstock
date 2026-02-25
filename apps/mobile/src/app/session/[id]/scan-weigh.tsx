@@ -367,7 +367,7 @@ export default function ScanWeighScreen() {
             setPhase("weighing");
           }
         } else if (
-          (result.source === "master" || result.source === "openfoodfacts") &&
+          (result.source === "master" || result.source === "openfoodfacts" || result.source === "upcitemdb") &&
           result.suggestion
         ) {
           // Found in master/OFF — open create modal with pre-filled suggestion
