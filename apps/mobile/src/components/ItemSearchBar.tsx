@@ -13,10 +13,22 @@ interface InventoryItem {
   category?: { id: string; name: string; countingMethod: string; defaultDensity: unknown } | null;
 }
 
+export interface BarcodeSuggestionResult {
+  barcode: string;
+  suggestion: {
+    name: string;
+    containerSizeMl: number | null;
+    categoryHint: string | null;
+    brand: string | null;
+    imageUrl?: string | null;
+  };
+}
+
 interface ItemSearchBarProps {
   locationId: string;
   onItemSelected: (item: InventoryItem) => void;
   onBarcodeNotFound?: (barcode: string) => void;
+  onBarcodeSuggestion?: (result: BarcodeSuggestionResult) => void;
   countingMethodFilter?: string;
   placeholder?: string;
 }
@@ -25,6 +37,7 @@ export function ItemSearchBar({
   locationId,
   onItemSelected,
   onBarcodeNotFound,
+  onBarcodeSuggestion,
   countingMethodFilter,
   placeholder = "Search items or scan barcode...",
 }: ItemSearchBarProps) {
@@ -76,12 +89,18 @@ export function ItemSearchBar({
     setShowScanner(false);
     setScanError(null);
     try {
-      const item = await utils.inventory.getByBarcode.fetch({
+      const result = await utils.masterProducts.chainedLookup.fetch({
         locationId,
         barcode,
       });
-      if (item) {
-        handleSelect(item as InventoryItem);
+      if (result.source === "local" && result.localItem) {
+        handleSelect(result.localItem as InventoryItem);
+      } else if (
+        (result.source === "master" || result.source === "openfoodfacts" || result.source === "upcitemdb") &&
+        result.suggestion &&
+        onBarcodeSuggestion
+      ) {
+        onBarcodeSuggestion({ barcode, suggestion: result.suggestion });
       } else if (onBarcodeNotFound) {
         onBarcodeNotFound(barcode);
       } else {

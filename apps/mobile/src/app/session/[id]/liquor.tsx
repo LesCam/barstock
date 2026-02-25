@@ -11,7 +11,7 @@ import { NumericKeypad } from "@/components/NumericKeypad";
 import { ItemSearchBar } from "@/components/ItemSearchBar";
 import { ScaleConnector } from "@/components/ScaleConnector";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
-import { CreateItemFromScanModal } from "@/components/CreateItemFromScanModal";
+import { CreateItemFromScanModal, type BarcodeSuggestion } from "@/components/CreateItemFromScanModal";
 import type { ScaleReading } from "@/lib/scale/scale-manager";
 
 interface SelectedItem {
@@ -43,7 +43,7 @@ export default function LiquorWeighScreen() {
   const [unitCount, setUnitCount] = useState("");
   const [submittedCount, setSubmittedCount] = useState(0);
   const [showScanner, setShowScanner] = useState(false);
-  const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
+  const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string; suggestion?: BarcodeSuggestion | null } | null>(null);
 
   const canTare = usePermission("canManageTareWeights");
 
@@ -129,14 +129,19 @@ export default function LiquorWeighScreen() {
   async function handleRescan(barcode: string) {
     setShowScanner(false);
     try {
-      const item = await utils.inventory.getByBarcode.fetch({
+      const result = await utils.masterProducts.chainedLookup.fetch({
         locationId: selectedLocationId!,
         barcode,
       });
-      if (item) {
-        setSelectedItem(item as SelectedItem);
+      if (result.source === "local" && result.localItem) {
+        setSelectedItem(result.localItem as SelectedItem);
         setScaleWeight(null);
         setManualWeight("");
+      } else if (
+        (result.source === "master" || result.source === "openfoodfacts" || result.source === "upcitemdb") &&
+        result.suggestion
+      ) {
+        setCreatingFromScan({ barcode, suggestion: result.suggestion });
       } else {
         handleBarcodeNotFound(barcode);
       }
@@ -313,6 +318,9 @@ export default function LiquorWeighScreen() {
             setUseManual(false);
           }}
           onBarcodeNotFound={handleBarcodeNotFound}
+          onBarcodeSuggestion={({ barcode, suggestion }) => {
+            setCreatingFromScan({ barcode, suggestion });
+          }}
           countingMethodFilter="weighable"
           placeholder="Search weighable items or scan..."
         />
@@ -563,6 +571,7 @@ export default function LiquorWeighScreen() {
         <CreateItemFromScanModal
           barcode={creatingFromScan.barcode}
           locationId={selectedLocationId!}
+          suggestion={creatingFromScan.suggestion}
           onSuccess={() => {
             utils.scale.listTemplates.invalidate({ locationId: selectedLocationId! });
             setCreatingFromScan(null);
