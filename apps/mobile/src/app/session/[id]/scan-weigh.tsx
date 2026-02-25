@@ -23,6 +23,7 @@ import { useNetwork } from "@/lib/network-context";
 import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { CreateItemFromScanModal, type BarcodeSuggestion } from "@/components/CreateItemFromScanModal";
+import { TareWeightEditModal } from "@/components/TareWeightEditModal";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
 import { useVoiceWeight } from "@/lib/voice/use-voice-weight";
 
@@ -43,6 +44,7 @@ interface MatchedItem {
   name: string;
   barcode: string | null;
   baseUom: string;
+  containerSize: unknown;
   category?: { id: string; name: string; countingMethod: string; defaultDensity: unknown } | null;
 }
 
@@ -70,6 +72,7 @@ export default function ScanWeighScreen() {
   const [submittedCount, setSubmittedCount] = useState(0);
   const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string; suggestion?: BarcodeSuggestion | null } | null>(null);
   const [lastSubmittedName, setLastSubmittedName] = useState<string | null>(null);
+  const [showTareModal, setShowTareModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [unitCount, setUnitCount] = useState("");
   const searchInputRef = useRef<TextInput>(null);
@@ -215,6 +218,7 @@ export default function ScanWeighScreen() {
 
   const addLineMutation = trpc.sessions.addLine.useMutation();
   const recordMeasurementMutation = trpc.scale.recordMeasurement.useMutation();
+  const createTemplateMutation = trpc.scale.createTemplate.useMutation();
 
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -847,7 +851,16 @@ export default function ScanWeighScreen() {
                 <Text style={styles.noTemplateText}>
                   Weight will be recorded as-is without tare subtraction. Results may be less accurate.
                 </Text>
-                <Text style={styles.noTemplateHint}>Set up in Tare Weights after this session.</Text>
+                {canTare && matchedItem?.containerSize != null ? (
+                  <TouchableOpacity
+                    style={styles.setTareBtn}
+                    onPress={() => setShowTareModal(true)}
+                  >
+                    <Text style={styles.setTareBtnText}>Set Tare Now</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.noTemplateHint}>Set up in Tare Weights after this session.</Text>
+                )}
               </View>
             )}
 
@@ -1086,6 +1099,30 @@ export default function ScanWeighScreen() {
             setCreatingFromScan(null);
             resetToScanning();
           }}
+        />
+      )}
+
+      {/* Inline tare weight setup */}
+      {showTareModal && matchedItem && (
+        <TareWeightEditModal
+          visible={showTareModal}
+          itemName={matchedItem.name}
+          containerSizeMl={Number(matchedItem.containerSize) || 750}
+          onSave={async (emptyG, fullG) => {
+            try {
+              await createTemplateMutation.mutateAsync({
+                inventoryItemId: matchedItem.id,
+                containerSizeMl: Number(matchedItem.containerSize) || 750,
+                emptyBottleWeightG: emptyG ?? undefined,
+                fullBottleWeightG: fullG ?? undefined,
+              });
+              utils.scale.listTemplates.invalidate({ locationId: selectedLocationId! });
+              setShowTareModal(false);
+            } catch (error: any) {
+              Alert.alert("Error", error.message ?? "Failed to save tare weight.");
+            }
+          }}
+          onCancel={() => setShowTareModal(false)}
         />
       )}
     </View>
@@ -1351,6 +1388,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
     opacity: 0.7,
+  },
+  setTareBtn: {
+    marginTop: 10,
+    backgroundColor: "#FBBF24",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignSelf: "flex-start",
+  },
+  setTareBtnText: {
+    color: "#0B1623",
+    fontSize: 13,
+    fontWeight: "600",
   },
 
   // Weight display
