@@ -41,4 +41,14 @@ export const scanImportRouter = router({
       });
       return { success: true };
     }),
+
+  scanBarcode: protectedProcedure
+    .input(z.object({ scanSessionId: z.string().uuid(), barcode: z.string().min(1) }))
+    .mutation(({ input }) => {
+      scanImportEmitter.notifyScanSession(input.scanSessionId, {
+        type: "barcode_scanned",
+        payload: { barcode: input.barcode },
+      });
+      return { success: true };
+    }),
 });

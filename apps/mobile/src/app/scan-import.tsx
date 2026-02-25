@@ -72,6 +72,7 @@ export default function ScanImportScreen() {
 
   const addBridgeItemMutation = trpc.scanImport.addItem.useMutation();
   const removeBridgeItemMutation = trpc.scanImport.removeItem.useMutation();
+  const scanBarcodeMut = trpc.scanImport.scanBarcode.useMutation();
 
   // Queries
   const { data: categories } = trpc.itemCategories.list.useQuery(
@@ -138,6 +139,11 @@ export default function ScanImportScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         Alert.alert("Already Staged", `"${barcode}" is already in your import list.`);
         return;
+      }
+
+      // Fire raw barcode to web bridge (before mobile's own lookup flow)
+      if (bridgeSessionId) {
+        scanBarcodeMut.mutate({ scanSessionId: bridgeSessionId, barcode });
       }
 
       setScanEnabled(false);

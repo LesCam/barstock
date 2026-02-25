@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { HelpLink } from "@/components/help-link";
 import { UOM } from "@barstock/types";
+import { QRCodeSVG } from "qrcode.react";
 
 type SortKey = "name" | "category";
 type SortDir = "asc" | "desc";
@@ -56,8 +57,36 @@ export default function InventoryPage() {
   const [newContainerSize, setNewContainerSize] = useState("");
   const [newContainerUom, setNewContainerUom] = useState<string>("");
 
+  const barcodeRef = useRef<HTMLInputElement>(null);
+
+  // Phone-to-web scan bridge
+  const [scanSessionId, setScanSessionId] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Barcode lookup state
+  const [lookupStatus, setLookupStatus] = useState<
+    | null
+    | { type: "loading" }
+    | { type: "exists"; name: string }
+    | { type: "found"; source: string; brand?: string | null }
+    | { type: "not_found" }
+  >(null);
+  const [createdFromLookup, setCreatedFromLookup] = useState(false);
+
+  const contributeMut = trpc.masterProducts.contribute.useMutation();
+
   const createMut = trpc.inventory.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      // Contribute back to master products if item was created from a lookup
+      if (createdFromLookup && variables.barcode) {
+        contributeMut.mutate({
+          barcode: variables.barcode,
+          name: variables.name,
+          containerSizeMl: variables.containerSize && variables.containerUom === "ml"
+            ? variables.containerSize
+            : undefined,
+        });
+      }
       utils.inventory.list.invalidate();
       utils.inventory.onHand.invalidate();
       setShowCreate(false);
@@ -73,6 +102,122 @@ export default function InventoryPage() {
     setNewPackSize("");
     setNewContainerSize("");
     setNewContainerUom("");
+    setLookupStatus(null);
+    setCreatedFromLookup(false);
+  }
+
+  const doLookup = useCallback(async (barcode: string) => {
+    if (!barcode || !locationId) return;
+    setNewBarcode(barcode);
+    setLookupStatus({ type: "loading" });
+    try {
+      const result = await utils.masterProducts.chainedLookup.fetch({ barcode, locationId });
+      if (result.source === "local" && result.localItem) {
+        setLookupStatus({ type: "exists", name: result.localItem.name });
+      } else if (
+        (result.source === "master" || result.source === "openfoodfacts") &&
+        result.suggestion
+      ) {
+        const s = result.suggestion;
+        if (s.name) {
+          setNewName(s.brand ? `${s.brand} ${s.name}` : s.name);
+        }
+        if (s.containerSizeMl) {
+          setNewContainerSize(String(s.containerSizeMl));
+          setNewContainerUom("ml");
+        }
+        if (s.categoryHint && categories?.length) {
+          const hint = s.categoryHint.toLowerCase();
+          const match = categories.find(
+            (c) =>
+              c.name.toLowerCase().includes(hint) ||
+              hint.includes(c.name.toLowerCase())
+          );
+          if (match) setNewCategoryId(match.id);
+        }
+        setCreatedFromLookup(true);
+        setLookupStatus({ type: "found", source: result.source, brand: s.brand });
+      } else {
+        setLookupStatus({ type: "not_found" });
+      }
+    } catch {
+      setLookupStatus({ type: "not_found" });
+    }
+  }, [locationId, categories, utils]);
+
+  // Global barcode scanner detection: captures rapid keystrokes ending with Enter
+  useEffect(() => {
+    if (!showCreate) return;
+    let buffer = "";
+    let lastKeyTime = 0;
+    const SCAN_THRESHOLD_MS = 80; // max ms between keystrokes for scanner input
+    const MIN_BARCODE_LENGTH = 6;
+
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ignore if user is typing in another input (not the barcode field)
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" &&
+        target !== barcodeRef.current
+      ) return;
+      if (target.tagName === "SELECT" || target.tagName === "TEXTAREA") return;
+
+      const now = Date.now();
+      if (e.key === "Enter") {
+        if (buffer.length >= MIN_BARCODE_LENGTH) {
+          e.preventDefault();
+          doLookup(buffer);
+        }
+        buffer = "";
+        return;
+      }
+      // Only buffer printable single characters
+      if (e.key.length === 1) {
+        if (now - lastKeyTime > SCAN_THRESHOLD_MS) {
+          buffer = ""; // too slow, reset — likely manual typing
+        }
+        buffer += e.key;
+        lastKeyTime = now;
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showCreate, doLookup]);
+
+  // Phone-to-web scan bridge: open SSE when create form opens
+  useEffect(() => {
+    if (!showCreate) {
+      // Cleanup on close
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setScanSessionId(null);
+      return;
+    }
+    const id = crypto.randomUUID();
+    setScanSessionId(id);
+    const es = new EventSource(`/api/scan-import/${id}/stream`);
+    eventSourceRef.current = es;
+    es.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if (data.type === "barcode_scanned" && data.payload?.barcode) {
+          doLookup(data.payload.barcode);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+    return () => {
+      es.close();
+      eventSourceRef.current = null;
+    };
+  }, [showCreate, doLookup]);
+
+  function handleLookup() {
+    doLookup(newBarcode.trim());
   }
 
   function handleCreate() {
@@ -184,13 +329,39 @@ export default function InventoryPage() {
             </div>
             <div>
               <label className="mb-1 block text-xs text-[#EAF0FF]/60">Barcode</label>
-              <input
-                type="text"
-                value={newBarcode}
-                onChange={(e) => setNewBarcode(e.target.value)}
-                className="w-full rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
-                placeholder="Optional"
-              />
+              <div className="flex gap-2">
+                <input
+                  ref={barcodeRef}
+                  autoFocus
+                  type="text"
+                  value={newBarcode}
+                  onChange={(e) => { setNewBarcode(e.target.value); setLookupStatus(null); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleLookup(); } }}
+                  className="flex-1 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+                  placeholder="Scan or type UPC..."
+                />
+                <button
+                  type="button"
+                  onClick={handleLookup}
+                  disabled={!newBarcode.trim() || lookupStatus?.type === "loading"}
+                  className="shrink-0 rounded-md border border-[#E9B44C] px-3 py-2 text-sm font-medium text-[#E9B44C] hover:bg-[#E9B44C] hover:text-[#0B1623] disabled:opacity-40"
+                >
+                  {lookupStatus?.type === "loading" ? (
+                    <span className="inline-flex items-center gap-1">
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    </span>
+                  ) : "Lookup"}
+                </button>
+              </div>
+              {lookupStatus?.type === "exists" && (
+                <p className="mt-1 text-xs text-amber-400">Already in inventory: {lookupStatus.name}</p>
+              )}
+              {lookupStatus?.type === "found" && (
+                <p className="mt-1 text-xs text-green-400">Found via {lookupStatus.source === "master" ? "master catalog" : "Open Food Facts"}</p>
+              )}
+              {lookupStatus?.type === "not_found" && (
+                <p className="mt-1 text-xs text-[#EAF0FF]/50">No product found — fill in manually</p>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs text-[#EAF0FF]/60">Vendor SKU</label>
@@ -245,6 +416,22 @@ export default function InventoryPage() {
               </select>
             </div>
           </div>
+          {/* Phone scan pairing */}
+          {scanSessionId && (
+            <div className="mt-3 flex items-center gap-4 rounded-md border border-white/10 bg-[#0B1623] p-3">
+              <QRCodeSVG
+                value={`barstock://scan-import/${scanSessionId}`}
+                size={80}
+                bgColor="#0B1623"
+                fgColor="#EAF0FF"
+              />
+              <div className="text-xs text-[#EAF0FF]/60">
+                <p className="mb-1 font-medium text-[#EAF0FF]/80">Scan from phone</p>
+                <p>Open <span className="font-medium text-[#E9B44C]">Scan Import</span> on your phone, scan this QR to pair, then scan any barcode.</p>
+                <p className="mt-1 font-mono text-[10px] text-[#EAF0FF]/30">{scanSessionId.slice(0, 6).toUpperCase()}</p>
+              </div>
+            </div>
+          )}
           <div className="mt-3 flex items-center gap-3">
             <button
               onClick={handleCreate}
