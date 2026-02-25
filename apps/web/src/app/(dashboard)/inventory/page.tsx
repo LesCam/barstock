@@ -47,6 +47,7 @@ export default function InventoryPage() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [showCreate, setShowCreate] = useState(false);
+  const [showTareNudge, setShowTareNudge] = useState(false);
 
   // Create form state
   const [newName, setNewName] = useState("");
@@ -109,6 +110,11 @@ export default function InventoryPage() {
             ? variables.containerSize
             : undefined,
         });
+      }
+      // Check if the created item's category is weighable
+      const createdCategory = categories?.find((c) => c.id === variables.categoryId);
+      if (createdCategory?.countingMethod === "weighable") {
+        setShowTareNudge(true);
       }
       utils.inventory.list.invalidate();
       utils.inventory.onHand.invalidate();
@@ -574,6 +580,21 @@ export default function InventoryPage() {
               <p className="text-sm text-red-400">{updateMut.error.message}</p>
             )}
           </div>
+        </div>
+      )}
+
+      {showTareNudge && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-[#FBBF24]/25 bg-[#92400E]/20 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-[#FBBF24]">Set up tare weight</p>
+            <p className="text-xs text-[#FDE68A]">This weighable item needs an empty bottle weight for accurate counting. Set it up on the mobile app under Tare Weights.</p>
+          </div>
+          <button
+            onClick={() => setShowTareNudge(false)}
+            className="shrink-0 rounded-md px-2 py-1.5 text-xs text-[#FDE68A] hover:text-white"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 

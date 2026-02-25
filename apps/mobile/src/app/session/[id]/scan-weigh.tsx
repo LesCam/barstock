@@ -843,9 +843,11 @@ export default function ScanWeighScreen() {
 
             {!hasTemplate && (
               <View style={styles.noTemplateBox}>
+                <Text style={styles.noTemplateTitle}>No Tare Weight Set</Text>
                 <Text style={styles.noTemplateText}>
-                  No bottle template. Enter weight manually.
+                  Weight will be recorded as-is without tare subtraction. Results may be less accurate.
                 </Text>
+                <Text style={styles.noTemplateHint}>Set up in Tare Weights after this session.</Text>
               </View>
             )}
 
@@ -1325,18 +1327,30 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // No template
+  // No template — amber warning
   noTemplateBox: {
-    backgroundColor: "#3B2A1A",
-    borderRadius: 8,
-    padding: 10,
+    backgroundColor: "rgba(251, 191, 36, 0.15)",
+    borderRadius: 10,
+    padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#6B4C2A",
+    borderColor: "rgba(251, 191, 36, 0.25)",
+  },
+  noTemplateTitle: {
+    color: "#FBBF24",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 4,
   },
   noTemplateText: {
-    color: "#AA9070",
+    color: "#FDE68A",
     fontSize: 13,
+  },
+  noTemplateHint: {
+    color: "#FDE68A",
+    fontSize: 12,
+    marginTop: 6,
+    opacity: 0.7,
   },
 
   // Weight display

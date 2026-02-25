@@ -40,6 +40,7 @@ export default function LiquorWeighScreen() {
   const [useManual, setUseManual] = useState(manual === "1");
   const [manualWeight, setManualWeight] = useState("");
   const [scaleWeight, setScaleWeight] = useState<number | null>(null);
+  const [unitCount, setUnitCount] = useState("");
   const [submittedCount, setSubmittedCount] = useState(0);
   const [showScanner, setShowScanner] = useState(false);
   const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
@@ -226,12 +227,12 @@ export default function LiquorWeighScreen() {
 
   async function handleManualCountSubmit() {
     // Fallback: just count units when no template exists
-    if (!selectedItem || !manualWeight) return;
+    if (!selectedItem || !unitCount) return;
 
     const mutationInput = {
       sessionId: sessionId!,
       inventoryItemId: selectedItem.id,
-      countUnits: parseInt(manualWeight, 10),
+      countUnits: parseInt(unitCount, 10),
       isManual: true,
       subAreaId: subAreaId || undefined,
     };
@@ -248,7 +249,7 @@ export default function LiquorWeighScreen() {
             sessionId,
             inventoryItemId: selectedItem.id,
             grossWeightGrams: null,
-            countUnits: parseInt(manualWeight, 10),
+            countUnits: parseInt(unitCount, 10),
             percentRemaining: null,
             isManual: true,
             subAreaId: subAreaId || null,
@@ -272,7 +273,7 @@ export default function LiquorWeighScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSubmittedCount((c) => c + 1);
       setSelectedItem(null);
-      setManualWeight("");
+      setUnitCount("");
       return;
     }
 
@@ -280,7 +281,7 @@ export default function LiquorWeighScreen() {
       await addLineMutation.mutateAsync(mutationInput);
       setSubmittedCount((c) => c + 1);
       setSelectedItem(null);
-      setManualWeight("");
+      setUnitCount("");
       utils.sessions.getById.invalidate({ id: sessionId! });
     } catch (error: any) {
       Alert.alert("Error", error.message ?? "Failed to submit.");
@@ -350,188 +351,191 @@ export default function LiquorWeighScreen() {
               )}
             </View>
 
+            {/* No Tare Weight Warning */}
             {!matchedTemplate && (
-              <>
-                {/* No Template Warning */}
-                <View style={styles.warningBox}>
-                  <Text style={styles.warningTitle}>No Bottle Template</Text>
-                  <Text style={styles.warningText}>
-                    No bottle template exists for this item. You can submit a manual unit count instead.
-                  </Text>
-                </View>
+              <View style={styles.noTareWarning}>
+                <Text style={styles.noTareTitle}>No Tare Weight Set</Text>
+                <Text style={styles.noTareText}>
+                  Weight will be recorded as-is without tare subtraction. Results may be less accurate.
+                </Text>
+                <Text style={styles.noTareHint}>Set up in Tare Weights after this session.</Text>
+              </View>
+            )}
 
-                {/* Manual Count Fallback */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Unit Count</Text>
-                  <View style={styles.quantityDisplay}>
-                    <Text style={styles.quantityValue}>{manualWeight || "0"}</Text>
-                    <Text style={styles.quantityLabel}>units</Text>
+            {/* Mode Toggle */}
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Manual Weight Entry</Text>
+              <Switch
+                value={useManual}
+                onValueChange={setUseManual}
+                trackColor={{ false: "#1E3550", true: "#E9B44C" }}
+                thumbColor="#EAF0FF"
+              />
+            </View>
+
+            {/* Scale or Manual Input */}
+            {!useManual ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Scale</Text>
+                <ScaleConnector onWeightReading={handleWeightReading} />
+                {scaleWeight != null && (
+                  <View style={styles.weightResult}>
+                    <Text style={styles.weightValue}>{scaleWeight.toFixed(1)}g</Text>
+                    {!matchedTemplate && (
+                      <Text style={styles.grossWeightNote}>Gross weight (no tare)</Text>
+                    )}
                   </View>
-                  <NumericKeypad value={manualWeight} onChange={setManualWeight} />
-                  <TouchableOpacity
-                    style={[
-                      styles.submitBtn,
-                      (!manualWeight || isPending) && styles.submitBtnDisabled,
-                    ]}
-                    onPress={handleManualCountSubmit}
-                    disabled={!manualWeight || isPending}
-                  >
-                    <Text style={styles.submitBtnText}>
-                      {isPending ? "Submitting..." : "Submit Count"}
+                )}
+              </View>
+            ) : (
+              <View style={styles.section}>
+                {/* Weight Display — kg formatted */}
+                <Text style={styles.sectionLabel}>Manual Weight Input</Text>
+                <View style={styles.weightDisplay}>
+                  <Text style={styles.weightDisplayValue}>
+                    {manualWeight
+                      ? (parseInt(manualWeight, 10) / 1000).toFixed(3)
+                      : "0.000"}
+                  </Text>
+                  <Text style={styles.weightDisplayUnit}>kg</Text>
+                </View>
+                {!matchedTemplate && manualWeight ? (
+                  <Text style={styles.grossWeightNote}>Gross weight (no tare)</Text>
+                ) : null}
+
+                {/* Calculation Display — only with template */}
+                {calcQuery.data && (
+                  <View style={styles.calcSection}>
+                    <Text style={styles.calcInline}>
+                      ~{calcQuery.data.liquidOz} oz  ≈  {calcQuery.data.percentRemaining}% Full
                     </Text>
+                    <View style={styles.progressRow}>
+                      <View style={styles.progressTrack}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            { width: `${Math.min(100, Math.max(0, calcQuery.data.percentRemaining))}%` },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.progressLabel}>
+                        {calcQuery.data.percentRemaining}%
+                      </Text>
+                    </View>
+                    <Text style={styles.ozLeftText}>
+                      ~ {calcQuery.data.liquidOz} oz left
+                    </Text>
+                  </View>
+                )}
+
+                {/* Rescan / Enter Manually buttons */}
+                <View style={styles.switchRow}>
+                  <TouchableOpacity
+                    style={styles.switchBtn}
+                    onPress={() => setShowScanner(true)}
+                  >
+                    <Text style={styles.switchBtnText}>Rescan</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.switchBtn}
+                    onPress={() => {
+                      setSelectedItem(null);
+                      setManualWeight("");
+                    }}
+                  >
+                    <Text style={styles.switchBtnText}>Enter Manually</Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* Keypad */}
+                <NumericKeypad
+                  value={manualWeight}
+                  onChange={setManualWeight}
+                  maxLength={5}
+                  showSublabels
+                />
+
+                {/* Submit */}
+                <TouchableOpacity
+                  style={[
+                    styles.submitBtn,
+                    (grossWeightG == null || grossWeightG <= 0 || isPending) &&
+                      styles.submitBtnDisabled,
+                  ]}
+                  onPress={handleSubmit}
+                  disabled={grossWeightG == null || grossWeightG <= 0 || isPending}
+                >
+                  <Text style={styles.submitBtnText}>
+                    {isPending ? "Submitting..." : "Submit"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Scale mode: Calculation + Submit outside the manual branch */}
+            {!useManual && (
+              <>
+                {calcQuery.data && (
+                  <View style={styles.calcSection}>
+                    <Text style={styles.calcInline}>
+                      ~{calcQuery.data.liquidOz} oz  ≈  {calcQuery.data.percentRemaining}% Full
+                    </Text>
+                    <View style={styles.progressRow}>
+                      <View style={styles.progressTrack}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            { width: `${Math.min(100, Math.max(0, calcQuery.data.percentRemaining))}%` },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.progressLabel}>
+                        {calcQuery.data.percentRemaining}%
+                      </Text>
+                    </View>
+                    <Text style={styles.ozLeftText}>
+                      ~ {calcQuery.data.liquidOz} oz left
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.submitBtn,
+                    (grossWeightG == null || grossWeightG <= 0 || isPending) &&
+                      styles.submitBtnDisabled,
+                  ]}
+                  onPress={handleSubmit}
+                  disabled={grossWeightG == null || grossWeightG <= 0 || isPending}
+                >
+                  <Text style={styles.submitBtnText}>
+                    {isPending ? "Submitting..." : "Submit"}
+                  </Text>
+                </TouchableOpacity>
               </>
             )}
 
-            {matchedTemplate && (
-              <>
-                {/* Mode Toggle */}
-                <View style={styles.toggleRow}>
-                  <Text style={styles.toggleLabel}>Manual Weight Entry</Text>
-                  <Switch
-                    value={useManual}
-                    onValueChange={setUseManual}
-                    trackColor={{ false: "#1E3550", true: "#E9B44C" }}
-                    thumbColor="#EAF0FF"
-                  />
+            {/* Unit count fallback — available when no template */}
+            {!matchedTemplate && (
+              <View style={styles.unitCountFallback}>
+                <Text style={styles.unitCountFallbackLabel}>Or count full units instead:</Text>
+                <View style={styles.quantityDisplay}>
+                  <Text style={styles.quantityValue}>{unitCount || "0"}</Text>
+                  <Text style={styles.quantityLabel}>units</Text>
                 </View>
-
-                {/* Scale or Manual Input */}
-                {!useManual ? (
-                  <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Scale</Text>
-                    <ScaleConnector onWeightReading={handleWeightReading} />
-                    {scaleWeight != null && (
-                      <View style={styles.weightResult}>
-                        <Text style={styles.weightValue}>{scaleWeight.toFixed(1)}g</Text>
-                      </View>
-                    )}
-                  </View>
-                ) : (
-                  <View style={styles.section}>
-                    {/* Weight Display — kg formatted */}
-                    <Text style={styles.sectionLabel}>Manual Weight Input</Text>
-                    <View style={styles.weightDisplay}>
-                      <Text style={styles.weightDisplayValue}>
-                        {manualWeight
-                          ? (parseInt(manualWeight, 10) / 1000).toFixed(3)
-                          : "0.000"}
-                      </Text>
-                      <Text style={styles.weightDisplayUnit}>kg</Text>
-                    </View>
-
-                    {/* Calculation Display */}
-                    {calcQuery.data && (
-                      <View style={styles.calcSection}>
-                        <Text style={styles.calcInline}>
-                          ~{calcQuery.data.liquidOz} oz  ≈  {calcQuery.data.percentRemaining}% Full
-                        </Text>
-                        <View style={styles.progressRow}>
-                          <View style={styles.progressTrack}>
-                            <View
-                              style={[
-                                styles.progressFill,
-                                { width: `${Math.min(100, Math.max(0, calcQuery.data.percentRemaining))}%` },
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.progressLabel}>
-                            {calcQuery.data.percentRemaining}%
-                          </Text>
-                        </View>
-                        <Text style={styles.ozLeftText}>
-                          ~ {calcQuery.data.liquidOz} oz left
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* Rescan / Enter Manually buttons */}
-                    <View style={styles.switchRow}>
-                      <TouchableOpacity
-                        style={styles.switchBtn}
-                        onPress={() => setShowScanner(true)}
-                      >
-                        <Text style={styles.switchBtnText}>Rescan</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.switchBtn}
-                        onPress={() => {
-                          setSelectedItem(null);
-                          setManualWeight("");
-                        }}
-                      >
-                        <Text style={styles.switchBtnText}>Enter Manually</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Keypad */}
-                    <NumericKeypad
-                      value={manualWeight}
-                      onChange={setManualWeight}
-                      maxLength={5}
-                      showSublabels
-                    />
-
-                    {/* Submit */}
-                    <TouchableOpacity
-                      style={[
-                        styles.submitBtn,
-                        (grossWeightG == null || grossWeightG <= 0 || isPending) &&
-                          styles.submitBtnDisabled,
-                      ]}
-                      onPress={handleSubmit}
-                      disabled={grossWeightG == null || grossWeightG <= 0 || isPending}
-                    >
-                      <Text style={styles.submitBtnText}>
-                        {isPending ? "Submitting..." : "Submit"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {/* Scale mode: Calculation + Submit outside the manual branch */}
-                {!useManual && (
-                  <>
-                    {calcQuery.data && (
-                      <View style={styles.calcSection}>
-                        <Text style={styles.calcInline}>
-                          ~{calcQuery.data.liquidOz} oz  ≈  {calcQuery.data.percentRemaining}% Full
-                        </Text>
-                        <View style={styles.progressRow}>
-                          <View style={styles.progressTrack}>
-                            <View
-                              style={[
-                                styles.progressFill,
-                                { width: `${Math.min(100, Math.max(0, calcQuery.data.percentRemaining))}%` },
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.progressLabel}>
-                            {calcQuery.data.percentRemaining}%
-                          </Text>
-                        </View>
-                        <Text style={styles.ozLeftText}>
-                          ~ {calcQuery.data.liquidOz} oz left
-                        </Text>
-                      </View>
-                    )}
-                    <TouchableOpacity
-                      style={[
-                        styles.submitBtn,
-                        (grossWeightG == null || grossWeightG <= 0 || isPending) &&
-                          styles.submitBtnDisabled,
-                      ]}
-                      onPress={handleSubmit}
-                      disabled={grossWeightG == null || grossWeightG <= 0 || isPending}
-                    >
-                      <Text style={styles.submitBtnText}>
-                        {isPending ? "Submitting..." : "Submit"}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </>
+                <NumericKeypad value={unitCount} onChange={setUnitCount} />
+                <TouchableOpacity
+                  style={[
+                    styles.submitBtn,
+                    (!unitCount || isPending) && styles.submitBtnDisabled,
+                  ]}
+                  onPress={handleManualCountSubmit}
+                  disabled={!unitCount || isPending}
+                >
+                  <Text style={styles.submitBtnText}>
+                    {isPending ? "Submitting..." : "Submit Unit Count"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
           </>
         )}
@@ -799,5 +803,49 @@ const styles = StyleSheet.create({
     color: "#E9B44C",
     fontSize: 14,
     fontWeight: "600",
+  },
+  // No tare weight — amber warning
+  noTareWarning: {
+    backgroundColor: "rgba(251, 191, 36, 0.15)",
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "rgba(251, 191, 36, 0.25)",
+  },
+  noTareTitle: {
+    color: "#FBBF24",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  noTareText: {
+    color: "#FDE68A",
+    fontSize: 13,
+  },
+  noTareHint: {
+    color: "#FDE68A",
+    fontSize: 12,
+    marginTop: 6,
+    opacity: 0.7,
+  },
+  grossWeightNote: {
+    color: "#FBBF24",
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  unitCountFallback: {
+    marginTop: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#1E3550",
+  },
+  unitCountFallbackLabel: {
+    color: "#8899AA",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 12,
+    textAlign: "center",
   },
 });

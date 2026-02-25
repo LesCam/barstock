@@ -57,8 +57,19 @@ export default function ManageItemsScreen() {
   const createMutation = trpc.inventory.create.useMutation({
     onSuccess: () => {
       utils.inventory.list.invalidate({ locationId });
+      const selectedCategory = categories?.find((c) => c.id === formCategoryId);
       resetForm();
       setShowForm(false);
+      if (selectedCategory?.countingMethod === "weighable") {
+        Alert.alert(
+          "Set Tare Weight?",
+          "This item uses weight-based counting. Setting an empty bottle weight improves accuracy.",
+          [
+            { text: "Later", style: "cancel" },
+            { text: "Set Now", onPress: () => router.push("/tare-weights") },
+          ]
+        );
+      }
     },
     onError: (error) => {
       Alert.alert("Error", error.message ?? "Failed to create item.");
