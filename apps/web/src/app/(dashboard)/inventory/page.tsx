@@ -426,7 +426,7 @@ export default function InventoryPage() {
                 <p className="mt-1 text-xs text-green-400">Found via {lookupStatus.source === "master" ? "master catalog" : "Open Food Facts"}</p>
               )}
               {lookupStatus?.type === "not_found" && (
-                <p className="mt-1 text-xs text-[#EAF0FF]/50">No product found — fill in manually</p>
+                <p className="mt-1 text-xs text-amber-400">Not found online — please enter details manually</p>
               )}
             </div>
             <div>
