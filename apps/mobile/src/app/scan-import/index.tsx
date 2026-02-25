@@ -11,7 +11,8 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
-import { router as navRouter, useLocalSearchParams } from "expo-router";
+import { router as navRouter } from "expo-router";
+import { consumePendingBridgeSession } from "./pending-bridge";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
@@ -38,7 +39,6 @@ type Phase = "scanning" | "form" | "prefilled" | "pairing";
 const UOM_OPTIONS = Object.values(UOM);
 
 export default function ScanImportScreen() {
-  const { bridgeSession } = useLocalSearchParams<{ bridgeSession?: string }>();
   const { selectedLocationId, user } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const utils = trpc.useUtils();
@@ -72,19 +72,18 @@ export default function ScanImportScreen() {
   const [pairingCode, setPairingCode] = useState("");
   const [bridgeScanCount, setBridgeScanCount] = useState(0);
 
-  // Auto-pair if arriving via deep link (once only)
-  const didAutoPair = useRef(false);
+  // Auto-pair if arriving via deep link (consumed once)
   useEffect(() => {
-    if (bridgeSession && !didAutoPair.current) {
-      didAutoPair.current = true;
-      setBridgeSessionId(bridgeSession);
+    const pending = consumePendingBridgeSession();
+    if (pending) {
+      setBridgeSessionId(pending);
       setScanEnabled(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Paired!", "Phone is now connected to the web form.", [
         { text: "OK", onPress: () => setScanEnabled(true) },
       ]);
     }
-  }, [bridgeSession]);
+  }, []);
 
   const addBridgeItemMutation = trpc.scanImport.addItem.useMutation();
   const removeBridgeItemMutation = trpc.scanImport.removeItem.useMutation();
@@ -372,7 +371,7 @@ export default function ScanImportScreen() {
       Alert.alert(
         "Import Complete",
         `Created ${result.created} items${result.skipped > 0 ? `, skipped ${result.skipped} duplicates` : ""}.`,
-        [{ text: "OK", onPress: () => navRouter.back() }]
+        [{ text: "OK", onPress: () => navRouter.canGoBack() ? navRouter.back() : navRouter.replace("/") }]
       );
     } catch (err: any) {
       Alert.alert("Import Failed", err.message || "An error occurred.");
@@ -393,7 +392,7 @@ export default function ScanImportScreen() {
           <TouchableOpacity style={styles.grantButton} onPress={requestPermission}>
             <Text style={styles.grantButtonText}>Grant Permission</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navRouter.back()}>
+          <TouchableOpacity onPress={() => navRouter.canGoBack() ? navRouter.back() : navRouter.replace("/")}>
             <Text style={styles.cancelText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -408,7 +407,7 @@ export default function ScanImportScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navRouter.back()}>
+        <TouchableOpacity onPress={() => navRouter.canGoBack() ? navRouter.back() : navRouter.replace("/")}>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Scan to Import</Text>

@@ -1,16 +1,19 @@
 import { useEffect } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import { setPendingBridgeSession } from "./pending-bridge";
 
 /**
  * Deep link handler for barstock://scan-import/{sessionId}
- * Redirects to the main scan-import screen with the session ID as a query param
- * so it can auto-pair with the web bridge.
+ * Stores the session ID in a shared ref, then navigates to scan-import.
  */
 export default function ScanImportDeepLink() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
 
   useEffect(() => {
-    router.replace({ pathname: "/scan-import", params: { bridgeSession: sessionId } });
+    if (sessionId) {
+      setPendingBridgeSession(sessionId);
+    }
+    router.replace("/scan-import");
   }, [sessionId]);
 
   return null;

@@ -73,8 +73,8 @@ export default function InventoryPage() {
 
   const barcodeRef = useRef<HTMLInputElement>(null);
 
-  // Phone-to-web scan bridge
-  const [scanSessionId, setScanSessionId] = useState<string | null>(null);
+  // Phone-to-web scan bridge (stable ID for page lifetime)
+  const [scanSessionId] = useState(() => crypto.randomUUID());
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Barcode lookup state
@@ -112,8 +112,10 @@ export default function InventoryPage() {
       }
       utils.inventory.list.invalidate();
       utils.inventory.onHand.invalidate();
-      setShowCreate(false);
       resetCreateForm();
+      if (!scanSessionId) {
+        setShowCreate(false);
+      }
     },
   });
 
@@ -219,17 +221,13 @@ export default function InventoryPage() {
   // Phone-to-web scan bridge: open SSE when create form opens
   useEffect(() => {
     if (!showCreate) {
-      // Cleanup on close
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      setScanSessionId(null);
       return;
     }
-    const id = crypto.randomUUID();
-    setScanSessionId(id);
-    const es = new EventSource(`/api/scan-import/${id}/stream`);
+    const es = new EventSource(`/api/scan-import/${scanSessionId}/stream`);
     eventSourceRef.current = es;
     es.onmessage = (evt) => {
       try {
@@ -347,7 +345,7 @@ export default function InventoryPage() {
           <HelpLink section="counting-methods" tooltip="Learn about counting methods" />
         </div>
         <button
-          onClick={() => setShowCreate((v) => !v)}
+          onClick={() => { setShowCreate((v) => { if (v) resetCreateForm(); return !v; }); }}
           className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
         >
           {showCreate ? "Cancel" : "New Item"}
