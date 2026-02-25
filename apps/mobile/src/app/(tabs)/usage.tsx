@@ -12,15 +12,22 @@ import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { UsageBarChart } from "@/components/charts/UsageBarChart";
+import { UsageChartCard } from "@/components/charts/UsageChartCard";
 import { BarSparkline } from "@/components/charts/BarSparkline";
 
-type Period = "7d" | "30d";
+type Period = "7d" | "30d" | "90d";
+type Metric = "qty" | "cost";
 
 function getDateRange(period: Period) {
   const toDate = new Date();
   const fromDate = new Date();
-  fromDate.setDate(fromDate.getDate() - (period === "7d" ? 7 : 30));
+  const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+  fromDate.setDate(fromDate.getDate() - days);
   return { fromDate, toDate };
+}
+
+function getGranularity(period: Period): "day" | "week" {
+  return period === "90d" ? "week" : "day";
 }
 
 function formatBucketLabel(dateStr: string, period: Period): string {
@@ -28,13 +35,18 @@ function formatBucketLabel(dateStr: string, period: Period): string {
   if (period === "7d") {
     return d.toLocaleDateString("en", { weekday: "short" }).slice(0, 3);
   }
+  if (period === "90d") {
+    return d.toLocaleDateString("en", { month: "short", day: "numeric" });
+  }
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 export default function UsageTab() {
   const { selectedLocationId, user } = useAuth();
   const [period, setPeriod] = useState<Period>("7d");
+  const [metric, setMetric] = useState<Metric>("qty");
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const { fromDate, toDate } = useMemo(() => getDateRange(period), [period]);
 
   const { data: categories } = trpc.itemCategories.list.useQuery(
@@ -47,7 +59,7 @@ export default function UsageTab() {
       locationId: selectedLocationId!,
       fromDate,
       toDate,
-      granularity: "day",
+      granularity: getGranularity(period),
       categoryId: categoryId || undefined,
     },
     {
@@ -60,9 +72,9 @@ export default function UsageTab() {
     if (!data?.buckets) return [];
     return data.buckets.map((b) => ({
       label: formatBucketLabel(b.period, period),
-      value: b.totalQty,
+      value: metric === "cost" ? (b.totalCost ?? 0) : b.totalQty,
     }));
-  }, [data, period]);
+  }, [data, period, metric]);
 
   const topMovers = useMemo(() => {
     if (!data?.itemSeries) return [];
@@ -70,11 +82,23 @@ export default function UsageTab() {
       .map((s) => ({
         itemId: s.itemId,
         itemName: s.itemName,
-        total: s.dataPoints.reduce((sum, dp) => sum + dp.qty, 0),
-        sparkline: s.dataPoints.map((dp) => dp.qty),
+        totalQty: s.dataPoints.reduce((sum, dp) => sum + dp.qty, 0),
+        totalCost: s.dataPoints.reduce((sum, dp) => sum + (dp.cost ?? 0), 0),
+        sparkline: s.dataPoints.map((dp) =>
+          metric === "cost" ? (dp.cost ?? 0) : dp.qty
+        ),
       }))
-      .sort((a, b) => b.total - a.total);
-  }, [data]);
+      .sort((a, b) =>
+        metric === "cost"
+          ? b.totalCost - a.totalCost
+          : b.totalQty - a.totalQty
+      );
+  }, [data, metric]);
+
+  const chartTitle =
+    period === "90d"
+      ? "Weekly Usage"
+      : "Daily Usage";
 
   if (!selectedLocationId) {
     return (
@@ -93,7 +117,7 @@ export default function UsageTab() {
           <>
             {/* Period toggle */}
             <View style={styles.toggleRow}>
-              {(["7d", "30d"] as Period[]).map((p) => (
+              {(["7d", "30d", "90d"] as Period[]).map((p) => (
                 <TouchableOpacity
                   key={p}
                   style={[styles.pill, period === p && styles.pillActive]}
@@ -106,6 +130,29 @@ export default function UsageTab() {
                     ]}
                   >
                     {p}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Metric toggle */}
+            <View style={styles.toggleRow}>
+              {([
+                { key: "qty" as Metric, label: "Quantity" },
+                { key: "cost" as Metric, label: "Cost ($)" },
+              ]).map((m) => (
+                <TouchableOpacity
+                  key={m.key}
+                  style={[styles.metricPill, metric === m.key && styles.metricPillActive]}
+                  onPress={() => setMetric(m.key)}
+                >
+                  <Text
+                    style={[
+                      styles.metricPillText,
+                      metric === m.key && styles.metricPillTextActive,
+                    ]}
+                  >
+                    {m.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -161,17 +208,20 @@ export default function UsageTab() {
 
             {/* Aggregate chart */}
             <View style={styles.chartCard}>
-              <Text style={styles.sectionTitle}>Daily Usage</Text>
+              <Text style={styles.sectionTitle}>{chartTitle}</Text>
               {isLoading ? (
                 <View style={styles.center}>
-                  <ActivityIndicator color="#4FC3F7" />
+                  <ActivityIndicator color="#E9B44C" />
                 </View>
               ) : aggregateChartData.length === 0 ? (
                 <View style={styles.center}>
                   <Text style={styles.emptyText}>No usage data</Text>
                 </View>
               ) : (
-                <UsageBarChart data={aggregateChartData} />
+                <UsageBarChart
+                  data={aggregateChartData}
+                  barColor={metric === "cost" ? "#E9B44C" : "#2BA8A0"}
+                />
               )}
             </View>
 
@@ -182,21 +232,56 @@ export default function UsageTab() {
           </>
         }
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.moverRow}
-            activeOpacity={0.7}
-            onPress={() => router.push(`/inventory/${item.itemId}` as any)}
-          >
-            <View style={styles.moverInfo}>
-              <Text style={styles.moverName} numberOfLines={1}>
-                {item.itemName}
-              </Text>
-              <Text style={styles.moverQty}>
-                {item.total.toFixed(1)} total
-              </Text>
-            </View>
-            <BarSparkline data={item.sparkline} />
-          </TouchableOpacity>
+          <View>
+            <TouchableOpacity
+              style={[
+                styles.moverRow,
+                expandedItemId === item.itemId && styles.moverRowExpanded,
+              ]}
+              activeOpacity={0.7}
+              onPress={() =>
+                setExpandedItemId(
+                  expandedItemId === item.itemId ? null : item.itemId
+                )
+              }
+              onLongPress={() =>
+                router.push(`/inventory/${item.itemId}` as any)
+              }
+            >
+              <View style={styles.moverInfo}>
+                <Text style={styles.moverName} numberOfLines={1}>
+                  {item.itemName}
+                </Text>
+                <Text style={styles.moverQty}>
+                  {metric === "cost"
+                    ? `$${item.totalCost.toFixed(2)}`
+                    : `${item.totalQty.toFixed(1)} total`}
+                </Text>
+              </View>
+              <BarSparkline
+                data={item.sparkline}
+                color={metric === "cost" ? "#E9B44C" : "#4FC3F7"}
+              />
+            </TouchableOpacity>
+            {expandedItemId === item.itemId && (
+              <View style={styles.expandedCard}>
+                <UsageChartCard
+                  itemId={item.itemId}
+                  locationId={selectedLocationId!}
+                />
+                <TouchableOpacity
+                  style={styles.viewDetailBtn}
+                  onPress={() =>
+                    router.push(`/inventory/${item.itemId}` as any)
+                  }
+                >
+                  <Text style={styles.viewDetailBtnText}>
+                    View Full Detail
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         )}
         ListEmptyComponent={
           !isLoading ? (
@@ -233,6 +318,26 @@ const styles = StyleSheet.create({
   },
   pillTextActive: {
     color: "#0B1623",
+  },
+  metricPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "#16283F",
+    borderWidth: 1,
+    borderColor: "#1E3550",
+  },
+  metricPillActive: {
+    backgroundColor: "#2BA8A0",
+    borderColor: "#2BA8A0",
+  },
+  metricPillText: {
+    fontSize: 13,
+    color: "#8899AA",
+    fontWeight: "600",
+  },
+  metricPillTextActive: {
+    color: "#FFF",
   },
   categoryScroll: {
     marginBottom: 16,
@@ -292,6 +397,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
   },
+  moverRowExpanded: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    marginBottom: 0,
+  },
   moverInfo: {
     flex: 1,
     marginRight: 12,
@@ -305,5 +415,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#5A6A7A",
     marginTop: 2,
+  },
+  expandedCard: {
+    backgroundColor: "#16283F",
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    marginBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#1E3550",
+  },
+  viewDetailBtn: {
+    marginTop: 8,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  viewDetailBtnText: {
+    fontSize: 13,
+    color: "#E9B44C",
+    fontWeight: "600",
   },
 });

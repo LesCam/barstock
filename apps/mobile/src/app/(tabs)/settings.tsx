@@ -71,6 +71,14 @@ export default function SettingsTab() {
         >
           <Text style={styles.rowText}>Manage Items</Text>
         </TouchableOpacity>
+        {capabilities?.recipesEnabled && (
+          <TouchableOpacity
+            style={[styles.card, { marginTop: 8 }]}
+            onPress={() => router.push("/recipes" as any)}
+          >
+            <Text style={styles.rowText}>Recipes</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {canAccessScale && (

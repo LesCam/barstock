@@ -143,6 +143,22 @@ function RootNavigator() {
         options={{ title: "Alert Settings", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="recipes/index"
+        options={{ title: "Recipes", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
+        name="recipes/[id]"
+        options={{ title: "Recipe Detail", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
+        name="recipes/new"
+        options={{ title: "New Recipe", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
+        name="reorder"
+        options={{ title: "Reorder", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
         name="help"
         options={{ title: "Help", headerBackTitle: "Back" }}
       />

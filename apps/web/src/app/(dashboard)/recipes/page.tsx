@@ -317,6 +317,24 @@ export default function RecipesPage() {
     });
   }
 
+  function startDuplicate(recipe: any) {
+    setShowCreate(true);
+    setName(`${recipe.name} (Copy)`);
+    setCategory(recipe.category ?? "");
+    setAddingNewCategory(false);
+    setIngredients(
+      recipe.ingredients.map((ing: any) => ({
+        inventoryItemId: ing.inventoryItemId,
+        quantity: String(Number(ing.quantity)),
+        uom: ing.uom,
+      }))
+    );
+    setIngredientSearch({});
+    setExpandedId(null);
+    // Scroll to top to show the create form
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function startEdit(recipe: any) {
     setEditingId(recipe.id);
     setEditName(recipe.name);
@@ -1002,6 +1020,12 @@ export default function RecipesPage() {
                                     Reactivate
                                   </button>
                                 )}
+                                <button
+                                  onClick={() => startDuplicate(recipe)}
+                                  className="text-xs text-blue-400/60 hover:text-blue-400"
+                                >
+                                  Duplicate
+                                </button>
                                 <button
                                   onClick={() => setExpandedId(null)}
                                   className="text-xs text-[#EAF0FF]/40 hover:text-[#EAF0FF]"
