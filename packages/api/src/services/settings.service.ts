@@ -46,7 +46,7 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
   },
   alertRules: {
     variancePercent: { enabled: true, threshold: 10 },
-    lowStock: { enabled: false, threshold: 5 },
+    lowStock: { enabled: true, threshold: 5 },
     staleCountDays: { enabled: true, threshold: 7 },
     kegNearEmpty: { enabled: true, threshold: 10 },
     loginFailures: { enabled: true, threshold: 5 },
