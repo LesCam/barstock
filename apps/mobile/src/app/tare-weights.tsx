@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   Alert,
   StyleSheet,
 } from "react-native";
@@ -56,6 +57,7 @@ export default function TareWeightsScreen() {
   const [addingItem, setAddingItem] = useState<SelectedItem | null>(null);
   const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string } | null>(null);
   const [filterCategoryId, setFilterCategoryId] = useState<string | null>(null);
+  const [needsTareExpanded, setNeedsTareExpanded] = useState(true);
 
   const flatListRef = useRef<FlatList>(null);
   const utils = trpc.useUtils();
@@ -73,6 +75,23 @@ export default function TareWeightsScreen() {
     { locationId },
     { enabled: !!locationId }
   );
+
+  const { data: allItems } = trpc.inventory.list.useQuery(
+    { locationId },
+    { enabled: !!locationId }
+  );
+
+  // Weighable items that don't have a bottle template yet
+  const needsTareItems = useMemo(() => {
+    if (!allItems || !templates) return [];
+    const templateItemIds = new Set((templates as TemplateRow[]).map((t) => t.inventoryItemId));
+    return allItems
+      .filter(
+        (item) =>
+          item.category?.countingMethod === "weighable" && !templateItemIds.has(item.id)
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allItems, templates]);
 
   const updateMutation = trpc.scale.updateTemplate.useMutation({
     onSuccess: () => {
@@ -320,6 +339,53 @@ export default function TareWeightsScreen() {
           </Text>
           <Text style={styles.filterDropdownArrow}>&#x25BC;</Text>
         </TouchableOpacity>
+      )}
+
+      {/* Needs Tare Weight section */}
+      {needsTareItems.length > 0 && (
+        <View style={styles.needsTareSection}>
+          <TouchableOpacity
+            style={styles.needsTareHeader}
+            onPress={() => setNeedsTareExpanded(!needsTareExpanded)}
+          >
+            <Text style={styles.needsTareTitle}>
+              Needs Tare Weight ({needsTareItems.length})
+            </Text>
+            <Text style={styles.needsTareArrow}>
+              {needsTareExpanded ? "\u25B2" : "\u25BC"}
+            </Text>
+          </TouchableOpacity>
+          {needsTareExpanded && (
+            <ScrollView style={styles.needsTareScroll} nestedScrollEnabled>
+              <View style={styles.needsTareList}>
+                {needsTareItems.map((item) => (
+                  <View key={item.id} style={styles.needsTareRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.needsTareItemName}>{item.name}</Text>
+                      {item.barcode && (
+                        <Text style={styles.needsTareBarcode}>#{item.barcode}</Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={styles.setTareBtn}
+                      onPress={() =>
+                        addItemWithPrefill({
+                          id: item.id,
+                          name: item.name,
+                          barcode: item.barcode ?? null,
+                          containerSize: item.containerSize,
+                          category: item.category ?? null,
+                        })
+                      }
+                    >
+                      <Text style={styles.setTareBtnText}>Set Tare</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          )}
+        </View>
       )}
 
       <Text style={styles.heading}>Tare Weight Management</Text>
@@ -804,5 +870,64 @@ const styles = StyleSheet.create({
   filterDropdownArrow: {
     fontSize: 12,
     color: "#8899AA",
+  },
+  needsTareSection: {
+    marginBottom: 16,
+    backgroundColor: "rgba(251, 191, 36, 0.08)",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(251, 191, 36, 0.25)",
+    overflow: "hidden",
+  },
+  needsTareHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  needsTareTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FBBF24",
+  },
+  needsTareArrow: {
+    fontSize: 12,
+    color: "#FBBF24",
+  },
+  needsTareScroll: {
+    maxHeight: 240,
+  },
+  needsTareList: {
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+  },
+  needsTareRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(251, 191, 36, 0.12)",
+  },
+  needsTareItemName: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#FDE68A",
+  },
+  needsTareBarcode: {
+    fontSize: 12,
+    color: "#92400E",
+    marginTop: 1,
+  },
+  setTareBtn: {
+    backgroundColor: "#FBBF24",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 6,
+  },
+  setTareBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0B1623",
   },
 });
