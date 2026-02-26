@@ -31,7 +31,7 @@ export interface BarcodeSuggestion {
 }
 
 interface Props {
-  barcode: string;
+  barcode?: string;
   locationId: string;
   suggestion?: BarcodeSuggestion | null;
   onSuccess: (result: { guideItemId?: string }) => void;
@@ -62,6 +62,7 @@ export function CreateItemFromScanModal({
 
   // Form state — pre-fill from suggestion if available
   const [name, setName] = useState(suggestion?.name ?? "");
+  const [manualBarcode, setManualBarcode] = useState(barcode ?? "");
   const [containerSizeMl, setContainerSizeMl] = useState(
     suggestion?.containerSizeMl ? String(suggestion.containerSizeMl) : "750"
   );
@@ -153,6 +154,8 @@ export function CreateItemFromScanModal({
   }
 
   async function handleSave() {
+    const effectiveBarcode = barcode || manualBarcode.trim() || undefined;
+
     try {
       let itemId: string;
 
@@ -171,7 +174,7 @@ export function CreateItemFromScanModal({
         const result = await createWithTemplateMutation.mutateAsync({
           locationId,
           name: name.trim(),
-          barcode,
+          barcode: effectiveBarcode,
           containerSizeMl: sizeMl,
           categoryId: selectedCategoryId,
           vendorId: selectedVendorId ?? undefined,
@@ -185,27 +188,31 @@ export function CreateItemFromScanModal({
         itemId = result.item.id;
 
         // Fire-and-forget: contribute to master product catalog
-        contributeMutation.mutate({
-          barcode,
-          name: name.trim(),
-          containerSizeMl: sizeMl,
-        });
+        if (effectiveBarcode) {
+          contributeMutation.mutate({
+            barcode: effectiveBarcode,
+            name: name.trim(),
+            containerSizeMl: sizeMl,
+          });
+        }
       } else {
         // Unit count / keg: create inventory item only (no bottle template)
         const result = await createItemMutation.mutateAsync({
           locationId,
           name: name.trim(),
-          barcode: barcode || undefined,
+          barcode: effectiveBarcode,
           categoryId: selectedCategoryId,
           baseUom: "units" as const,
         });
         itemId = result.id;
 
         // Fire-and-forget: contribute to master product catalog
-        contributeMutation.mutate({
-          barcode,
-          name: name.trim(),
-        });
+        if (effectiveBarcode) {
+          contributeMutation.mutate({
+            barcode: effectiveBarcode,
+            name: name.trim(),
+          });
+        }
       }
 
       if (addToGuide && guideCategoryId) {
@@ -269,11 +276,22 @@ export function CreateItemFromScanModal({
               </View>
             )}
 
-            {/* Barcode (read-only) */}
-            <Text style={styles.label}>Barcode</Text>
-            <View style={styles.readOnlyField}>
-              <Text style={styles.readOnlyText}>{barcode}</Text>
-            </View>
+            {/* Barcode */}
+            <Text style={styles.label}>Barcode{barcode ? "" : " (optional)"}</Text>
+            {barcode ? (
+              <View style={styles.readOnlyField}>
+                <Text style={styles.readOnlyText}>{barcode}</Text>
+              </View>
+            ) : (
+              <TextInput
+                style={styles.textInput}
+                value={manualBarcode}
+                onChangeText={setManualBarcode}
+                placeholder="Enter barcode or leave blank"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+              />
+            )}
 
             {/* Name */}
             <Text style={styles.label}>Name *</Text>

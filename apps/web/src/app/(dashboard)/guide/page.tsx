@@ -170,6 +170,49 @@ function SortableItemCard({ item }: { item: any }) {
   );
 }
 
+// ─── QR Section ──────────────────────────────────────────────
+
+function QRSection({ locationId, businessId, businessName }: { locationId: string; businessId?: string; businessName?: string }) {
+  const { data: business } = trpc.businesses.getById.useQuery(
+    { businessId: businessId! },
+    { enabled: !!businessId }
+  );
+
+  const logoUrl = business?.logoUrl || null;
+  const publicUrl = `${process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")}/menu/${locationId}`;
+
+  return (
+    <div className="mb-6 flex flex-col items-center gap-4 rounded-lg border border-white/10 bg-[#16283F] p-8">
+      <p className="text-2xl font-extrabold uppercase tracking-widest text-[#E9B44C]">
+        {businessName || "Our Menu"}
+      </p>
+      <div className="h-0.5 w-16 rounded bg-[#E9B44C]" />
+      <p className="text-sm text-[#EAF0FF]">Scan to view our menu</p>
+
+      {/* QR with logo overlay */}
+      <div style={{ position: "relative", display: "inline-block", borderRadius: 12, backgroundColor: "#fff", padding: 16 }}>
+        <QRCodeSVG
+          value={publicUrl}
+          size={220}
+          fgColor="#0B1623"
+          level="H"
+        />
+        {logoUrl && (
+          <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 100, height: 100, backgroundColor: "#fff", borderRadius: 10, padding: 4, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+            <img
+              src={logoUrl}
+              alt=""
+              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+            />
+          </div>
+        )}
+      </div>
+
+      <p className="select-all text-xs text-[#5A6A7A]">{publicUrl}</p>
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────
 
 export default function ProductGuidePage() {
@@ -458,18 +501,7 @@ export default function ProductGuidePage() {
       </div>
 
       {showQR && (
-        <div className="mb-6 flex flex-col items-center gap-3 rounded-lg border border-white/10 bg-[#16283F] p-6">
-          <p className="text-sm text-[#EAF0FF]/60">Customers scan to view the menu</p>
-          <div className="rounded-lg bg-white p-3">
-            <QRCodeSVG
-              value={`${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/menu/${locationId}`}
-              size={180}
-            />
-          </div>
-          <p className="select-all text-xs text-[#5A6A7A]">
-            {`${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/menu/${locationId}`}
-          </p>
-        </div>
+        <QRSection locationId={locationId!} businessId={user?.businessId} businessName={user?.businessName} />
       )}
 
       {/* Categories */}

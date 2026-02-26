@@ -1,30 +1,55 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
 import { useAuth } from "@/lib/auth-context";
-import { API_URL } from "@/lib/trpc";
+import { trpc, API_URL } from "@/lib/trpc";
 
 export default function GuideQRScreen() {
-  const { selectedLocationId } = useAuth();
+  const { user, selectedLocationId } = useAuth();
+  const businessId = user?.businessId ?? "";
 
+  const { data: business } = trpc.businesses.getById.useQuery(
+    { businessId },
+    { enabled: !!businessId }
+  );
+
+  const logoUrl = business?.logoUrl ? `${API_URL}${business.logoUrl}` : null;
   const publicUrl = `${API_URL}/menu/${selectedLocationId}`;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Product Guide</Text>
-      <Text style={styles.subtitle}>Scan to view our menu</Text>
-
-      <View style={styles.qrWrapper}>
-        <QRCode
-          value={publicUrl}
-          size={220}
-          backgroundColor="#FFFFFF"
-          color="#000000"
-          ecl="H"
-        />
+      {/* Business branding */}
+      <View style={styles.brandSection}>
+        <Text style={styles.businessName}>
+          {user?.businessName ?? "Our Menu"}
+        </Text>
+        <View style={styles.divider} />
+        <Text style={styles.subtitle}>Scan to view our menu</Text>
       </View>
 
-      <Text style={styles.scanHint}>Scan with your phone camera</Text>
+      {/* QR card */}
+      <View style={styles.qrCard}>
+        <View style={styles.qrInner}>
+          <QRCode
+            value={publicUrl}
+            size={220}
+            backgroundColor="#FFFFFF"
+            color="#0B1623"
+            ecl="H"
+          />
+          {logoUrl && (
+            <View style={styles.qrOverlay}>
+              <Image
+                source={{ uri: logoUrl }}
+                style={styles.qrLogoImage}
+                resizeMode="contain"
+              />
+            </View>
+          )}
+        </View>
+        <Text style={styles.scanHint}>Point your camera at the code</Text>
+      </View>
+
       <Text style={styles.urlText} selectable>{publicUrl}</Text>
 
       <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
@@ -37,50 +62,82 @@ export default function GuideQRScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#0B1623",
     alignItems: "center",
-    paddingTop: 80,
-    paddingHorizontal: 24,
+    justifyContent: "center",
+    paddingHorizontal: 32,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111",
-    marginBottom: 4,
+  brandSection: {
+    alignItems: "center",
+    marginBottom: 36,
+  },
+  businessName: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#E9B44C",
+    textAlign: "center",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  divider: {
+    width: 60,
+    height: 2,
+    backgroundColor: "#E9B44C",
+    marginVertical: 12,
+    borderRadius: 1,
   },
   subtitle: {
-    fontSize: 15,
-    color: "#666",
-    marginBottom: 32,
+    fontSize: 16,
+    color: "#EAF0FF",
+    fontWeight: "500",
   },
-  qrWrapper: {
-    padding: 16,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
+  qrCard: {
+    backgroundColor: "#16283F",
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "rgba(233, 180, 76, 0.2)",
+  },
+  qrInner: {
+    padding: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qrOverlay: {
+    position: "absolute",
+    backgroundColor: "#FFFFFF",
+    padding: 4,
+    borderRadius: 8,
+  },
+  qrLogoImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 10,
   },
   scanHint: {
     fontSize: 13,
-    color: "#999",
+    color: "#8FA3B8",
     marginTop: 16,
   },
   urlText: {
     fontSize: 10,
-    color: "#BBB",
-    marginTop: 4,
+    color: "#5A6A7A",
+    marginTop: 16,
     textAlign: "center",
   },
   closeButton: {
-    marginTop: 32,
+    marginTop: 36,
     paddingVertical: 14,
-    paddingHorizontal: 48,
-    backgroundColor: "#111",
+    paddingHorizontal: 52,
+    backgroundColor: "#E9B44C",
     borderRadius: 12,
   },
   closeText: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#FFF",
+    fontWeight: "700",
+    color: "#0B1623",
   },
 });

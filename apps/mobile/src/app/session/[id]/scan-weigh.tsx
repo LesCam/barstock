@@ -72,7 +72,7 @@ export default function ScanWeighScreen() {
   const [manualWeight, setManualWeight] = useState("");
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
-  const [creatingFromScan, setCreatingFromScan] = useState<{ barcode: string; suggestion?: BarcodeSuggestion | null } | null>(null);
+  const [creatingFromScan, setCreatingFromScan] = useState<{ barcode?: string; suggestion?: BarcodeSuggestion | null } | null>(null);
   const [lastSubmittedName, setLastSubmittedName] = useState<string | null>(null);
   const [showTareModal, setShowTareModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -735,6 +735,14 @@ export default function ScanWeighScreen() {
           >
             <Text style={styles.cantScanBtnText}>Can't scan? Search by name</Text>
           </TouchableOpacity>
+          {canTare && (
+            <TouchableOpacity
+              style={[styles.cantScanBtn, { marginTop: 4 }]}
+              onPress={() => setCreatingFromScan({})}
+            >
+              <Text style={styles.cantScanBtnText}>+ Add new item manually</Text>
+            </TouchableOpacity>
+          )}
           {!scaleConnected && (
             <TouchableOpacity
               style={styles.manualScaleBanner}
@@ -846,7 +854,17 @@ export default function ScanWeighScreen() {
             {searchQuery.trim().length === 0 ? (
               <Text style={styles.searchHint}>Start typing to search</Text>
             ) : filteredSearchItems.length === 0 ? (
-              <Text style={styles.searchHint}>No matching items</Text>
+              <View>
+                <Text style={styles.searchHint}>No matching items</Text>
+                {canTare && (
+                  <TouchableOpacity
+                    style={styles.createFromSearchBtn}
+                    onPress={() => setCreatingFromScan({ suggestion: { name: searchQuery.trim(), containerSizeMl: null, categoryHint: null, brand: null } })}
+                  >
+                    <Text style={styles.createFromSearchBtnText}>+ Create "{searchQuery.trim()}"</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             ) : (
               filteredSearchItems.map((item) => (
                 <TouchableOpacity
@@ -1748,6 +1766,19 @@ const styles = StyleSheet.create({
     textAlign: "center",
     padding: 20,
     fontSize: 14,
+  },
+  createFromSearchBtn: {
+    alignSelf: "center",
+    backgroundColor: "#E9B44C",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginTop: 4,
+  },
+  createFromSearchBtnText: {
+    color: "#0B1623",
+    fontSize: 14,
+    fontWeight: "600",
   },
   searchRow: {
     paddingVertical: 12,
