@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   Animated,
+  ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -66,6 +67,7 @@ export default function ScanWeighScreen() {
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [scaleWeight, setScaleWeight] = useState<number | null>(null);
   const [scaleConnected, setScaleConnected] = useState(scaleManager.isConnected);
+  const [scaleReconnecting, setScaleReconnecting] = useState(false);
   const [batteryLevel, setBatteryLevel] = useState<number | null>(scaleManager.batteryLevel);
   const [manualWeight, setManualWeight] = useState("");
   const [showManualEntry, setShowManualEntry] = useState(false);
@@ -295,6 +297,51 @@ export default function ScanWeighScreen() {
       cancelAutoSubmit();
     };
   }, []);
+
+  // Auto-reconnect scale when entering weighing phase with scale disconnected
+  const reconnectAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "weighing") {
+      reconnectAttemptedRef.current = false;
+      return;
+    }
+    if (scaleConnected || reconnectAttemptedRef.current) return;
+    reconnectAttemptedRef.current = true;
+    let cancelled = false;
+    setScaleReconnecting(true);
+
+    const attempt = async () => {
+      // Try reconnect (has its own internal timeout)
+      const success = await scaleManager.reconnectLast();
+      if (cancelled) return;
+
+      if (success) {
+        setScaleConnected(true);
+        setBatteryLevel(scaleManager.batteryLevel);
+        setScaleReconnecting(false);
+      } else {
+        // Failed — go to connect-scale page
+        setScaleReconnecting(false);
+        router.push(`/session/${sessionId}/connect-scale`);
+      }
+    };
+
+    // Hard timeout: if reconnect hangs, bail after 8s
+    const timeout = setTimeout(() => {
+      if (!cancelled && !scaleManager.isConnected) {
+        cancelled = true;
+        setScaleReconnecting(false);
+        router.push(`/session/${sessionId}/connect-scale`);
+      }
+    }, 8000);
+
+    attempt();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [phase, scaleConnected, sessionId]);
 
   // Pre-select item from itemId param (tap-to-count)
   useEffect(() => {
@@ -864,6 +911,14 @@ export default function ScanWeighScreen() {
               </View>
             )}
 
+            {/* Reconnecting to scale indicator */}
+            {scaleReconnecting && !scaleConnected && (
+              <View style={styles.reconnectingBox}>
+                <ActivityIndicator size="small" color="#60A5FA" />
+                <Text style={styles.reconnectingText}>Reconnecting to scale...</Text>
+              </View>
+            )}
+
             {/* Scale weight display */}
             {!showManualEntry && scaleConnected && hasTemplate && (
               <>
@@ -1373,6 +1428,22 @@ const styles = StyleSheet.create({
   },
 
   // No template — amber warning
+  reconnectingBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(96, 165, 250, 0.12)",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(96, 165, 250, 0.25)",
+  },
+  reconnectingText: {
+    color: "#60A5FA",
+    fontSize: 14,
+    fontWeight: "500",
+  },
   noTemplateBox: {
     backgroundColor: "rgba(251, 191, 36, 0.15)",
     borderRadius: 10,

@@ -106,34 +106,38 @@ export default function ConnectScaleSettingsScreen() {
 
   const handleConnect = useCallback(async (deviceId: string, name: string) => {
     setConnecting(deviceId);
-    try {
-      await scaleManager.connect(deviceId);
-      setConnected(true);
-      setConnectedDeviceName(name);
+    const maxAttempts = 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+        await scaleManager.connect(deviceId);
+        setConnected(true);
+        setConnectedDeviceName(name);
 
-      // Check for existing profile mapping
-      const existing = await getMappingForDevice(deviceId);
-      if (existing) {
-        setProfileId(existing.profileId);
-        setProfileName(existing.profileName || null);
-      } else if (voiceProfile) {
-        // Voice command pre-selected a profile — auto-assign it
-        await setMappingForDevice(deviceId, voiceProfile.id, voiceProfile.name);
-        setProfileId(voiceProfile.id);
-        setProfileName(voiceProfile.name);
-      } else if (selectedLocationId) {
-        // No mapping — show picker
-        setPendingDeviceId(deviceId);
-        setShowProfilePicker(true);
+        // Check for existing profile mapping
+        const existing = await getMappingForDevice(deviceId);
+        if (existing) {
+          setProfileId(existing.profileId);
+          setProfileName(existing.profileName || null);
+        } else if (voiceProfile) {
+          await setMappingForDevice(deviceId, voiceProfile.id, voiceProfile.name);
+          setProfileId(voiceProfile.id);
+          setProfileName(voiceProfile.name);
+        } else if (selectedLocationId) {
+          setPendingDeviceId(deviceId);
+          setShowProfilePicker(true);
+        }
+        setConnecting(null);
+        return;
+      } catch {
+        // Retry on next iteration
       }
-    } catch {
-      Alert.alert(
-        "Connection Failed",
-        "Could not connect to scale. Please try again."
-      );
-    } finally {
-      setConnecting(null);
     }
+    setConnecting(null);
+    Alert.alert(
+      "Connection Failed",
+      "Could not connect to scale. Make sure the scale is on and nearby, then try again."
+    );
   }, [selectedLocationId, voiceProfile]);
 
   const handleProfileSelect = useCallback(async (selectedProfileId: string, selectedProfileName: string) => {
