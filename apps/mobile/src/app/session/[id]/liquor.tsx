@@ -612,7 +612,7 @@ export default function LiquorWeighScreen() {
                 emptyBottleWeightG: emptyG ?? undefined,
                 fullBottleWeightG: fullG ?? undefined,
               });
-              utils.scale.listTemplates.invalidate({ locationId: selectedLocationId! });
+              await utils.scale.listTemplates.invalidate({ locationId: selectedLocationId! });
               setShowTareModal(false);
             } catch (error: any) {
               Alert.alert("Error", error.message ?? "Failed to save tare weight.");
