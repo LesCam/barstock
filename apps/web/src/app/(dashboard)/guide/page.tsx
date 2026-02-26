@@ -451,11 +451,7 @@ export default function ProductGuidePage() {
         <h1 className="text-2xl font-bold text-[#EAF0FF]">Product Guide</h1>
         <button
           onClick={() => setShowQR(!showQR)}
-          className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
-            showQR
-              ? "border-[#E9B44C] bg-[#E9B44C]/10 text-[#E9B44C]"
-              : "border-white/10 text-[#EAF0FF]/60 hover:bg-[#16283F]"
-          }`}
+          className="rounded-md border border-[#E9B44C] bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
         >
           QR Code
         </button>

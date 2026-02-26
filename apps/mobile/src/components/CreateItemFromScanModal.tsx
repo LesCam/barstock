@@ -48,13 +48,10 @@ export function CreateItemFromScanModal({
   const { user } = useAuth();
   const businessId = user?.businessId ?? "";
 
-  // Fetch weighable categories
+  // Fetch all categories
   const { data: categories } = trpc.itemCategories.list.useQuery(
     { businessId },
     { enabled: !!businessId }
-  );
-  const weighableCategories = categories?.filter(
-    (c) => c.countingMethod === "weighable"
   );
 
   // Fetch product guide categories
@@ -77,13 +74,17 @@ export function CreateItemFromScanModal({
   const [addToGuide, setAddToGuide] = useState(false);
   const [guideCategoryId, setGuideCategoryId] = useState<string>("");
 
-  // Auto-select category: fuzzy-match suggestion categoryHint, or fall back to first weighable
+  // Determine counting method of selected category
+  const selectedCategory = categories?.find((c) => c.id === selectedCategoryId);
+  const isWeighable = selectedCategory?.countingMethod === "weighable";
+
+  // Auto-select category: fuzzy-match suggestion categoryHint, or fall back to first
   useEffect(() => {
-    if (selectedCategoryId || !weighableCategories?.length) return;
+    if (selectedCategoryId || !categories?.length) return;
 
     if (suggestion?.categoryHint) {
       const hint = suggestion.categoryHint.toLowerCase();
-      const match = weighableCategories.find((c) =>
+      const match = categories.find((c) =>
         hint.includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(hint)
       );
       if (match) {
@@ -92,8 +93,8 @@ export function CreateItemFromScanModal({
       }
     }
 
-    setSelectedCategoryId(weighableCategories[0].id);
-  }, [weighableCategories, selectedCategoryId, suggestion]);
+    setSelectedCategoryId(categories[0].id);
+  }, [categories, selectedCategoryId, suggestion]);
 
   // Auto-select first guide category when toggled on
   useEffect(() => {
@@ -119,10 +120,11 @@ export function CreateItemFromScanModal({
     );
 
   // Create mutations
-  const createMutation = trpc.scale.createItemWithTemplate.useMutation();
+  const createWithTemplateMutation = trpc.scale.createItemWithTemplate.useMutation();
+  const createItemMutation = trpc.inventory.create.useMutation();
   const guideCreateMutation = trpc.productGuide.createItem.useMutation();
   const contributeMutation = trpc.masterProducts.contribute.useMutation();
-  const isSaving = createMutation.isPending || guideCreateMutation.isPending;
+  const isSaving = createWithTemplateMutation.isPending || createItemMutation.isPending || guideCreateMutation.isPending;
 
   // Scale listener
   useEffect(() => {
@@ -151,47 +153,67 @@ export function CreateItemFromScanModal({
   }
 
   async function handleSave() {
-    const sizeMl = parseInt(containerSizeMl) || 750;
-    const emptyG =
-      capturedWeight?.kind === "tare" ? capturedWeight.grams : undefined;
-    const fullG =
-      capturedWeight?.kind === "full" ? capturedWeight.grams : undefined;
-
-    // Use category's default density, or fall back to 0.95
-    const selectedCategory = weighableCategories?.find((c) => c.id === selectedCategoryId);
-    const density = selectedCategory?.defaultDensity ? Number(selectedCategory.defaultDensity) : DEFAULT_DENSITY;
-    const finalEmptyG = emptyG;
-    const finalFullG = fullG ?? (emptyG ? undefined : Math.round(sizeMl * density + 300));
-
     try {
-      const result = await createMutation.mutateAsync({
-        locationId,
-        name: name.trim(),
-        barcode,
-        containerSizeMl: sizeMl,
-        categoryId: selectedCategoryId,
-        vendorId: selectedVendorId ?? undefined,
-        newVendorName:
-          addingNewVendor && newVendorName.trim()
-            ? newVendorName.trim()
-            : undefined,
-        emptyBottleWeightG: finalEmptyG,
-        fullBottleWeightG: finalFullG,
-      });
+      let itemId: string;
 
-      // Fire-and-forget: contribute to master product catalog
-      contributeMutation.mutate({
-        barcode,
-        name: name.trim(),
-        containerSizeMl: sizeMl,
-      });
+      if (isWeighable) {
+        // Weighable: create item + bottle template
+        const sizeMl = parseInt(containerSizeMl) || 750;
+        const emptyG =
+          capturedWeight?.kind === "tare" ? capturedWeight.grams : undefined;
+        const fullG =
+          capturedWeight?.kind === "full" ? capturedWeight.grams : undefined;
+
+        const density = selectedCategory?.defaultDensity ? Number(selectedCategory.defaultDensity) : DEFAULT_DENSITY;
+        const finalEmptyG = emptyG;
+        const finalFullG = fullG ?? (emptyG ? undefined : Math.round(sizeMl * density + 300));
+
+        const result = await createWithTemplateMutation.mutateAsync({
+          locationId,
+          name: name.trim(),
+          barcode,
+          containerSizeMl: sizeMl,
+          categoryId: selectedCategoryId,
+          vendorId: selectedVendorId ?? undefined,
+          newVendorName:
+            addingNewVendor && newVendorName.trim()
+              ? newVendorName.trim()
+              : undefined,
+          emptyBottleWeightG: finalEmptyG,
+          fullBottleWeightG: finalFullG,
+        });
+        itemId = result.item.id;
+
+        // Fire-and-forget: contribute to master product catalog
+        contributeMutation.mutate({
+          barcode,
+          name: name.trim(),
+          containerSizeMl: sizeMl,
+        });
+      } else {
+        // Unit count / keg: create inventory item only (no bottle template)
+        const result = await createItemMutation.mutateAsync({
+          locationId,
+          name: name.trim(),
+          barcode: barcode || undefined,
+          categoryId: selectedCategoryId,
+          baseUom: "units" as const,
+        });
+        itemId = result.id;
+
+        // Fire-and-forget: contribute to master product catalog
+        contributeMutation.mutate({
+          barcode,
+          name: name.trim(),
+        });
+      }
 
       if (addToGuide && guideCategoryId) {
         try {
           const guideItem = await guideCreateMutation.mutateAsync({
             locationId,
             categoryId: guideCategoryId,
-            inventoryItemId: result.item.id,
+            inventoryItemId: itemId,
           });
           onSuccess({ guideItemId: guideItem.id });
         } catch {
@@ -202,12 +224,13 @@ export function CreateItemFromScanModal({
         onSuccess({});
       }
     } catch {
-      // createMutation.error will be populated automatically
+      // mutation error will be populated automatically
     }
   }
 
   const sizeMl = parseInt(containerSizeMl) || 0;
-  const canSave = name.trim().length > 0 && sizeMl > 0 && !!selectedCategoryId
+  const canSave = name.trim().length > 0 && !!selectedCategoryId
+    && (isWeighable ? sizeMl > 0 : true)
     && (!addToGuide || !!guideCategoryId);
 
   return (
@@ -264,28 +287,32 @@ export function CreateItemFromScanModal({
               returnKeyType="next"
             />
 
-            {/* Container Size */}
-            <Text style={styles.label}>Container Size (ml)</Text>
-            <TextInput
-              style={styles.textInput}
-              value={containerSizeMl}
-              onChangeText={(v) =>
-                setContainerSizeMl(v.replace(/[^0-9]/g, ""))
-              }
-              placeholder="750"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
+            {/* Container Size — weighable only */}
+            {isWeighable && (
+              <>
+                <Text style={styles.label}>Container Size (ml)</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={containerSizeMl}
+                  onChangeText={(v) =>
+                    setContainerSizeMl(v.replace(/[^0-9]/g, ""))
+                  }
+                  placeholder="750"
+                  placeholderTextColor="#999"
+                  keyboardType="numeric"
+                />
+              </>
+            )}
 
             {/* Category */}
             <Text style={styles.label}>Category</Text>
             <TouchableOpacity
               style={styles.dropdown}
               onPress={() => {
-                if (!weighableCategories?.length) return;
+                if (!categories?.length) return;
                 Alert.alert("Select Category", undefined, [
-                  ...weighableCategories.map((cat) => ({
-                    text: cat.name,
+                  ...categories.map((cat) => ({
+                    text: `${cat.name}${cat.countingMethod !== "weighable" ? ` (${cat.countingMethod === "unit_count" ? "count" : cat.countingMethod})` : ""}`,
                     onPress: () => setSelectedCategoryId(cat.id),
                   })),
                   { text: "Cancel", style: "cancel" },
@@ -293,7 +320,7 @@ export function CreateItemFromScanModal({
               }}
             >
               <Text style={styles.dropdownText}>
-                {weighableCategories?.find((c) => c.id === selectedCategoryId)?.name ?? "Select..."}
+                {categories?.find((c) => c.id === selectedCategoryId)?.name ?? "Select..."}
               </Text>
               <Text style={styles.dropdownArrow}>&#x25BC;</Text>
             </TouchableOpacity>
@@ -409,8 +436,8 @@ export function CreateItemFromScanModal({
               </ScrollView>
             )}
 
-            {/* Scale weight capture info card */}
-            {capturedWeight && (
+            {/* Scale weight capture info card — weighable only */}
+            {isWeighable && capturedWeight && (
               <View style={styles.weightCard}>
                 <Text style={styles.weightCardTitle}>
                   {capturedWeight.kind === "full"
@@ -424,8 +451,8 @@ export function CreateItemFromScanModal({
               </View>
             )}
 
-            {/* Scale weight prompt overlay */}
-            {pendingReading !== null && (
+            {/* Scale weight prompt overlay — weighable only */}
+            {isWeighable && pendingReading !== null && (
               <View style={styles.weightPrompt}>
                 <Text style={styles.weightPromptTitle}>
                   Scale reading: {(pendingReading / 1000).toFixed(3)} kg
@@ -457,9 +484,9 @@ export function CreateItemFromScanModal({
             )}
 
             {/* Error */}
-            {(createMutation.error || guideCreateMutation.error) && (
+            {(createWithTemplateMutation.error || createItemMutation.error || guideCreateMutation.error) && (
               <Text style={styles.errorText}>
-                {createMutation.error?.message ?? guideCreateMutation.error?.message}
+                {createWithTemplateMutation.error?.message ?? createItemMutation.error?.message ?? guideCreateMutation.error?.message}
               </Text>
             )}
 

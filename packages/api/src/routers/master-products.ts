@@ -61,9 +61,10 @@ export const masterProductsRouter = router({
       const offResult = await lookupOpenFoodFacts(input.barcode);
 
       if (offResult) {
-        const displayName = offResult.brand
-          ? `${offResult.brand} ${offResult.name}`
-          : offResult.name;
+        const displayName =
+          offResult.brand && !offResult.name.toLowerCase().startsWith(offResult.brand.toLowerCase())
+            ? `${offResult.brand} ${offResult.name}`
+            : offResult.name;
 
         return {
           source: "openfoodfacts" as const,
@@ -82,9 +83,10 @@ export const masterProductsRouter = router({
       const upcResult = await lookupUpcItemDb(input.barcode);
 
       if (upcResult) {
-        const displayName = upcResult.brand
-          ? `${upcResult.brand} ${upcResult.name}`
-          : upcResult.name;
+        const displayName =
+          upcResult.brand && !upcResult.name.toLowerCase().startsWith(upcResult.brand.toLowerCase())
+            ? `${upcResult.brand} ${upcResult.name}`
+            : upcResult.name;
 
         return {
           source: "upcitemdb" as const,
