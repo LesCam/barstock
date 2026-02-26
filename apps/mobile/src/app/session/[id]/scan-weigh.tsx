@@ -1117,10 +1117,12 @@ export default function ScanWeighScreen() {
           onSave={async (emptyG, fullG) => {
             try {
               await createTemplateMutation.mutateAsync({
+                locationId: selectedLocationId!,
                 inventoryItemId: matchedItem.id,
                 containerSizeMl: Number(matchedItem.containerSize) || 750,
                 emptyBottleWeightG: emptyG ?? undefined,
                 fullBottleWeightG: fullG ?? undefined,
+                force: true,
               });
               await utils.scale.listTemplates.invalidate({ locationId: selectedLocationId! });
               setShowTareModal(false);
