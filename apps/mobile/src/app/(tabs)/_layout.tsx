@@ -1,5 +1,5 @@
-import { View, Text } from "react-native";
-import { Tabs } from "expo-router";
+import { View, Text, TouchableOpacity } from "react-native";
+import { Tabs, router } from "expo-router";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import LocationPicker from "@/components/LocationPicker";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -91,6 +91,17 @@ function TabsLayout() {
             tabBarLabel: "Guide",
             tabBarIcon: ({ color }) => (
               <Text style={{ fontSize: 22, color }}>🍸</Text>
+            ),
+            headerRight: () => (
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <TouchableOpacity
+                  onPress={() => router.push("/guide/qr")}
+                  style={{ marginRight: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: "#E9B44C" }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: "#E9B44C" }}>QR</Text>
+                </TouchableOpacity>
+                <NotificationBell />
+              </View>
             ),
             href: canAccessGuide ? undefined : null,
           }}

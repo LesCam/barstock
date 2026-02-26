@@ -1,4 +1,5 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { useState } from "react";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, Stack, router } from "expo-router";
 import { trpc } from "@/lib/trpc";
@@ -15,6 +16,8 @@ export default function GuideItemDetail() {
     user?.highestRole ?? ""
   );
 
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   const utils = trpc.useUtils();
 
   const { data: item, isLoading } = trpc.productGuide.getItem.useQuery(
@@ -28,6 +31,37 @@ export default function GuideItemDetail() {
       router.back();
     },
   });
+
+  const lookupImage = trpc.productGuide.lookupProductImage.useQuery(
+    { barcode: item?.inventoryItem.barcode ?? "", locationId: selectedLocationId! },
+    { enabled: false }
+  );
+
+  const importImage = trpc.productGuide.importImageFromUrl.useMutation({
+    onSuccess: () => {
+      setPreviewUrl(null);
+      utils.productGuide.getItem.invalidate({ id: id!, locationId: selectedLocationId! });
+      utils.productGuide.listItems.invalidate();
+    },
+  });
+
+  async function handleFindImage() {
+    const result = await lookupImage.refetch();
+    if (result.data?.imageUrl) {
+      setPreviewUrl(result.data.imageUrl);
+    } else {
+      Alert.alert("No Image Found", "No image found for this barcode in external databases.");
+    }
+  }
+
+  function handleUseImage() {
+    if (!previewUrl) return;
+    importImage.mutate({
+      id: id!,
+      locationId: selectedLocationId!,
+      imageUrl: previewUrl,
+    });
+  }
 
   function handleDelete() {
     Alert.alert(
@@ -74,36 +108,52 @@ export default function GuideItemDetail() {
   const prices = Array.isArray(item.prices) ? (item.prices as { label: string; price: number }[]) : [];
 
   return (
-    <ScrollView style={styles.container}>
-      <Stack.Screen options={{ title: item.inventoryItem.name }} />
+    <View style={styles.container}>
+      <ScrollView style={styles.container}>
+        <Stack.Screen options={{ title: item.inventoryItem.name }} />
 
-      {/* Hero image */}
-      <View>
-        {imgUrl ? (
-          <Image
-            source={{ uri: imgUrl }}
-            style={styles.heroImage}
-            contentFit="contain"
-            transition={200}
-          />
-        ) : (
-          <View style={styles.heroPlaceholder}>
-            <Text style={styles.heroPlaceholderText}>🍷</Text>
-          </View>
-        )}
-        {isAdmin && (
-          <TouchableOpacity
-            style={styles.cameraButton}
-            onPress={() =>
-              router.push(
-                `/guide/photo?guideItemId=${id}&locationId=${selectedLocationId}`
-              )
-            }
-          >
-            <Text style={styles.cameraButtonText}>📷</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        {/* Hero image */}
+        <View>
+          {imgUrl ? (
+            <Image
+              source={{ uri: imgUrl }}
+              style={styles.heroImage}
+              contentFit="contain"
+              transition={200}
+            />
+          ) : (
+            <View style={styles.heroPlaceholder}>
+              <Text style={styles.heroPlaceholderText}>🍷</Text>
+            </View>
+          )}
+          {isAdmin && (
+            <View style={styles.imageButtons}>
+              {item?.inventoryItem.barcode && (
+                <TouchableOpacity
+                  style={styles.findImageButton}
+                  onPress={handleFindImage}
+                  disabled={lookupImage.isFetching}
+                >
+                  {lookupImage.isFetching ? (
+                    <ActivityIndicator size="small" color="#EAF0FF" />
+                  ) : (
+                    <Text style={styles.findImageButtonText}>Find Image</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.cameraButton}
+                onPress={() =>
+                  router.push(
+                    `/guide/photo?guideItemId=${id}&locationId=${selectedLocationId}`
+                  )
+                }
+              >
+                <Text style={styles.cameraButtonText}>📷</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
       <View style={styles.content}>
         <Text style={styles.name}>{item.inventoryItem.name}</Text>
@@ -112,9 +162,11 @@ export default function GuideItemDetail() {
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{item.category.name}</Text>
           </View>
-          <Text style={styles.type}>
-            {item.inventoryItem.category?.name ?? item.category.name}
-          </Text>
+          {item.inventoryItem.category?.name && item.inventoryItem.category.name !== item.category.name && (
+            <Text style={styles.type}>
+              {item.inventoryItem.category.name}
+            </Text>
+          )}
         </View>
 
         {prices.length > 0 && (
@@ -184,6 +236,37 @@ export default function GuideItemDetail() {
 
       </View>
     </ScrollView>
+
+      {/* Image preview overlay */}
+      {previewUrl && (
+        <View style={styles.previewOverlay}>
+          <Text style={styles.previewTitle}>Use this image?</Text>
+          <Image
+            source={{ uri: previewUrl }}
+            style={styles.previewImage}
+            contentFit="contain"
+            transition={200}
+          />
+          <View style={styles.previewActions}>
+            <TouchableOpacity
+              style={styles.previewCancel}
+              onPress={() => setPreviewUrl(null)}
+            >
+              <Text style={styles.previewCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.previewConfirm}
+              onPress={handleUseImage}
+              disabled={importImage.isPending}
+            >
+              <Text style={styles.previewConfirmText}>
+                {importImage.isPending ? "Saving..." : "Use This"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -199,10 +282,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   heroPlaceholderText: { fontSize: 64, opacity: 0.3 },
-  cameraButton: {
+  imageButtons: {
     position: "absolute",
     bottom: 12,
     right: 12,
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  findImageButton: {
+    height: 32,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  findImageButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#EAF0FF",
+  },
+  cameraButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -211,6 +312,58 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cameraButtonText: { fontSize: 20 },
+  previewOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(11,22,35,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+    zIndex: 100,
+  },
+  previewTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#EAF0FF",
+    marginBottom: 16,
+  },
+  previewImage: {
+    width: 280,
+    height: 280,
+    borderRadius: 12,
+    backgroundColor: "#16283F",
+  },
+  previewActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 20,
+  },
+  previewCancel: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  previewCancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#EAF0FF",
+  },
+  previewConfirm: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#E9B44C",
+  },
+  previewConfirmText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#0B1623",
+  },
   content: { padding: 16 },
   name: {
     fontSize: 22,

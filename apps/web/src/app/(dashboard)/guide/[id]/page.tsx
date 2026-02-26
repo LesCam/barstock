@@ -58,6 +58,29 @@ export default function GuideItemDetailPage() {
     },
   });
 
+  const lookupImage = trpc.productGuide.lookupProductImage.useQuery(
+    { barcode: item?.inventoryItem.barcode ?? "", locationId: locationId! },
+    { enabled: false }
+  );
+
+  const importImage = trpc.productGuide.importImageFromUrl.useMutation({
+    onSuccess: () => {
+      setFindImagePreview(null);
+      utils.productGuide.getItem.invalidate({ id, locationId: locationId! });
+    },
+  });
+
+  const [findImagePreview, setFindImagePreview] = useState<string | null>(null);
+
+  async function handleFindImage() {
+    const result = await lookupImage.refetch();
+    if (result.data?.imageUrl) {
+      setFindImagePreview(result.data.imageUrl);
+    } else {
+      alert("No image found for this barcode in external databases.");
+    }
+  }
+
   const deleteItem = trpc.productGuide.deleteItem.useMutation({
     onSuccess: () => {
       router.push("/guide");
@@ -177,7 +200,7 @@ export default function GuideItemDetailPage() {
 
       {/* Image */}
       <div className="mb-6">
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-start">
           {item.imageUrl ? (
             <div className="relative inline-block max-h-96 max-w-sm rounded-lg bg-[#16283F]">
               <img
@@ -212,6 +235,47 @@ export default function GuideItemDetailPage() {
             >
               {uploadImage.isPending ? "Uploading..." : "Replace Image"}
             </button>
+          )}
+          {item.inventoryItem.barcode && (
+            <button
+              onClick={handleFindImage}
+              disabled={lookupImage.isFetching}
+              className="flex h-64 w-64 items-center justify-center rounded-lg border-2 border-dashed border-[#E9B44C]/30 text-[#E9B44C]/60 hover:border-[#E9B44C]/50 hover:text-[#E9B44C] disabled:opacity-50"
+            >
+              {lookupImage.isFetching ? "Searching..." : "Find Image"}
+            </button>
+          )}
+          {findImagePreview && (
+            <div className="flex flex-col items-center gap-2">
+              <div className="relative rounded-lg bg-[#16283F] p-2">
+                <img
+                  src={findImagePreview}
+                  alt="Found image"
+                  className="max-h-56 max-w-56 rounded-lg object-contain"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFindImagePreview(null)}
+                  className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-[#EAF0FF]/60 hover:bg-[#16283F]"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() =>
+                    importImage.mutate({
+                      id,
+                      locationId: locationId!,
+                      imageUrl: findImagePreview,
+                    })
+                  }
+                  disabled={importImage.isPending}
+                  className="rounded-md bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E] disabled:opacity-50"
+                >
+                  {importImage.isPending ? "Saving..." : "Use This"}
+                </button>
+              </div>
+            </div>
           )}
         </div>
         <input

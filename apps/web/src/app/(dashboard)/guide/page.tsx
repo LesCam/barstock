@@ -192,6 +192,9 @@ export default function ProductGuidePage() {
   const [itemRegion, setItemRegion] = useState("");
   const [itemVintage, setItemVintage] = useState("");
   const [itemVarietal, setItemVarietal] = useState("");
+  const [lookupImageUrl, setLookupImageUrl] = useState<string | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupDone, setLookupDone] = useState(false);
 
   // Bulk import state
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -268,9 +271,23 @@ export default function ProductGuidePage() {
     onSuccess: () => utils.productGuide.listItems.invalidate(),
   });
 
-  const createItem = trpc.productGuide.createItem.useMutation({
+  const importImage = trpc.productGuide.importImageFromUrl.useMutation({
     onSuccess: () => {
       utils.productGuide.listItems.invalidate();
+    },
+  });
+
+  const createItem = trpc.productGuide.createItem.useMutation({
+    onSuccess: (data) => {
+      utils.productGuide.listItems.invalidate();
+      // Auto-import looked-up image if available
+      if (lookupImageUrl && locationId) {
+        importImage.mutate({
+          id: data.id,
+          locationId,
+          imageUrl: lookupImageUrl,
+        });
+      }
       setShowItemForm(false);
       setItemInventoryId("");
       setItemDescription("");
@@ -281,6 +298,8 @@ export default function ProductGuidePage() {
       setItemRegion("");
       setItemVintage("");
       setItemVarietal("");
+      setLookupImageUrl(null);
+      setLookupDone(false);
     },
   });
 
@@ -300,6 +319,32 @@ export default function ProductGuidePage() {
       i.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
       (i.category?.name ?? "").toLowerCase().includes(inventorySearch.toLowerCase())
   );
+
+  const selectedInvItem = inventoryItems?.find((i: any) => i.id === itemInventoryId) as any;
+
+  async function handleLookupDetails() {
+    if (!selectedInvItem?.barcode || !locationId) return;
+    setLookupLoading(true);
+    try {
+      const result = await utils.productGuide.lookupProductImage.fetch({
+        barcode: selectedInvItem.barcode,
+        locationId,
+      });
+      if (result.brand && !itemProducer) {
+        setItemProducer(result.brand);
+      }
+      if (result.imageUrl) {
+        setLookupImageUrl(result.imageUrl);
+      }
+      if (!result.brand && !result.imageUrl) {
+        alert("No product details found for this barcode.");
+      }
+    } catch {
+      alert("Lookup failed. Try again later.");
+    }
+    setLookupLoading(false);
+    setLookupDone(true);
+  }
 
   // Items already in the guide (for bulk import exclusion)
   const existingInventoryIds = useMemo(() => {
@@ -668,6 +713,8 @@ export default function ProductGuidePage() {
                     onClick={() => {
                       setItemInventoryId(inv.id);
                       setInventorySearch(inv.name);
+                      setLookupImageUrl(null);
+                      setLookupDone(false);
                     }}
                     className={`block w-full px-3 py-2 text-left text-sm hover:bg-[#16283F] ${
                       itemInventoryId === inv.id
@@ -682,6 +729,21 @@ export default function ProductGuidePage() {
                   </button>
                 ))}
               </div>
+            )}
+            {itemInventoryId && selectedInvItem?.barcode && !lookupDone && (
+              <button
+                onClick={handleLookupDetails}
+                disabled={lookupLoading}
+                type="button"
+                className="mt-2 rounded-md border border-[#E9B44C]/30 px-3 py-1.5 text-sm text-[#E9B44C] hover:bg-[#E9B44C]/10 disabled:opacity-50"
+              >
+                {lookupLoading ? "Looking up..." : "Lookup Details by Barcode"}
+              </button>
+            )}
+            {lookupDone && (
+              <p className="mt-1 text-xs text-green-400/70">
+                {lookupImageUrl ? "Product details found — image will be imported after saving." : "Lookup complete."}
+              </p>
             )}
           </div>
           <div className="mb-3">
@@ -834,6 +896,8 @@ export default function ProductGuidePage() {
                 setItemRegion("");
                 setItemVintage("");
                 setItemVarietal("");
+                setLookupImageUrl(null);
+                setLookupDone(false);
               }}
               className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-[#EAF0FF]/60 hover:bg-[#16283F]"
             >

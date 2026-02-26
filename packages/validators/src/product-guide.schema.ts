@@ -88,6 +88,17 @@ export const guideItemDeleteSchema = z.object({
   locationId: z.string().uuid(),
 });
 
+export const guideItemLookupImageSchema = z.object({
+  barcode: z.string().min(1),
+  locationId: z.string().uuid(),
+});
+
+export const guideItemImportImageSchema = z.object({
+  id: z.string().uuid(),
+  locationId: z.string().uuid(),
+  imageUrl: z.string().url(),
+});
+
 // ─── Reorder / Delete Category / Bulk Import ────────────────
 
 export const guideCategoryReorderSchema = z.object({

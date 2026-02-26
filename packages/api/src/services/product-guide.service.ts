@@ -258,6 +258,82 @@ export class ProductGuideService {
     return item;
   }
 
+  async importImageFromUrl(
+    id: string,
+    locationId: string,
+    imageUrl: string,
+    actorUserId: string
+  ) {
+    // Fetch image from external URL server-side
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    let buffer: Buffer;
+    try {
+      const res = await fetch(imageUrl, { signal: controller.signal });
+      if (!res.ok) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Failed to fetch image: ${res.status}`,
+        });
+      }
+      buffer = Buffer.from(await res.arrayBuffer());
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Failed to fetch image from URL",
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    // Remove existing image if any
+    const existing = await this.prisma.productGuideItem.findUniqueOrThrow({
+      where: { id },
+      select: { imageKey: true },
+    });
+
+    const storage = createStorageAdapter();
+
+    if (existing.imageKey) {
+      await storage.delete(existing.imageKey);
+    }
+
+    // Derive a filename from the URL
+    const urlPath = new URL(imageUrl).pathname;
+    const ext = urlPath.split(".").pop()?.toLowerCase() ?? "jpg";
+    const filename = `imported.${ext}`;
+    const key = `guide/${id}/${Date.now()}-${filename}`;
+    const url = await storage.upload(buffer, key);
+
+    const item = await this.prisma.productGuideItem.update({
+      where: { id },
+      data: { imageUrl: url, imageKey: key },
+      include: {
+        inventoryItem: { select: { name: true, category: { select: { name: true } } } },
+        category: { select: { id: true, name: true } },
+      },
+    });
+
+    const location = await this.prisma.location.findUnique({
+      where: { id: locationId },
+      select: { businessId: true },
+    });
+
+    if (location) {
+      await this.audit.log({
+        businessId: location.businessId,
+        actorUserId,
+        actionType: "guide_item.image_imported",
+        objectType: "guide_item",
+        objectId: id,
+        metadata: { source: imageUrl },
+      });
+    }
+
+    return item;
+  }
+
   async removeItemImage(id: string, locationId: string, actorUserId: string) {
     const existing = await this.prisma.productGuideItem.findUniqueOrThrow({
       where: { id },

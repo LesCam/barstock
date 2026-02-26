@@ -20,8 +20,12 @@ import {
   guideItemDeleteSchema,
   guideItemReorderSchema,
   guideItemBulkCreateSchema,
+  guideItemLookupImageSchema,
+  guideItemImportImageSchema,
 } from "@barstock/validators";
 import { ProductGuideService } from "../services/product-guide.service";
+import { lookupOpenFoodFacts } from "../lib/open-food-facts";
+import { lookupUpcItemDb } from "../lib/upc-itemdb";
 
 export const productGuideRouter = router({
   // ─── Categories ───────────────────────────────────────────
@@ -167,5 +171,55 @@ export const productGuideRouter = router({
     .mutation(async ({ ctx, input }) => {
       const service = new ProductGuideService(ctx.prisma);
       return service.bulkCreateItems(input, ctx.user.userId);
+    }),
+
+  lookupProductImage: protectedProcedure
+    .use(requireLocationAccess())
+    .input(guideItemLookupImageSchema)
+    .query(async ({ input }) => {
+      // Try Open Food Facts first, then UPC Item DB
+      const offResult = await lookupOpenFoodFacts(input.barcode);
+      if (offResult?.imageUrl) {
+        return {
+          imageUrl: offResult.imageUrl,
+          brand: offResult.brand,
+          source: "Open Food Facts",
+        };
+      }
+
+      const upcResult = await lookupUpcItemDb(input.barcode);
+      if (upcResult?.imageUrl || upcResult?.brand) {
+        return {
+          imageUrl: upcResult?.imageUrl ?? null,
+          brand: upcResult?.brand ?? null,
+          source: "UPC Item DB",
+        };
+      }
+
+      // One source may have brand but not image — check OFF for brand
+      if (offResult?.brand) {
+        return {
+          imageUrl: null,
+          brand: offResult.brand,
+          source: "Open Food Facts",
+        };
+      }
+
+      return { imageUrl: null, brand: null, source: null };
+    }),
+
+  importImageFromUrl: protectedProcedure
+    .use(requireRole("manager"))
+    .use(requireCapability("productGuideEnabled"))
+    .use(requireLocationAccess())
+    .input(guideItemImportImageSchema)
+    .mutation(async ({ ctx, input }) => {
+      const service = new ProductGuideService(ctx.prisma);
+      return service.importImageFromUrl(
+        input.id,
+        input.locationId,
+        input.imageUrl,
+        ctx.user.userId
+      );
     }),
 });
