@@ -40,7 +40,7 @@ export default async function PublicMenuPage({ params }: PageProps) {
       {/* Header */}
       <header className="border-b border-white/10 px-4 py-6 text-center">
         {guide.businessName && (
-          <p className="text-sm font-medium uppercase tracking-widest text-[#E9B44C]">
+          <p className="text-xl font-bold uppercase tracking-widest text-[#E9B44C]">
             {guide.businessName}
           </p>
         )}
