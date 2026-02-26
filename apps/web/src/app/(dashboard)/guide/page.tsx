@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
+import { QRCodeSVG } from "qrcode.react";
 import {
   DndContext,
   closestCenter,
@@ -195,6 +196,7 @@ export default function ProductGuidePage() {
   const [lookupImageUrl, setLookupImageUrl] = useState<string | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   // Bulk import state
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -447,7 +449,32 @@ export default function ProductGuidePage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-[#EAF0FF]">Product Guide</h1>
+        <button
+          onClick={() => setShowQR(!showQR)}
+          className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+            showQR
+              ? "border-[#E9B44C] bg-[#E9B44C]/10 text-[#E9B44C]"
+              : "border-white/10 text-[#EAF0FF]/60 hover:bg-[#16283F]"
+          }`}
+        >
+          QR Code
+        </button>
       </div>
+
+      {showQR && (
+        <div className="mb-6 flex flex-col items-center gap-3 rounded-lg border border-white/10 bg-[#16283F] p-6">
+          <p className="text-sm text-[#EAF0FF]/60">Customers scan to view the menu</p>
+          <div className="rounded-lg bg-white p-3">
+            <QRCodeSVG
+              value={`${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/menu/${locationId}`}
+              size={180}
+            />
+          </div>
+          <p className="select-all text-xs text-[#5A6A7A]">
+            {`${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/menu/${locationId}`}
+          </p>
+        </div>
+      )}
 
       {/* Categories */}
       <div className="mb-6">
