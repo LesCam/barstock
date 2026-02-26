@@ -1,8 +1,56 @@
 import { router, protectedProcedure, requirePermission } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { SettingsService } from "../services/settings.service";
 
 const DEFAULT_DENSITY = 0.95;
+
+/**
+ * Auto-contribute tare weight data to master_products when:
+ * 1. The item has a barcode
+ * 2. The business has master product sharing opted in
+ * Best-effort — silently fails if sharing is disabled or errors occur.
+ */
+async function contributeWeightToMasterDb(
+  prisma: any,
+  businessId: string,
+  inventoryItemId: string,
+  weights: {
+    emptyBottleWeightG?: number | null;
+    fullBottleWeightG?: number | null;
+    densityGPerMl?: number | null;
+    containerSizeMl?: number;
+  }
+) {
+  try {
+    const item = await prisma.inventoryItem.findUnique({
+      where: { id: inventoryItemId },
+      select: { barcode: true },
+    });
+    if (!item?.barcode) return;
+
+    const settingsService = new SettingsService(prisma);
+    const settings = await settingsService.getSettings(businessId);
+    if (!settings.masterProductSharing.optedIn) return;
+
+    const updateData: Record<string, any> = {
+      contributionCount: { increment: 1 },
+      lastContributedAt: new Date(),
+      lastContributedByBusinessId: businessId,
+    };
+    if (weights.emptyBottleWeightG != null) updateData.emptyBottleWeightG = weights.emptyBottleWeightG;
+    if (weights.fullBottleWeightG != null) updateData.fullBottleWeightG = weights.fullBottleWeightG;
+    if (weights.densityGPerMl != null) updateData.densityGPerMl = weights.densityGPerMl;
+    if (weights.containerSizeMl != null) updateData.containerSizeMl = weights.containerSizeMl;
+
+    await prisma.masterProduct.update({
+      where: { barcode: item.barcode },
+      data: updateData,
+    });
+  } catch {
+    // Best-effort — don't break the main operation
+  }
+}
 
 export const scaleRouter = router({
   /** Bottle templates for a location (includes org-level) */
@@ -101,32 +149,43 @@ export const scaleRouter = router({
         densityGPerMl: input.densityGPerMl ?? null,
       };
 
+      let result;
       if (active) {
         // Force: update the existing active template
-        return ctx.prisma.bottleTemplate.update({
+        result = await ctx.prisma.bottleTemplate.update({
           where: { id: active.id },
           data: templateData,
         });
-      }
-
-      // Reactivate a soft-deleted template if one exists
-      const disabled = await ctx.prisma.bottleTemplate.findFirst({
-        where: { inventoryItemId: input.inventoryItemId, locationId: input.locationId ?? null, enabled: false },
-      });
-      if (disabled) {
-        return ctx.prisma.bottleTemplate.update({
-          where: { id: disabled.id },
-          data: { enabled: true, ...templateData },
+      } else {
+        // Reactivate a soft-deleted template if one exists
+        const disabled = await ctx.prisma.bottleTemplate.findFirst({
+          where: { inventoryItemId: input.inventoryItemId, locationId: input.locationId ?? null, enabled: false },
         });
+        if (disabled) {
+          result = await ctx.prisma.bottleTemplate.update({
+            where: { id: disabled.id },
+            data: { enabled: true, ...templateData },
+          });
+        } else {
+          result = await ctx.prisma.bottleTemplate.create({
+            data: {
+              ...data,
+              emptyBottleWeightG: data.emptyBottleWeightG ?? null,
+              fullBottleWeightG: data.fullBottleWeightG ?? null,
+            },
+          });
+        }
       }
 
-      return ctx.prisma.bottleTemplate.create({
-        data: {
-          ...data,
-          emptyBottleWeightG: data.emptyBottleWeightG ?? null,
-          fullBottleWeightG: data.fullBottleWeightG ?? null,
-        },
+      // Auto-contribute weight data to master product DB
+      contributeWeightToMasterDb(ctx.prisma, ctx.user.businessId, input.inventoryItemId, {
+        emptyBottleWeightG: input.emptyBottleWeightG,
+        fullBottleWeightG: input.fullBottleWeightG,
+        densityGPerMl: input.densityGPerMl,
+        containerSizeMl: input.containerSizeMl,
       });
+
+      return result;
     }),
 
   updateTemplate: protectedProcedure
@@ -145,10 +204,19 @@ export const scaleRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Template belongs to another business" });
       }
       const { templateId, ...data } = input;
-      return ctx.prisma.bottleTemplate.update({
+      const result = await ctx.prisma.bottleTemplate.update({
         where: { id: templateId },
         data,
       });
+
+      // Auto-contribute weight data to master product DB
+      contributeWeightToMasterDb(ctx.prisma, ctx.user.businessId, template.inventoryItemId, {
+        emptyBottleWeightG: input.emptyBottleWeightG,
+        fullBottleWeightG: input.fullBottleWeightG,
+        densityGPerMl: input.densityGPerMl,
+      });
+
+      return result;
     }),
 
   /** Check if a template has related measurements or session lines */
