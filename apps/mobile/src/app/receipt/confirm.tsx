@@ -106,7 +106,7 @@ export default function ReceiptConfirmScreen() {
       Alert.alert(
         "Receipt Processed",
         `${data.eventIds.length} item${data.eventIds.length === 1 ? "" : "s"} received successfully.`,
-        [{ text: "OK", onPress: () => router.dismiss(2) }]
+        [{ text: "OK", onPress: () => router.replace("/receive") }]
       );
     },
     onError: (err) => {

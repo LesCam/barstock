@@ -293,6 +293,9 @@ export default function ReceiveStockScreen() {
           <Text style={styles.scanReceiptBtnText}>Scan Receipt</Text>
         </TouchableOpacity>
 
+        {/* Pending Receipts */}
+        <PendingReceipts locationId={selectedLocationId} />
+
         {/* Vendor Picker */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Vendor</Text>
@@ -713,6 +716,76 @@ export default function ReceiveStockScreen() {
     </View>
   );
 }
+
+// ── Pending Receipts Component ───────────────────────────────
+function PendingReceipts({ locationId }: { locationId: string | null }) {
+  if (!locationId) return null;
+
+  const { data } = trpc.receipts.list.useQuery(
+    { locationId, limit: 5 },
+    { enabled: !!locationId }
+  );
+
+  const pending = data?.items?.filter(
+    (r: any) => r.status === "extracted" || r.status === "pending"
+  );
+
+  if (!pending?.length) return null;
+
+  return (
+    <View style={pendingStyles.container}>
+      <Text style={pendingStyles.label}>Unfinished Receipts</Text>
+      {pending.map((r: any) => (
+        <TouchableOpacity
+          key={r.id}
+          style={pendingStyles.row}
+          onPress={() =>
+            router.push({
+              pathname: "/receipt/confirm",
+              params: { receiptCaptureId: r.id },
+            })
+          }
+        >
+          <View style={pendingStyles.info}>
+            <Text style={pendingStyles.vendor}>
+              {r.vendorName ?? "Unknown vendor"}
+            </Text>
+            <Text style={pendingStyles.meta}>
+              {r.lineCount} items · {new Date(r.createdAt).toLocaleString()}
+            </Text>
+          </View>
+          <Text style={pendingStyles.resume}>Resume</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+const pendingStyles = StyleSheet.create({
+  container: { marginBottom: 16 },
+  label: {
+    color: "#E9B44C",
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#16283F",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#E9B44C",
+  },
+  info: { flex: 1 },
+  vendor: { color: "#EAF0FF", fontSize: 15, fontWeight: "600" },
+  meta: { color: "#5A6A7A", fontSize: 12, marginTop: 2 },
+  resume: { color: "#E9B44C", fontSize: 14, fontWeight: "600" },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0B1623" },

@@ -166,43 +166,36 @@ export class ReceiptService {
         }
       }
 
-      // 8. Check for duplicate receipts
+      // 8. Check for duplicate receipts (all checks run, first match wins)
       let possibleDuplicate: DuplicateInfo | null = null;
+      const dupConditions: Prisma.ReceiptCaptureWhereInput[] = [];
+
+      // Check 1: Same invoice number
       if (extraction.invoiceNumber) {
-        // Check by invoice number (strongest signal)
-        const existing = await this.prisma.receiptCapture.findFirst({
-          where: {
-            locationId,
-            invoiceNumber: extraction.invoiceNumber,
-            id: { not: capture.id },
-            status: { not: "failed" },
-          },
-          include: {
-            vendor: { select: { name: true } },
-            _count: { select: { lines: true } },
-          },
-          orderBy: { createdAt: "desc" },
-        });
-        if (existing) {
-          possibleDuplicate = {
-            receiptCaptureId: existing.id,
-            invoiceNumber: existing.invoiceNumber,
-            invoiceDate: existing.invoiceDate?.toISOString().split("T")[0] ?? null,
-            vendorName: existing.vendor?.name ?? existing.vendorNameRaw,
-            processedAt: existing.processedAt,
-            lineCount: existing._count.lines,
-          };
-        }
+        dupConditions.push({ invoiceNumber: extraction.invoiceNumber });
       }
-      if (!possibleDuplicate && vendorId && extraction.invoiceDate) {
-        // Fallback: same vendor + same date + similar line count
+      // Check 2: Same vendor + same date
+      if (vendorId && extraction.invoiceDate) {
+        dupConditions.push({
+          vendorId,
+          invoiceDate: new Date(extraction.invoiceDate),
+        });
+      }
+      // Check 3: Same vendor name (raw) + same date — catches unmatched vendors
+      if (extraction.vendorName && extraction.invoiceDate) {
+        dupConditions.push({
+          vendorNameRaw: extraction.vendorName,
+          invoiceDate: new Date(extraction.invoiceDate),
+        });
+      }
+
+      if (dupConditions.length > 0) {
         const existing = await this.prisma.receiptCapture.findFirst({
           where: {
             locationId,
-            vendorId,
-            invoiceDate: new Date(extraction.invoiceDate),
             id: { not: capture.id },
             status: { not: "failed" },
+            OR: dupConditions,
           },
           include: {
             vendor: { select: { name: true } },
