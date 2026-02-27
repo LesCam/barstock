@@ -8,6 +8,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@barstock/database": "workspace:*",
     "@barstock/types": "workspace:*",
     "@barstock/validators": "workspace:*",

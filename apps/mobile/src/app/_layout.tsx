@@ -103,6 +103,14 @@ function RootNavigator() {
         options={{ title: "Receive Stock", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="receipt/capture"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="receipt/confirm"
+        options={{ title: "Review Receipt", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
         name="par-levels"
         options={{ title: "Par Levels", headerBackTitle: "Back" }}
       />

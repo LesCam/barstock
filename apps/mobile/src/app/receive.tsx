@@ -285,6 +285,14 @@ export default function ReceiveStockScreen() {
       >
         <Text style={styles.heading}>Receive Stock</Text>
 
+        {/* Scan Receipt */}
+        <TouchableOpacity
+          style={styles.scanReceiptBtn}
+          onPress={() => router.push("/receipt/capture")}
+        >
+          <Text style={styles.scanReceiptBtnText}>Scan Receipt</Text>
+        </TouchableOpacity>
+
         {/* Vendor Picker */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Vendor</Text>
@@ -1033,4 +1041,18 @@ const styles = StyleSheet.create({
   },
   newVendorSaveDisabled: { opacity: 0.4 },
   newVendorSaveText: { color: "#0B1623", fontSize: 16, fontWeight: "700" },
+  scanReceiptBtn: {
+    backgroundColor: "#16283F",
+    borderRadius: 10,
+    padding: 14,
+    alignItems: "center",
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E9B44C",
+  },
+  scanReceiptBtnText: {
+    color: "#E9B44C",
+    fontSize: 16,
+    fontWeight: "600",
+  },
 });

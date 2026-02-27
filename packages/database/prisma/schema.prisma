@@ -45,8 +45,19 @@ enum SourceSystemT {
   clover
   other
   manual
+  receipt_capture
 
   @@map("source_system_t")
+}
+
+enum ReceiptCaptureStatusT {
+  pending
+  extracted
+  confirmed
+  processed
+  failed
+
+  @@map("receipt_capture_status_t")
 }
 
 enum MappingModeT {
@@ -212,6 +223,8 @@ model Business {
   staffInvites              StaffInvite[]
   masterProductContributions MasterProduct[]
   tareObservations           TareObservation[]
+  receiptCaptures            ReceiptCapture[]
+  supplierItemAliases        SupplierItemAlias[]
 
   @@map("businesses")
 }
@@ -256,6 +269,7 @@ model Location {
   parLevels        ParLevel[]
   purchaseOrders   PurchaseOrder[]
   csvImports       CSVImport[]
+  receiptCaptures  ReceiptCapture[]
 
   @@map("locations")
 }
@@ -293,6 +307,7 @@ model User {
   csvImports              CSVImport[]
   sentStaffInvites        StaffInvite[] @relation("InvitedByUser")
   tareObservations        TareObservation[]
+  receiptCaptures         ReceiptCapture[]
 
   @@map("users")
 }
@@ -364,7 +379,9 @@ model InventoryItem {
   recipeIngredients  RecipeIngredient[]
   parLevels          ParLevel[]
   purchaseOrderLines PurchaseOrderLine[]
-  ratioSnapshots     RecipeRatioSnapshot[]
+  ratioSnapshots      RecipeRatioSnapshot[]
+  receiptLines        ReceiptLine[]
+  supplierItemAliases SupplierItemAlias[]
 
   @@index([locationId], map: "ix_inventory_items_location")
   @@map("inventory_items")
@@ -864,8 +881,10 @@ model Vendor {
   inventoryItems  InventoryItem[]
   itemVendors     ItemVendor[]
   parLevels       ParLevel[]
-  purchaseOrders  PurchaseOrder[]
-  vendorOrderers  VendorOrderer[]
+  purchaseOrders      PurchaseOrder[]
+  vendorOrderers      VendorOrderer[]
+  receiptCaptures     ReceiptCapture[]
+  supplierItemAliases SupplierItemAlias[]
 
   @@index([businessId], map: "ix_vendors_business")
   @@map("vendors")
@@ -1270,4 +1289,79 @@ model StaffInvite {
   @@index([businessId], map: "ix_staff_invites_business")
   @@index([email, businessId], map: "ix_staff_invites_email_business")
   @@map("staff_invites")
+}
+
+// ─── Receipt Capture ──────────────────────────────────────
+
+model ReceiptCapture {
+  id              String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId      String                @map("location_id") @db.Uuid
+  businessId      String                @map("business_id") @db.Uuid
+  status          ReceiptCaptureStatusT @default(pending)
+  imageKey        String                @map("image_key")
+  imageUrl        String                @map("image_url")
+  vendorId        String?               @map("vendor_id") @db.Uuid
+  vendorNameRaw   String?               @map("vendor_name_raw")
+  invoiceNumber   String?               @map("invoice_number")
+  invoiceDate     DateTime?             @map("invoice_date") @db.Date
+  extractedJson   Json?                 @map("extracted_json")
+  errorMessage    String?               @map("error_message")
+  processedAt     DateTime?             @map("processed_at") @db.Timestamptz()
+  capturedBy      String                @map("captured_by") @db.Uuid
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz()
+
+  location  Location       @relation(fields: [locationId], references: [id])
+  business  Business       @relation(fields: [businessId], references: [id])
+  vendor    Vendor?        @relation(fields: [vendorId], references: [id])
+  capturer  User           @relation(fields: [capturedBy], references: [id])
+  lines     ReceiptLine[]
+
+  @@index([locationId, createdAt(sort: Desc)], map: "ix_receipt_captures_location_time")
+  @@index([businessId], map: "ix_receipt_captures_business")
+  @@map("receipt_captures")
+}
+
+model ReceiptLine {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  receiptCaptureId   String   @map("receipt_capture_id") @db.Uuid
+  lineIndex          Int      @map("line_index")
+  descriptionRaw     String   @map("description_raw")
+  quantityRaw        Decimal? @map("quantity_raw")
+  unitPriceRaw       Decimal? @map("unit_price_raw")
+  totalPriceRaw      Decimal? @map("total_price_raw")
+  unitSizeRaw        String?  @map("unit_size_raw")
+  inventoryItemId    String?  @map("inventory_item_id") @db.Uuid
+  matchConfidence    Decimal? @map("match_confidence") @db.Decimal(3, 2)
+  matchSource        String?  @map("match_source")
+  quantityConfirmed  Decimal? @map("quantity_confirmed")
+  unitPriceConfirmed Decimal? @map("unit_price_confirmed")
+  skipped            Boolean  @default(false)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  receiptCapture ReceiptCapture @relation(fields: [receiptCaptureId], references: [id], onDelete: Cascade)
+  inventoryItem  InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+
+  @@index([receiptCaptureId], map: "ix_receipt_lines_capture")
+  @@map("receipt_lines")
+}
+
+model SupplierItemAlias {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId      String   @map("business_id") @db.Uuid
+  vendorId        String?  @map("vendor_id") @db.Uuid
+  aliasText       String   @map("alias_text")
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  confidence      Decimal  @default(1.0) @db.Decimal(3, 2)
+  useCount        Int      @default(1) @map("use_count")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  business      Business      @relation(fields: [businessId], references: [id])
+  vendor        Vendor?       @relation(fields: [vendorId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([businessId, aliasText], map: "ux_supplier_alias_biz_text")
+  @@index([businessId, aliasText], map: "ix_supplier_aliases_biz_text")
+  @@map("supplier_item_aliases")
 }

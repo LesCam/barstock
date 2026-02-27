@@ -31,6 +31,7 @@ import { subscriptionRouter } from "./routers/subscription";
 import { masterProductsRouter } from "./routers/master-products";
 import { scanImportRouter } from "./routers/scan-import";
 import { tareObservationsRouter } from "./routers/tare-observations";
+import { receiptsRouter } from "./routers/receipts";
 
 export const appRouter = router({
   auth: authRouter,
@@ -65,6 +66,7 @@ export const appRouter = router({
   masterProducts: masterProductsRouter,
   scanImport: scanImportRouter,
   tareObservations: tareObservationsRouter,
+  receipts: receiptsRouter,
 });
 
 export type AppRouter = typeof appRouter;
