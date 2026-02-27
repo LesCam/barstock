@@ -18,6 +18,7 @@ export const receiptsRouter = router({
         locationId: input.locationId,
         businessId: ctx.user.businessId,
         base64Data: input.base64Data,
+        images: input.images,
         filename: input.filename,
         userId: ctx.user.userId,
       });

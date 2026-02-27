@@ -12,6 +12,7 @@
     "@barstock/database": "workspace:*",
     "@barstock/types": "workspace:*",
     "@barstock/validators": "workspace:*",
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.3.1",
     "@trpc/server": "^11.0.0-rc.660",
     "bcryptjs": "^3.0.3",

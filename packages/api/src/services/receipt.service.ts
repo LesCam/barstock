@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { ExtendedPrismaClient } from "@barstock/database";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { bestMatch } from "../utils/fuzzy-match";
 import { createStorageAdapter } from "./storage";
 import { NotificationService } from "./notification.service";
@@ -49,12 +49,10 @@ export interface ConfirmResult {
 // ─── Service ─────────────────────────────────────────────────
 
 export class ReceiptService {
-  private anthropic: Anthropic;
+  private genai: GoogleGenerativeAI;
 
   constructor(private prisma: ExtendedPrismaClient) {
-    this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
+    this.genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
   }
 
   // ── Capture + Extract ────────────────────────────────────
@@ -62,15 +60,24 @@ export class ReceiptService {
   async capture(input: {
     locationId: string;
     businessId: string;
-    base64Data: string;
-    filename: string;
+    base64Data?: string;
+    images?: Array<{ base64Data: string; filename: string }>;
+    filename?: string;
     userId: string;
   }): Promise<CaptureResult> {
-    const { locationId, businessId, base64Data, filename, userId } = input;
+    const { locationId, businessId, userId } = input;
 
-    // 1. Upload image to storage
-    const buffer = Buffer.from(base64Data, "base64");
-    const key = `receipts/${locationId}/${Date.now()}-${filename}`;
+    // Normalize to array of images (backwards compatible)
+    const imageList = input.images?.length
+      ? input.images
+      : input.base64Data
+        ? [{ base64Data: input.base64Data, filename: input.filename ?? `receipt-${Date.now()}.jpg` }]
+        : [];
+    if (imageList.length === 0) throw new Error("No images provided");
+
+    // 1. Upload first image to storage (primary image for the record)
+    const buffer = Buffer.from(imageList[0].base64Data, "base64");
+    const key = `receipts/${locationId}/${Date.now()}-${imageList[0].filename}`;
     const storage = createStorageAdapter();
     const imageUrl = await storage.upload(buffer, key);
 
@@ -100,9 +107,9 @@ export class ReceiptService {
         }),
       ]);
 
-      // 4. Extract via Claude Vision
+      // 4. Extract via Gemini Vision (all images at once)
       const extraction = await this.extractFromImage(
-        base64Data,
+        imageList.map((img) => img.base64Data),
         vendors.map((v) => v.name),
         items.map((i) => i.name)
       );
@@ -181,15 +188,17 @@ export class ReceiptService {
     }
   }
 
-  // ── Claude Vision Extraction ──────────────────────────────
+  // ── Gemini Vision Extraction ─────────────────────────────
 
   private async extractFromImage(
-    base64Data: string,
+    base64DataList: string[],
     vendorNames: string[],
     itemNames: string[]
   ): Promise<ExtractionResult> {
+    const multiImage = base64DataList.length > 1;
     const systemPrompt = `You are a receipt/invoice data extraction assistant for a bar inventory management system.
-Extract structured data from the receipt image and return ONLY valid JSON (no markdown fences).
+Extract structured data from the receipt image${multiImage ? "s" : ""} and return ONLY valid JSON (no markdown fences, no backticks).
+${multiImage ? "Multiple images are provided showing different sections of the SAME receipt. Combine all items into a single result. Do not duplicate items that appear in multiple images." : ""}
 
 Return this exact JSON structure:
 {
@@ -226,37 +235,39 @@ Rules:
     }
 
     const userPrompt = contextLines.length > 0
-      ? `Extract the receipt data from this image.\n\nContext:\n${contextLines.join("\n")}`
-      : "Extract the receipt data from this image.";
+      ? `Extract the receipt data from ${multiImage ? "these images" : "this image"}.\n\nContext:\n${contextLines.join("\n")}`
+      : `Extract the receipt data from ${multiImage ? "these images" : "this image"}.`;
 
-    const response = await this.anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/jpeg",
-                data: base64Data,
-              },
-            },
-            { type: "text", text: userPrompt },
-          ],
-        },
-      ],
+    const model = this.genai.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        maxOutputTokens: 8192,
+      },
     });
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      throw new Error("No text response from Claude Vision");
+    // Build content parts: all images first, then the text prompt
+    const parts: Array<{ inlineData: { mimeType: string; data: string } } | { text: string }> = [];
+    for (const base64Data of base64DataList) {
+      parts.push({
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: base64Data,
+        },
+      });
+    }
+    parts.push({ text: userPrompt });
+
+    const response = await model.generateContent(parts);
+
+    const text = response.response.text();
+    if (!text) {
+      throw new Error("No text response from Gemini Vision");
     }
 
-    const parsed = JSON.parse(textBlock.text) as ExtractionResult;
+    // Strip markdown fences if Gemini wraps them
+    const cleaned = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+    const parsed = JSON.parse(cleaned) as ExtractionResult;
 
     // Validate basic structure
     if (!Array.isArray(parsed.lineItems)) {

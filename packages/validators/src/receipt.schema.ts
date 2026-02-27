@@ -2,8 +2,12 @@ import { z } from "zod";
 
 export const receiptCaptureSchema = z.object({
   locationId: z.string().uuid(),
-  base64Data: z.string(),
-  filename: z.string(),
+  base64Data: z.string().optional(),
+  images: z.array(z.object({
+    base64Data: z.string(),
+    filename: z.string(),
+  })).optional(),
+  filename: z.string().optional(),
 });
 
 export const receiptConfirmLineSchema = z.object({

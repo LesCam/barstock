@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -50,42 +50,40 @@ export default function ReceiptConfirmScreen() {
   // Fetch receipt data
   const { data: receipt, isLoading } = trpc.receipts.getById.useQuery(
     { id: receiptCaptureId! },
-    {
-      enabled: !!receiptCaptureId,
-      onSuccess: (data) => {
-        if (initialized) return;
-        setInitialized(true);
-
-        // Initialize editable lines from receipt data
-        setEditableLines(
-          data.lines.map((line: any) => ({
-            receiptLineId: line.id,
-            lineIndex: line.lineIndex,
-            descriptionRaw: line.descriptionRaw,
-            inventoryItemId: line.inventoryItemId ?? null,
-            inventoryItemName: line.inventoryItem?.name ?? null,
-            quantity: line.quantityRaw != null ? String(Number(line.quantityRaw)) : "1",
-            unitPrice: line.unitPriceRaw != null ? String(Number(line.unitPriceRaw)) : "",
-            matchConfidence: line.matchConfidence != null ? Number(line.matchConfidence) : null,
-            matchSource: line.matchSource,
-            skipped: false,
-          }))
-        );
-
-        // Initialize vendor and invoice fields
-        if (data.vendorId) {
-          setVendorId(data.vendorId);
-          setVendorName(data.vendor?.name ?? null);
-        }
-        if (data.invoiceNumber) setInvoiceNumber(data.invoiceNumber);
-        if (data.invoiceDate) {
-          setInvoiceDate(
-            new Date(data.invoiceDate).toISOString().split("T")[0]
-          );
-        }
-      },
-    }
+    { enabled: !!receiptCaptureId }
   );
+
+  // Initialize editable state when receipt data loads
+  useEffect(() => {
+    if (!receipt || initialized) return;
+    setInitialized(true);
+
+    setEditableLines(
+      receipt.lines.map((line: any) => ({
+        receiptLineId: line.id,
+        lineIndex: line.lineIndex,
+        descriptionRaw: line.descriptionRaw,
+        inventoryItemId: line.inventoryItemId ?? null,
+        inventoryItemName: line.inventoryItem?.name ?? null,
+        quantity: line.quantityRaw != null ? String(Number(line.quantityRaw)) : "1",
+        unitPrice: line.unitPriceRaw != null ? String(Number(line.unitPriceRaw)) : "",
+        matchConfidence: line.matchConfidence != null ? Number(line.matchConfidence) : null,
+        matchSource: line.matchSource,
+        skipped: false,
+      }))
+    );
+
+    if (receipt.vendorId) {
+      setVendorId(receipt.vendorId);
+      setVendorName(receipt.vendor?.name ?? null);
+    }
+    if (receipt.invoiceNumber) setInvoiceNumber(receipt.invoiceNumber);
+    if (receipt.invoiceDate) {
+      setInvoiceDate(
+        new Date(receipt.invoiceDate).toISOString().split("T")[0]
+      );
+    }
+  }, [receipt, initialized]);
 
   // Fetch vendors for picker
   const { data: vendors } = trpc.vendors.list.useQuery(
@@ -597,6 +595,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: "#0B1623",
+    paddingTop: 54,
   },
   modalHeader: {
     flexDirection: "row",
