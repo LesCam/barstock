@@ -37,10 +37,20 @@ interface MatchedLine {
   matchSource: string | null;
 }
 
+export interface DuplicateInfo {
+  receiptCaptureId: string;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  vendorName: string | null;
+  processedAt: Date | null;
+  lineCount: number;
+}
+
 export interface CaptureResult {
   receiptCaptureId: string;
   extraction: ExtractionResult;
   matchedLines: MatchedLine[];
+  possibleDuplicate: DuplicateInfo | null;
 }
 
 export interface ConfirmResult {
@@ -156,7 +166,63 @@ export class ReceiptService {
         }
       }
 
-      // 8. Create receipt lines
+      // 8. Check for duplicate receipts
+      let possibleDuplicate: DuplicateInfo | null = null;
+      if (extraction.invoiceNumber) {
+        // Check by invoice number (strongest signal)
+        const existing = await this.prisma.receiptCapture.findFirst({
+          where: {
+            locationId,
+            invoiceNumber: extraction.invoiceNumber,
+            id: { not: capture.id },
+            status: { not: "failed" },
+          },
+          include: {
+            vendor: { select: { name: true } },
+            _count: { select: { lines: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        if (existing) {
+          possibleDuplicate = {
+            receiptCaptureId: existing.id,
+            invoiceNumber: existing.invoiceNumber,
+            invoiceDate: existing.invoiceDate?.toISOString().split("T")[0] ?? null,
+            vendorName: existing.vendor?.name ?? existing.vendorNameRaw,
+            processedAt: existing.processedAt,
+            lineCount: existing._count.lines,
+          };
+        }
+      }
+      if (!possibleDuplicate && vendorId && extraction.invoiceDate) {
+        // Fallback: same vendor + same date + similar line count
+        const existing = await this.prisma.receiptCapture.findFirst({
+          where: {
+            locationId,
+            vendorId,
+            invoiceDate: new Date(extraction.invoiceDate),
+            id: { not: capture.id },
+            status: { not: "failed" },
+          },
+          include: {
+            vendor: { select: { name: true } },
+            _count: { select: { lines: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        if (existing) {
+          possibleDuplicate = {
+            receiptCaptureId: existing.id,
+            invoiceNumber: existing.invoiceNumber,
+            invoiceDate: existing.invoiceDate?.toISOString().split("T")[0] ?? null,
+            vendorName: existing.vendor?.name ?? existing.vendorNameRaw,
+            processedAt: existing.processedAt,
+            lineCount: existing._count.lines,
+          };
+        }
+      }
+
+      // 9. Create receipt lines
       await this.prisma.receiptLine.createMany({
         data: matchedLines.map((line) => ({
           receiptCaptureId: capture.id,
@@ -177,6 +243,7 @@ export class ReceiptService {
         receiptCaptureId: capture.id,
         extraction,
         matchedLines,
+        possibleDuplicate,
       };
     } catch (err: any) {
       // Update capture with error

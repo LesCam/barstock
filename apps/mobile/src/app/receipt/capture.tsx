@@ -18,13 +18,32 @@ export default function ReceiptCaptureScreen() {
   const [processing, setProcessing] = useState(false);
   const launchingRef = useRef(false);
 
+  function goToConfirm(receiptCaptureId: string) {
+    router.replace({
+      pathname: "/receipt/confirm",
+      params: { receiptCaptureId },
+    });
+  }
+
   const captureMutation = trpc.receipts.capture.useMutation({
     onSuccess: (data) => {
       setProcessing(false);
-      router.replace({
-        pathname: "/receipt/confirm",
-        params: { receiptCaptureId: data.receiptCaptureId },
-      });
+      if (data.possibleDuplicate) {
+        const dup = data.possibleDuplicate;
+        const when = dup.processedAt
+          ? `processed ${new Date(dup.processedAt).toLocaleDateString()}`
+          : "not yet processed";
+        Alert.alert(
+          "Possible Duplicate",
+          `A similar receipt was already scanned${dup.invoiceNumber ? ` (Invoice #${dup.invoiceNumber})` : ""}${dup.vendorName ? ` from ${dup.vendorName}` : ""} — ${when}, ${dup.lineCount} items.\n\nContinue anyway?`,
+          [
+            { text: "Skip", style: "cancel", onPress: () => router.back() },
+            { text: "Review Anyway", onPress: () => goToConfirm(data.receiptCaptureId) },
+          ]
+        );
+      } else {
+        goToConfirm(data.receiptCaptureId);
+      }
     },
     onError: (err) => {
       setProcessing(false);
