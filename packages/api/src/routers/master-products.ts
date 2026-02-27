@@ -42,6 +42,15 @@ export const masterProductsRouter = router({
       });
 
       if (masterProduct) {
+        const tareSuggestion =
+          masterProduct.tareSampleCount > 0 && masterProduct.tareConfidence >= 30
+            ? {
+                tareWeightG: Number(masterProduct.emptyBottleWeightG),
+                confidence: masterProduct.tareConfidence,
+                sampleCount: masterProduct.tareSampleCount,
+              }
+            : null;
+
         return {
           source: "master" as const,
           localItem: null,
@@ -53,6 +62,7 @@ export const masterProductsRouter = router({
             categoryHint: masterProduct.categoryHint,
             brand: null as string | null,
             imageUrl: null as string | null,
+            tareSuggestion,
           },
         };
       }
@@ -75,6 +85,7 @@ export const masterProductsRouter = router({
             categoryHint: offResult.categoryHint,
             brand: offResult.brand,
             imageUrl: offResult.imageUrl,
+            tareSuggestion: null,
           },
         };
       }
@@ -97,6 +108,7 @@ export const masterProductsRouter = router({
             categoryHint: upcResult.categoryHint,
             brand: upcResult.brand,
             imageUrl: upcResult.imageUrl,
+            tareSuggestion: null,
           },
         };
       }

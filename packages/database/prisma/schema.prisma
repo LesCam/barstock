@@ -211,6 +211,7 @@ model Business {
   itemCategories   InventoryItemCategory[]
   staffInvites              StaffInvite[]
   masterProductContributions MasterProduct[]
+  tareObservations           TareObservation[]
 
   @@map("businesses")
 }
@@ -291,6 +292,7 @@ model User {
   deviceTokens            DeviceToken[]
   csvImports              CSVImport[]
   sentStaffInvites        StaffInvite[] @relation("InvitedByUser")
+  tareObservations        TareObservation[]
 
   @@map("users")
 }
@@ -979,10 +981,49 @@ model MasterProduct {
   lastContributedByBusinessId String?   @map("last_contributed_by_business_id") @db.Uuid
   createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
 
+  // Tare consensus fields
+  tareStdDev              Decimal?  @map("tare_std_dev")
+  tareSampleCount         Int       @default(0) @map("tare_sample_count")
+  tareConfidence          Int       @default(0) @map("tare_confidence")
+  tareAlgorithmVersion    Int       @default(1) @map("tare_algorithm_version")
+  tareLastUpdatedAt       DateTime? @map("tare_last_updated_at") @db.Timestamptz()
+
   lastContributedByBusiness Business? @relation(fields: [lastContributedByBusinessId], references: [id])
+  tareObservations          TareObservation[]
 
   @@index([barcode], map: "ix_master_products_barcode")
   @@map("master_products")
+}
+
+enum TareObservationSourceT {
+  empty_confirmed
+  manual_template
+  imported
+
+  @@map("tare_observation_source_t")
+}
+
+model TareObservation {
+  id                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  barcode           String
+  measuredWeightG   Decimal                 @map("measured_weight_g")
+  sourceType        TareObservationSourceT  @map("source_type")
+  sourceBusinessId  String?                 @map("source_business_id") @db.Uuid
+  sourceUserId      String?                 @map("source_user_id") @db.Uuid
+  sessionId         String?                 @map("session_id") @db.Uuid
+  containerSizeMl   Decimal?                @map("container_size_ml")
+  scaleDeviceId     String?                 @map("scale_device_id")
+  isManualEntry     Boolean                 @default(false) @map("is_manual_entry")
+  isOutlier         Boolean                 @default(false) @map("is_outlier")
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz()
+
+  masterProduct     MasterProduct?          @relation(fields: [barcode], references: [barcode])
+  sourceBusiness    Business?               @relation(fields: [sourceBusinessId], references: [id])
+  sourceUser        User?                   @relation(fields: [sourceUserId], references: [id])
+
+  @@index([barcode], map: "ix_tare_observations_barcode")
+  @@index([barcode, isOutlier], map: "ix_tare_observations_barcode_outlier")
+  @@map("tare_observations")
 }
 
 // ─── Platform Infrastructure ────────────────────────────────

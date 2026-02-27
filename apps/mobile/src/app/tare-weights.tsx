@@ -93,6 +93,16 @@ export default function TareWeightsScreen() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allItems, templates]);
 
+  // Fetch global tare suggestions for needsTare items
+  const needsTareBarcodes = useMemo(
+    () => needsTareItems.map((i) => i.barcode).filter((b): b is string => !!b),
+    [needsTareItems]
+  );
+  const { data: tareSuggestions } = trpc.tareObservations.batchGetSuggestions.useQuery(
+    { barcodes: needsTareBarcodes },
+    { enabled: needsTareBarcodes.length > 0 }
+  );
+
   const updateMutation = trpc.scale.updateTemplate.useMutation({
     onSuccess: () => {
       utils.scale.listTemplates.invalidate({ locationId });
@@ -358,30 +368,38 @@ export default function TareWeightsScreen() {
           {needsTareExpanded && (
             <ScrollView style={styles.needsTareScroll} nestedScrollEnabled>
               <View style={styles.needsTareList}>
-                {needsTareItems.map((item) => (
-                  <View key={item.id} style={styles.needsTareRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.needsTareItemName}>{item.name}</Text>
-                      {item.barcode && (
-                        <Text style={styles.needsTareBarcode}>#{item.barcode}</Text>
-                      )}
+                {needsTareItems.map((item) => {
+                  const hasSuggestion = item.barcode && tareSuggestions?.[item.barcode]?.confidence >= 30;
+                  return (
+                    <View key={item.id} style={styles.needsTareRow}>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <Text style={styles.needsTareItemName}>{item.name}</Text>
+                          {hasSuggestion && (
+                            <Text style={styles.globeIcon}>🌐</Text>
+                          )}
+                        </View>
+                        {item.barcode && (
+                          <Text style={styles.needsTareBarcode}>#{item.barcode}</Text>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        style={styles.setTareBtn}
+                        onPress={() =>
+                          addItemWithPrefill({
+                            id: item.id,
+                            name: item.name,
+                            barcode: item.barcode ?? null,
+                            containerSize: item.containerSize,
+                            category: item.category ?? null,
+                          })
+                        }
+                      >
+                        <Text style={styles.setTareBtnText}>Set Tare</Text>
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      style={styles.setTareBtn}
-                      onPress={() =>
-                        addItemWithPrefill({
-                          id: item.id,
-                          name: item.name,
-                          barcode: item.barcode ?? null,
-                          containerSize: item.containerSize,
-                          category: item.category ?? null,
-                        })
-                      }
-                    >
-                      <Text style={styles.setTareBtnText}>Set Tare</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             </ScrollView>
           )}
@@ -488,6 +506,7 @@ export default function TareWeightsScreen() {
         <TareWeightEditModal
           visible
           itemName={editingTemplate.inventoryItem.name}
+          barcode={editingTemplate.inventoryItem.barcode}
           currentTareWeightG={editingTemplate.emptyBottleWeightG != null ? Number(editingTemplate.emptyBottleWeightG) : undefined}
           currentFullWeightG={editingTemplate.fullBottleWeightG != null ? Number(editingTemplate.fullBottleWeightG) : undefined}
           containerSizeMl={Number(editingTemplate.containerSizeMl)}
@@ -504,6 +523,7 @@ export default function TareWeightsScreen() {
           visible
           editable
           itemName={addingItem.name}
+          barcode={addingItem.barcode}
           containerSizeMl={addingItem.prefill?.containerMl ?? (Number(addingItem.containerSize) || 750)}
           currentTareWeightG={addingItem.prefill?.tareG ?? undefined}
           currentFullWeightG={addingItem.prefill?.fullG ?? undefined}
@@ -918,6 +938,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#92400E",
     marginTop: 1,
+  },
+  globeIcon: {
+    fontSize: 14,
   },
   setTareBtn: {
     backgroundColor: "#FBBF24",

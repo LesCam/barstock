@@ -221,6 +221,7 @@ export default function ScanWeighScreen() {
   const addLineMutation = trpc.sessions.addLine.useMutation();
   const recordMeasurementMutation = trpc.scale.recordMeasurement.useMutation();
   const createTemplateMutation = trpc.scale.createTemplate.useMutation();
+  const contributeTareMutation = trpc.tareObservations.contribute.useMutation();
 
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -552,6 +553,36 @@ export default function ScanWeighScreen() {
       });
 
       utils.sessions.getById.invalidate({ id: sessionId! });
+
+      // Empty bottle detection — offer to contribute tare weight to global DB
+      if (matchedTemplate && matchedItem.barcode && grossWeightG != null) {
+        const tareG = matchedTemplate.emptyBottleWeightG != null ? Number(matchedTemplate.emptyBottleWeightG) : null;
+        if (tareG != null) {
+          const threshold = Math.max(5, tareG * 0.02);
+          if (Math.abs(grossWeightG - tareG) <= threshold) {
+            Alert.alert(
+              "Empty Bottle Detected",
+              "This bottle appears empty. Contribute its weight to help other bars?",
+              [
+                { text: "No Thanks", style: "cancel" },
+                {
+                  text: "Contribute",
+                  onPress: () => {
+                    contributeTareMutation.mutate({
+                      barcode: matchedItem!.barcode!,
+                      measuredWeightG: grossWeightG!,
+                      sourceType: "empty_confirmed",
+                      sessionId: sessionId!,
+                      containerSizeMl: Number(matchedTemplate!.containerSizeMl) || undefined,
+                    });
+                  },
+                },
+              ]
+            );
+          }
+        }
+      }
+
       showSuccessFlash(matchedItem.name);
     } catch (error: any) {
       // If network error, offer to queue
@@ -1180,6 +1211,7 @@ export default function ScanWeighScreen() {
         <TareWeightEditModal
           visible={showTareModal}
           itemName={matchedItem.name}
+          barcode={matchedItem.barcode}
           containerSizeMl={Number(matchedItem.containerSize) || 750}
           onConnectScale={() => {
             setShowTareModal(false);

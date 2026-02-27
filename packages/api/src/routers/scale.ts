@@ -2,6 +2,7 @@ import { router, protectedProcedure, requirePermission } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { SettingsService } from "../services/settings.service";
+import { TareConsensusService } from "../services/tare-consensus.service";
 
 const DEFAULT_DENSITY = 0.95;
 
@@ -14,6 +15,7 @@ const DEFAULT_DENSITY = 0.95;
 async function contributeWeightToMasterDb(
   prisma: any,
   businessId: string,
+  userId: string,
   inventoryItemId: string,
   weights: {
     emptyBottleWeightG?: number | null;
@@ -47,6 +49,23 @@ async function contributeWeightToMasterDb(
       where: { barcode: item.barcode },
       data: updateData,
     });
+
+    // Also create a tare observation if emptyBottleWeightG is provided
+    if (weights.emptyBottleWeightG != null) {
+      await prisma.tareObservation.create({
+        data: {
+          barcode: item.barcode,
+          measuredWeightG: weights.emptyBottleWeightG,
+          sourceType: "manual_template",
+          sourceBusinessId: businessId,
+          sourceUserId: userId,
+          containerSizeMl: weights.containerSizeMl,
+          isManualEntry: true,
+        },
+      });
+      const consensus = new TareConsensusService(prisma);
+      await consensus.recalculate(item.barcode);
+    }
   } catch {
     // Best-effort — don't break the main operation
   }
@@ -178,7 +197,7 @@ export const scaleRouter = router({
       }
 
       // Auto-contribute weight data to master product DB
-      contributeWeightToMasterDb(ctx.prisma, ctx.user.businessId, input.inventoryItemId, {
+      contributeWeightToMasterDb(ctx.prisma, ctx.user.businessId, ctx.user.userId, input.inventoryItemId, {
         emptyBottleWeightG: input.emptyBottleWeightG,
         fullBottleWeightG: input.fullBottleWeightG,
         densityGPerMl: input.densityGPerMl,
@@ -210,7 +229,7 @@ export const scaleRouter = router({
       });
 
       // Auto-contribute weight data to master product DB
-      contributeWeightToMasterDb(ctx.prisma, ctx.user.businessId, template.inventoryItemId, {
+      contributeWeightToMasterDb(ctx.prisma, ctx.user.businessId, ctx.user.userId, template.inventoryItemId, {
         emptyBottleWeightG: input.emptyBottleWeightG,
         fullBottleWeightG: input.fullBottleWeightG,
         densityGPerMl: input.densityGPerMl,

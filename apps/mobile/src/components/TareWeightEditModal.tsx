@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, FlatList } from "react-native";
 import { NumericKeypad } from "./NumericKeypad";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
+import { trpc } from "@/lib/trpc";
 
 interface TareWeightEditModalProps {
   visible: boolean;
@@ -13,6 +14,8 @@ interface TareWeightEditModalProps {
   densityGPerMl?: number | null;
   /** When true, name and container size are editable (used for new template creation) */
   editable?: boolean;
+  /** Barcode for fetching global tare suggestion */
+  barcode?: string | null;
   /** Called when user wants to navigate to the full connect-scale screen */
   onConnectScale?: () => void;
   onSave: (emptyBottleWeightG: number | null, fullBottleWeightG: number | null, name?: string, containerSizeMl?: number) => void;
@@ -31,6 +34,7 @@ export function TareWeightEditModal({
   containerSizeMl,
   densityGPerMl,
   editable,
+  barcode,
   onConnectScale,
   onSave,
   onCancel,
@@ -49,6 +53,18 @@ export function TareWeightEditModal({
   const [scanning, setScanning] = useState(false);
   const [foundDevices, setFoundDevices] = useState<Array<{ id: string; name: string }>>([]);
   const [scanEmpty, setScanEmpty] = useState(false);
+
+  // Fetch global tare suggestion when barcode available and no existing tare
+  const { data: tareSuggestion } = trpc.tareObservations.getSuggestion.useQuery(
+    { barcode: barcode! },
+    { enabled: !!barcode && currentTareWeightG == null }
+  );
+
+  function handleAcceptSuggestion() {
+    if (!tareSuggestion) return;
+    setTareValue(String(Math.round(tareSuggestion.tareWeightG)));
+    setActiveTarget("tare");
+  }
 
   useEffect(() => {
     const unsubDisconnect = scaleManager.onDisconnect(() => {
@@ -144,6 +160,23 @@ export function TareWeightEditModal({
             <Text style={styles.title} numberOfLines={1}>
               {itemName}
             </Text>
+          )}
+
+          {/* Global tare suggestion banner */}
+          {tareSuggestion && tareSuggestion.confidence >= 30 && currentTareWeightG == null && (
+            <View style={styles.suggestionBanner}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.suggestionText}>
+                  Suggested tare: {Math.round(tareSuggestion.tareWeightG)}g
+                </Text>
+                <Text style={styles.suggestionSubtext}>
+                  {tareSuggestion.confidence}% confidence · {tareSuggestion.sampleCount} observations
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.suggestionAcceptBtn} onPress={handleAcceptSuggestion}>
+                <Text style={styles.suggestionAcceptText}>Accept</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           {editable ? (
@@ -646,5 +679,36 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
     marginTop: 8,
+  },
+  suggestionBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(37, 99, 235, 0.1)",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  suggestionText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#2563eb",
+  },
+  suggestionSubtext: {
+    fontSize: 12,
+    color: "#2563eb",
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  suggestionAcceptBtn: {
+    backgroundColor: "#2563eb",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginLeft: 10,
+  },
+  suggestionAcceptText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
