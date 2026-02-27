@@ -128,7 +128,8 @@ const links = [
     },
     fetch(url, options) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15_000);
+      // Longer timeout for large payloads (e.g. receipt photo processing)
+      const timer = setTimeout(() => controller.abort(), 90_000);
       return fetch(url, { ...options, signal: controller.signal }).finally(() =>
         clearTimeout(timer)
       );

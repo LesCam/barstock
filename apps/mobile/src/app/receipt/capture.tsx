@@ -49,7 +49,7 @@ export default function ReceiptCaptureScreen() {
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
-        quality: 0.7,
+        quality: 0.4,
         base64: true,
       });
 

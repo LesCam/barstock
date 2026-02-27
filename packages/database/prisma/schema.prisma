@@ -1331,6 +1331,7 @@ model ReceiptLine {
   unitPriceRaw       Decimal? @map("unit_price_raw")
   totalPriceRaw      Decimal? @map("total_price_raw")
   unitSizeRaw        String?  @map("unit_size_raw")
+  productCodeRaw     String?  @map("product_code_raw")
   inventoryItemId    String?  @map("inventory_item_id") @db.Uuid
   matchConfidence    Decimal? @map("match_confidence") @db.Decimal(3, 2)
   matchSource        String?  @map("match_source")

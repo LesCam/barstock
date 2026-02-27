@@ -13,6 +13,7 @@ interface ExtractionLineItem {
   unitPrice: number | null;
   totalPrice: number | null;
   unitSize: string | null;
+  productCode: string | null;
 }
 
 interface ExtractionResult {
@@ -29,6 +30,7 @@ interface MatchedLine {
   unitPriceRaw: number | null;
   totalPriceRaw: number | null;
   unitSizeRaw: string | null;
+  productCodeRaw: string | null;
   inventoryItemId: string | null;
   inventoryItemName: string | null;
   matchConfidence: number | null;
@@ -164,6 +166,7 @@ export class ReceiptService {
           unitPriceRaw: line.unitPriceRaw != null ? new Prisma.Decimal(line.unitPriceRaw) : null,
           totalPriceRaw: line.totalPriceRaw != null ? new Prisma.Decimal(line.totalPriceRaw) : null,
           unitSizeRaw: line.unitSizeRaw,
+          productCodeRaw: line.productCodeRaw,
           inventoryItemId: line.inventoryItemId,
           matchConfidence: line.matchConfidence != null ? new Prisma.Decimal(line.matchConfidence) : null,
           matchSource: line.matchSource,
@@ -211,7 +214,8 @@ Return this exact JSON structure:
       "quantity": number or null,
       "unitPrice": number or null,
       "totalPrice": number or null,
-      "unitSize": "e.g. 750ml, 1L, 24pk — or null"
+      "unitSize": "e.g. 750ml, 1L, 24pk — or null",
+      "productCode": "vendor's internal product/shelf code — or null"
     }
   ]
 }
@@ -222,7 +226,8 @@ Rules:
 - Prices should be decimal numbers, not strings (e.g. 29.99 not "$29.99")
 - If quantity is not specified, use 1
 - invoiceDate must be YYYY-MM-DD format
-- Do not invent data that isn't on the receipt`;
+- Do not invent data that isn't on the receipt
+- If there is a product code, SKU, or shelf number for each item, extract it into productCode`;
 
     const contextLines: string[] = [];
     if (vendorNames.length > 0) {
@@ -242,7 +247,8 @@ Rules:
       model: "gemini-2.5-flash",
       systemInstruction: systemPrompt,
       generationConfig: {
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
+        responseMimeType: "application/json",
       },
     });
 
@@ -265,8 +271,7 @@ Rules:
       throw new Error("No text response from Gemini Vision");
     }
 
-    // Strip markdown fences if Gemini wraps them
-    const cleaned = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+    const cleaned = text.trim();
     const parsed = JSON.parse(cleaned) as ExtractionResult;
 
     // Validate basic structure
@@ -323,6 +328,7 @@ Rules:
           unitPriceRaw: line.unitPrice,
           totalPriceRaw: line.totalPrice,
           unitSizeRaw: line.unitSize,
+          productCodeRaw: line.productCode ?? null,
           inventoryItemId: alias.inventoryItemId,
           inventoryItemName: matchedItem?.name ?? null,
           matchConfidence: alias.confidence,
@@ -340,6 +346,7 @@ Rules:
           unitPriceRaw: line.unitPrice,
           totalPriceRaw: line.totalPrice,
           unitSizeRaw: line.unitSize,
+          productCodeRaw: line.productCode ?? null,
           inventoryItemId: fuzzy.item.id,
           inventoryItemName: fuzzy.item.name,
           matchConfidence: Math.round(fuzzy.score * 100) / 100,
@@ -355,6 +362,7 @@ Rules:
         unitPriceRaw: line.unitPrice,
         totalPriceRaw: line.totalPrice,
         unitSizeRaw: line.unitSize,
+        productCodeRaw: line.productCode ?? null,
         inventoryItemId: null,
         inventoryItemName: null,
         matchConfidence: null,
@@ -452,6 +460,35 @@ Rules:
             },
           });
           priceHistoryIds.push(ph.id);
+        }
+      }
+
+      // Auto-link vendor to items via ItemVendor
+      if (vendorId) {
+        for (const line of lines) {
+          if (line.skipped || !line.inventoryItemId) continue;
+          // Fetch the receipt line to get product code
+          const rl = await tx.receiptLine.findUnique({
+            where: { id: line.receiptLineId },
+            select: { productCodeRaw: true },
+          });
+          await tx.itemVendor.upsert({
+            where: {
+              inventoryItemId_vendorId: {
+                inventoryItemId: line.inventoryItemId,
+                vendorId,
+              },
+            },
+            create: {
+              inventoryItemId: line.inventoryItemId,
+              vendorId,
+              vendorSku: rl?.productCodeRaw ?? null,
+            },
+            update: {
+              // Update SKU if we have one and it's not already set
+              ...(rl?.productCodeRaw ? { vendorSku: rl.productCodeRaw } : {}),
+            },
+          });
         }
       }
 

@@ -3,6 +3,10 @@ import { appRouter, createContext } from "@barstock/api";
 import { auth } from "@/lib/auth";
 import type { UserPayload } from "@barstock/api";
 
+// Allow large payloads (receipt photos) and longer processing time
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 const handler = async (req: Request) => {
   const session = await auth();
   let user: UserPayload | null = null;
