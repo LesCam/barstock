@@ -1,5 +1,6 @@
 import { router, protectedProcedure, requireRole } from "../trpc";
 import { DepletionEngine } from "../services/depletion.service";
+import { SettingsService } from "../services/settings.service";
 import { depletionRequestSchema } from "@barstock/validators";
 import { z } from "zod";
 import { UOM } from "@barstock/types";
@@ -40,7 +41,9 @@ export const eventsRouter = router({
     .use(requireRole("manager"))
     .input(depletionRequestSchema)
     .mutation(async ({ ctx, input }) => {
-      const engine = new DepletionEngine(ctx.prisma);
+      const loc = await ctx.prisma.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { businessId: true } });
+      const settings = await new SettingsService(ctx.prisma).getSettings(loc.businessId);
+      const engine = new DepletionEngine(ctx.prisma, settings.adaptiveDepletion);
       return engine.processSalesLines(input.locationId, input.fromTs, input.toTs);
     }),
 

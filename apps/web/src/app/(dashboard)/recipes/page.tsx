@@ -49,11 +49,16 @@ function toEndOfDay(dateStr: string, eodTime: string): Date {
   return d;
 }
 
-function RecipeAutoLearning({ recipeId }: { recipeId: string }) {
+function RecipeAutoLearning({ recipeId, businessId }: { recipeId: string; businessId?: string }) {
   const { data: trend, isLoading } = trpc.recipes.recipeTrend.useQuery(
     { recipeId },
     { enabled: !!recipeId }
   );
+  const { data: settings } = trpc.settings.get.useQuery(
+    { businessId: businessId! },
+    { enabled: !!businessId }
+  );
+  const adaptive = (settings as any)?.adaptiveDepletion ?? { enabled: false, minSnapshots: 3 };
 
   if (isLoading) {
     return (
@@ -76,9 +81,21 @@ function RecipeAutoLearning({ recipeId }: { recipeId: string }) {
 
   return (
     <div className="mt-4 border-t border-white/10 pt-4">
-      <h4 className="mb-3 text-sm font-semibold text-[#EAF0FF]/80">
-        Auto-Learning ({trend.snapshotCount} snapshot{trend.snapshotCount !== 1 ? "s" : ""})
-      </h4>
+      <div className="mb-3 flex items-center gap-2">
+        <h4 className="text-sm font-semibold text-[#EAF0FF]/80">
+          Auto-Learning ({trend.snapshotCount} snapshot{trend.snapshotCount !== 1 ? "s" : ""})
+        </h4>
+        {adaptive.enabled && trend.snapshotCount >= adaptive.minSnapshots && (
+          <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
+            Adaptive active
+          </span>
+        )}
+        {adaptive.enabled && trend.snapshotCount < adaptive.minSnapshots && (
+          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+            Learning ({trend.snapshotCount}/{adaptive.minSnapshots})
+          </span>
+        )}
+      </div>
       <div className="space-y-4">
         {trend.ingredients.map((ing) => {
           const badge =
@@ -116,6 +133,15 @@ function RecipeAutoLearning({ recipeId }: { recipeId: string }) {
                 }`}>
                   {ing.trend === "improving" ? "\u2191 improving" : ing.trend === "worsening" ? "\u2193 worsening" : "\u2192 stable"}
                 </span>
+                {adaptive.enabled && (
+                  <span className={`text-xs ${
+                    ing.history.length >= adaptive.minSnapshots
+                      ? "text-green-400/70"
+                      : "text-[#EAF0FF]/30"
+                  }`}>
+                    {ing.history.length >= adaptive.minSnapshots ? "applied" : "learning"}
+                  </span>
+                )}
               </div>
               <div className="mb-2 flex items-center gap-4 text-xs text-[#EAF0FF]/60">
                 <span>Recipe: {ing.recipeQuantity} per serving</span>
@@ -1034,7 +1060,7 @@ export default function RecipesPage() {
                                 </button>
                               </div>
                               {/* Auto-Learning Section */}
-                              <RecipeAutoLearning recipeId={recipe.id} />
+                              <RecipeAutoLearning recipeId={recipe.id} businessId={businessId} />
                             </div>
                           )}
                         </div>

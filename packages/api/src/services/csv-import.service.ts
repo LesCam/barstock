@@ -16,6 +16,7 @@ import {
   REQUIRED_CANONICAL_FIELDS,
 } from "../adapters/csv-templates";
 import { DepletionEngine, type DepletionStats } from "./depletion.service";
+import { SettingsService } from "./settings.service";
 
 export interface ParseError {
   row: number;
@@ -265,7 +266,9 @@ export class CSVImportService {
     // Run depletion if requested
     let depletionStats: DepletionStats | null = null;
     if (runDepletion && insertedCount > 0 && businessDateMin && businessDateMax) {
-      const engine = new DepletionEngine(this.prisma);
+      const loc = await this.prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { businessId: true } });
+      const settings = await new SettingsService(this.prisma).getSettings(loc.businessId);
+      const engine = new DepletionEngine(this.prisma, settings.adaptiveDepletion);
       // Extend range by 1 day on each side to cover timezone edge cases
       const fromTs = new Date(businessDateMin);
       fromTs.setDate(fromTs.getDate() - 1);

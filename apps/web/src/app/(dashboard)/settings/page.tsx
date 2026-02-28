@@ -69,6 +69,7 @@ export default function SettingsPage() {
       <AutoLockPolicySection businessId={businessId} canEdit={canEdit} />
       <AlertRulesSection businessId={businessId} canEdit={canEdit} />
       <VerificationSettingsSection businessId={businessId} canEdit={canEdit} />
+      <AdaptiveDepletionSection businessId={businessId} canEdit={canEdit} />
       <BenchmarkingSection businessId={businessId} canEdit={canEdit} />
       <ProductDataSharingSection businessId={businessId} canEdit={canEdit} />
       {locationId && <ScaleProfilesSection locationId={locationId} canEdit={canEdit} />}
@@ -1224,6 +1225,105 @@ function VerificationSettingsSection({ businessId, canEdit }: { businessId: stri
             className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
           />
           <span className="text-xs text-[#EAF0FF]/40">%</span>
+        </div>
+      </div>
+
+      {updateMutation.error && (
+        <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
+      )}
+    </div>
+  );
+}
+
+function AdaptiveDepletionSection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {
+  const { data: settings } = trpc.settings.get.useQuery({ businessId });
+  const utils = trpc.useUtils();
+
+  const updateMutation = trpc.settings.update.useMutation({
+    onSuccess: () => utils.settings.get.invalidate({ businessId }),
+  });
+
+  const adaptive = (settings as any)?.adaptiveDepletion ?? { enabled: false, minSnapshots: 3, ratioFloor: 0.5, ratioCeiling: 2.0 };
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <h2 className="mb-4 text-lg font-semibold">Adaptive Recipe Depletion</h2>
+      <p className="mb-4 text-sm text-[#EAF0FF]/60">
+        Adjust recipe depletion quantities using learned pour ratios from counting sessions.
+      </p>
+
+      <div className="space-y-4">
+        <label className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={adaptive.enabled}
+            disabled={!canEdit}
+            onChange={(e) =>
+              updateMutation.mutate({
+                businessId,
+                adaptiveDepletion: { enabled: e.target.checked },
+              })
+            }
+            className="h-4 w-4 rounded border-white/20 bg-[#0B1623]"
+          />
+          <span className="text-sm text-[#EAF0FF]">Enable adaptive recipe depletion</span>
+        </label>
+
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-[#EAF0FF]/60">Minimum sessions</label>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={adaptive.minSnapshots}
+            disabled={!canEdit}
+            onChange={(e) =>
+              updateMutation.mutate({
+                businessId,
+                adaptiveDepletion: { minSnapshots: Number(e.target.value) },
+              })
+            }
+            className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
+          />
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-[#EAF0FF]/60">Ratio floor</label>
+            <input
+              type="number"
+              min={0.1}
+              max={1.0}
+              step={0.1}
+              value={adaptive.ratioFloor}
+              disabled={!canEdit}
+              onChange={(e) =>
+                updateMutation.mutate({
+                  businessId,
+                  adaptiveDepletion: { ratioFloor: Number(e.target.value) },
+                })
+              }
+              className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-[#EAF0FF]/60">Ratio ceiling</label>
+            <input
+              type="number"
+              min={1.0}
+              max={5.0}
+              step={0.1}
+              value={adaptive.ratioCeiling}
+              disabled={!canEdit}
+              onChange={(e) =>
+                updateMutation.mutate({
+                  businessId,
+                  adaptiveDepletion: { ratioCeiling: Number(e.target.value) },
+                })
+              }
+              className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
+            />
+          </div>
         </div>
       </div>
 

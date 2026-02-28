@@ -1,5 +1,5 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
-import type { CapabilityToggles, AutoLockPolicy, AlertRules, SubscriptionOverrides, VerificationSettings } from "@barstock/validators";
+import type { CapabilityToggles, AutoLockPolicy, AlertRules, SubscriptionOverrides, VerificationSettings, AdaptiveDepletionSettings } from "@barstock/validators";
 
 export interface BenchmarkingSettings {
   optedIn: boolean;
@@ -21,6 +21,7 @@ export interface BusinessSettingsData {
   masterProductSharing: MasterProductSharingSettings;
   subscriptionOverrides?: SubscriptionOverrides;
   verification: VerificationSettings;
+  adaptiveDepletion: AdaptiveDepletionSettings;
 }
 
 export const DEFAULT_SETTINGS: BusinessSettingsData = {
@@ -73,6 +74,12 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     autoFlagEnabled: false,
     verificationThreshold: 10,
   },
+  adaptiveDepletion: {
+    enabled: false,
+    minSnapshots: 3,
+    ratioFloor: 0.5,
+    ratioCeiling: 2.0,
+  },
 };
 
 export class SettingsService {
@@ -114,6 +121,10 @@ export class SettingsService {
         ...DEFAULT_SETTINGS.verification,
         ...stored.verification,
       },
+      adaptiveDepletion: {
+        ...DEFAULT_SETTINGS.adaptiveDepletion,
+        ...stored.adaptiveDepletion,
+      },
     };
   }
 
@@ -129,6 +140,7 @@ export class SettingsService {
       masterProductSharing?: Partial<MasterProductSharingSettings>;
       subscriptionOverrides?: SubscriptionOverrides;
       verification?: Partial<VerificationSettings>;
+      adaptiveDepletion?: Partial<AdaptiveDepletionSettings>;
     }
   ): Promise<BusinessSettingsData> {
     const current = await this.getSettings(businessId);
@@ -159,6 +171,10 @@ export class SettingsService {
       verification: {
         ...current.verification,
         ...patch.verification,
+      },
+      adaptiveDepletion: {
+        ...current.adaptiveDepletion,
+        ...patch.adaptiveDepletion,
       },
     };
 

@@ -297,6 +297,53 @@ export class RecipeLearningService {
   }
 
   /**
+   * Get adaptive depletion ratios for a recipe.
+   * Returns Map<inventoryItemId, ewmaRatio> for ingredients that meet threshold.
+   */
+  async getAdaptiveRatios(
+    recipeId: string,
+    minSnapshots: number,
+    ratioFloor: number,
+    ratioCeiling: number
+  ): Promise<Map<string, number>> {
+    const snapshots = await this.prisma.recipeRatioSnapshot.findMany({
+      where: { recipeId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // Group by ingredient
+    const byIngredient = new Map<string, number[]>();
+    for (const snap of snapshots) {
+      const key = snap.inventoryItemId;
+      if (!byIngredient.has(key)) byIngredient.set(key, []);
+      byIngredient.get(key)!.push(Number(snap.ratio));
+    }
+
+    const result = new Map<string, number>();
+
+    for (const [itemId, ratios] of byIngredient) {
+      if (ratios.length < minSnapshots) continue;
+
+      // Compute EWMA (ratios already ordered most recent first)
+      let weightedSum = 0;
+      let totalWeight = 0;
+      for (let i = 0; i < ratios.length; i++) {
+        const weight = EXP_WEIGHTS[i] ?? EXP_WEIGHTS[EXP_WEIGHTS.length - 1];
+        weightedSum += ratios[i] * weight;
+        totalWeight += weight;
+      }
+      const ewma = totalWeight > 0 ? weightedSum / totalWeight : 1;
+
+      // Only include if within bounds
+      if (ewma >= ratioFloor && ewma <= ratioCeiling) {
+        result.set(itemId, ewma);
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Get snapshot history for a recipe.
    */
   async getSnapshotHistory(recipeId: string, limit = 20) {

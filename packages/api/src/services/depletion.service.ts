@@ -13,6 +13,14 @@
 
 import { Prisma, UomT } from "@prisma/client";
 import type { ExtendedPrismaClient } from "@barstock/database";
+import { RecipeLearningService } from "./recipe-learning.service";
+
+export interface AdaptiveDepletionConfig {
+  enabled: boolean;
+  minSnapshots: number;
+  ratioFloor: number;
+  ratioCeiling: number;
+}
 
 export interface DepletionStats {
   processed: number;
@@ -22,7 +30,27 @@ export interface DepletionStats {
 }
 
 export class DepletionEngine {
-  constructor(private prisma: ExtendedPrismaClient) {}
+  private adaptiveConfig: AdaptiveDepletionConfig | null;
+  private recipeLearning: RecipeLearningService;
+  private ratioCache = new Map<string, Map<string, number>>();
+
+  constructor(private prisma: ExtendedPrismaClient, adaptiveConfig?: AdaptiveDepletionConfig) {
+    this.adaptiveConfig = adaptiveConfig?.enabled ? adaptiveConfig : null;
+    this.recipeLearning = new RecipeLearningService(prisma);
+  }
+
+  private async getAdaptiveRatiosForRecipe(recipeId: string): Promise<Map<string, number>> {
+    if (!this.adaptiveConfig) return new Map();
+    if (this.ratioCache.has(recipeId)) return this.ratioCache.get(recipeId)!;
+    const ratios = await this.recipeLearning.getAdaptiveRatios(
+      recipeId,
+      this.adaptiveConfig.minSnapshots,
+      this.adaptiveConfig.ratioFloor,
+      this.adaptiveConfig.ratioCeiling
+    );
+    this.ratioCache.set(recipeId, ratios);
+    return ratios;
+  }
 
   /**
    * Process all sales lines in a time window
@@ -220,21 +248,33 @@ export class DepletionEngine {
     const recipe = mapping.recipe;
     if (!recipe || !recipe.ingredients?.length) return 0;
 
-    const events = recipe.ingredients.map((ing: any) => ({
-      locationId: salesLine.locationId,
-      eventType: "pos_sale" as const,
-      sourceSystem: salesLine.sourceSystem,
-      eventTs: salesLine.soldAt,
-      inventoryItemId: ing.inventoryItemId,
-      receiptId: salesLine.receiptId,
-      salesLineId: salesLine.id,
-      quantityDelta: new Prisma.Decimal(
-        -Number(ing.quantity) * Number(salesLine.quantity)
-      ),
-      uom: ing.uom,
-      confidenceLevel: "theoretical" as const,
-      notes: `Recipe sale: ${salesLine.posItemName} (${recipe.name})`,
-    }));
+    const adaptiveRatios = await this.getAdaptiveRatiosForRecipe(recipe.id);
+
+    const events = recipe.ingredients.map((ing: any) => {
+      const ratio = adaptiveRatios.get(ing.inventoryItemId);
+      const baseQty = Number(ing.quantity);
+      const adjustedQty = ratio != null ? baseQty * ratio : baseQty;
+      const isAdapted = ratio != null;
+
+      let notes = `Recipe sale: ${salesLine.posItemName} (${recipe.name})`;
+      if (isAdapted) notes += ` (adapted: ×${ratio!.toFixed(2)})`;
+
+      return {
+        locationId: salesLine.locationId,
+        eventType: "pos_sale" as const,
+        sourceSystem: salesLine.sourceSystem,
+        eventTs: salesLine.soldAt,
+        inventoryItemId: ing.inventoryItemId,
+        receiptId: salesLine.receiptId,
+        salesLineId: salesLine.id,
+        quantityDelta: new Prisma.Decimal(
+          -adjustedQty * Number(salesLine.quantity)
+        ),
+        uom: ing.uom,
+        confidenceLevel: isAdapted ? "estimated" as const : "theoretical" as const,
+        notes,
+      };
+    });
 
     await this.prisma.consumptionEvent.createMany({ data: events });
     return events.length;
@@ -253,21 +293,33 @@ export class DepletionEngine {
       const recipe = mapping.recipe;
       if (!recipe || !recipe.ingredients?.length) return 0;
 
-      const events = recipe.ingredients.map((ing: any) => ({
-        locationId: salesLine.locationId,
-        eventType: "pos_sale" as const,
-        sourceSystem: salesLine.sourceSystem,
-        eventTs: salesLine.soldAt,
-        inventoryItemId: ing.inventoryItemId,
-        receiptId: salesLine.receiptId,
-        salesLineId: salesLine.id,
-        quantityDelta: new Prisma.Decimal(
-          Number(ing.quantity) * Number(salesLine.quantity)
-        ),
-        uom: ing.uom,
-        confidenceLevel: "theoretical" as const,
-        notes: `Void/Refund reversal: ${salesLine.posItemName} (${recipe.name})`,
-      }));
+      const adaptiveRatios = await this.getAdaptiveRatiosForRecipe(recipe.id);
+
+      const events = recipe.ingredients.map((ing: any) => {
+        const ratio = adaptiveRatios.get(ing.inventoryItemId);
+        const baseQty = Number(ing.quantity);
+        const adjustedQty = ratio != null ? baseQty * ratio : baseQty;
+        const isAdapted = ratio != null;
+
+        let notes = `Void/Refund reversal: ${salesLine.posItemName} (${recipe.name})`;
+        if (isAdapted) notes += ` (adapted: ×${ratio!.toFixed(2)})`;
+
+        return {
+          locationId: salesLine.locationId,
+          eventType: "pos_sale" as const,
+          sourceSystem: salesLine.sourceSystem,
+          eventTs: salesLine.soldAt,
+          inventoryItemId: ing.inventoryItemId,
+          receiptId: salesLine.receiptId,
+          salesLineId: salesLine.id,
+          quantityDelta: new Prisma.Decimal(
+            adjustedQty * Number(salesLine.quantity)
+          ),
+          uom: ing.uom,
+          confidenceLevel: isAdapted ? "estimated" as const : "theoretical" as const,
+          notes,
+        };
+      });
 
       await this.prisma.consumptionEvent.createMany({ data: events });
       return events.length;

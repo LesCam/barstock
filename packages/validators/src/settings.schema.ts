@@ -78,6 +78,14 @@ export const verificationSettingsSchema = z.object({
 
 export type VerificationSettings = z.infer<typeof verificationSettingsSchema>;
 
+export const adaptiveDepletionSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  minSnapshots: z.number().int().min(1).max(20).default(3),
+  ratioFloor: z.number().min(0.1).max(1.0).default(0.5),
+  ratioCeiling: z.number().min(1.0).max(5.0).default(2.0),
+});
+export type AdaptiveDepletionSettings = z.infer<typeof adaptiveDepletionSettingsSchema>;
+
 export const settingsUpdateSchema = z.object({
   businessId: z.string().uuid(),
   capabilities: capabilityTogglesSchema.partial().optional(),
@@ -89,6 +97,7 @@ export const settingsUpdateSchema = z.object({
   masterProductSharing: masterProductSharingSchema.partial().optional(),
   subscriptionOverrides: subscriptionOverridesSchema.optional(),
   verification: verificationSettingsSchema.partial().optional(),
+  adaptiveDepletion: adaptiveDepletionSettingsSchema.partial().optional(),
 });
 
 export const settingsGetSchema = z.object({

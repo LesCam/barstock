@@ -3,6 +3,7 @@ import { posConnectionCreateSchema, posConnectionUpdateSchema, salesLineCreateSc
 import { z } from "zod";
 import { CSVImportService } from "../services/csv-import.service";
 import { DepletionEngine } from "../services/depletion.service";
+import { SettingsService } from "../services/settings.service";
 import { AuditService } from "../services/audit.service";
 
 export const posRouter = router({
@@ -162,7 +163,9 @@ export const posRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const engine = new DepletionEngine(ctx.prisma);
+      const loc = await ctx.prisma.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { businessId: true } });
+      const settings = await new SettingsService(ctx.prisma).getSettings(loc.businessId);
+      const engine = new DepletionEngine(ctx.prisma, settings.adaptiveDepletion);
       const toTs = new Date();
       const fromTs = new Date(toTs.getTime() - input.hoursBack * 60 * 60 * 1000);
 
