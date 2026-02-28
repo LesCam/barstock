@@ -139,6 +139,21 @@ function isNotFoundError(err: unknown): boolean {
   return false;
 }
 
+function isConflictError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    if (msg.includes("conflict")) return true;
+    // tRPC wraps errors with JSON shape { type: "CONFLICT" }
+    try {
+      const parsed = JSON.parse(err.message);
+      if (parsed?.type === "CONFLICT") return true;
+    } catch {
+      // not JSON, ignore
+    }
+  }
+  return false;
+}
+
 const BACKOFF_DELAYS = [1000, 3000, 9000];
 
 /**
@@ -204,6 +219,9 @@ export async function processQueue(
         }
         sessionClosed = true;
         break; // stop processing
+      } else if (isConflictError(err)) {
+        // Server wins — discard stale offline mutation silently
+        toRemove.push(entry.id);
       } else if (isNotFoundError(err)) {
         entry.status = "failed";
         entry.error = (err as Error).message;

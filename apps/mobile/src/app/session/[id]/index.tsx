@@ -17,7 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { VoiceButton } from "@/components/VoiceButton";
 import { useCountingPreferences } from "@/lib/counting-preferences";
 import { useNetwork } from "@/lib/network-context";
-import { subscribe, type QueueEntry } from "@/lib/offline-queue";
+import { subscribe, enqueue, type QueueEntry } from "@/lib/offline-queue";
 import { useSessionSSE, type SSEEvent } from "@/lib/use-session-sse";
 import { VarianceReasonModal } from "@/components/VarianceReasonModal";
 import { SessionActivityFeed, type ActivityEvent } from "@/components/SessionActivityFeed";
@@ -59,6 +59,21 @@ export default function SessionDetailScreen() {
   }, []);
   const pendingTempIds = useMemo(
     () => new Set(offlineQueue.filter((e) => e.status !== "failed" && e.tempId).map((e) => e.tempId!)),
+    [offlineQueue],
+  );
+
+  // Track lines with pending update/delete mutations for syncing indicators
+  const pendingUpdateLineIds = useMemo(
+    () =>
+      new Set(
+        offlineQueue
+          .filter(
+            (e) =>
+              (e.status === "pending" || e.status === "syncing") &&
+              (e.mutation === "sessions.updateLine" || e.mutation === "sessions.deleteLine"),
+          )
+          .map((e) => (e.input as any).id as string),
+      ),
     [offlineQueue],
   );
 
@@ -679,9 +694,25 @@ export default function SessionDetailScreen() {
       Alert.alert("Offline", "Cannot close session while offline. Please reconnect first.");
       return;
     }
-    const pendingForSession = offlineQueue.filter(
-      (e) => e.status === "pending" && (e.input as any).sessionId === id,
-    );
+    const sessionLineIds = new Set(session?.lines.map((l: any) => l.id) ?? []);
+    const pendingForSession = offlineQueue.filter((e) => {
+      if (e.status !== "pending" && e.status !== "syncing") return false;
+      // addLine / updateLine have sessionId directly
+      if ((e.input as any).sessionId === id) return true;
+      // deleteLine uses line id — check if that line belongs to this session
+      if (
+        e.mutation === "sessions.deleteLine" &&
+        sessionLineIds.has((e.input as any).id)
+      )
+        return true;
+      // updateLine by id (sub-area changes)
+      if (
+        e.mutation === "sessions.updateLine" &&
+        sessionLineIds.has((e.input as any).id)
+      )
+        return true;
+      return false;
+    });
     if (pendingForSession.length > 0) {
       Alert.alert(
         "Pending Items",
@@ -775,7 +806,22 @@ export default function SessionDetailScreen() {
     const expectedUpdatedAt = line?.updatedAt
       ? new Date(line.updatedAt).toISOString()
       : undefined;
-    updateLine.mutate({ id: lineId, countUnits: val, expectedUpdatedAt });
+
+    if (!isOnline) {
+      enqueue("sessions.updateLine", { id: lineId, countUnits: val, expectedUpdatedAt });
+      // Optimistic cache update
+      utils.sessions.getById.setData({ id: id! }, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          lines: old.lines.map((l: any) =>
+            l.id === lineId ? { ...l, countUnits: val } : l,
+          ),
+        };
+      });
+    } else {
+      updateLine.mutate({ id: lineId, countUnits: val, expectedUpdatedAt });
+    }
     setEditingLineId(null);
     setEditingQty("");
   }
@@ -786,7 +832,21 @@ export default function SessionDetailScreen() {
       {
         text: "Remove",
         style: "destructive",
-        onPress: () => deleteLine.mutate({ id: lineId }),
+        onPress: () => {
+          if (!isOnline) {
+            enqueue("sessions.deleteLine", { id: lineId });
+            // Optimistic cache removal
+            utils.sessions.getById.setData({ id: id! }, (old: any) => {
+              if (!old) return old;
+              return {
+                ...old,
+                lines: old.lines.filter((l: any) => l.id !== lineId),
+              };
+            });
+          } else {
+            deleteLine.mutate({ id: lineId });
+          }
+        },
       },
     ]);
   }
@@ -1400,9 +1460,9 @@ export default function SessionDetailScreen() {
                           <Text style={styles.reviewItemName}>
                             {line.inventoryItem?.name ?? "Unknown"}
                           </Text>
-                          {(line as any)._pendingSync && pendingTempIds.has(line.id) && (
+                          {((line as any)._pendingSync && pendingTempIds.has(line.id)) || pendingUpdateLineIds.has(line.id) ? (
                             <Text style={styles.pendingSyncIcon}> syncing</Text>
-                          )}
+                          ) : null}
                         </View>
                         <TouchableOpacity
                           onPress={() => {
@@ -1421,7 +1481,23 @@ export default function SessionDetailScreen() {
                                   text: sa.label + (sa.id === line.subArea?.id ? " ✓" : ""),
                                   onPress: () => {
                                     if (sa.id !== line.subArea?.id) {
-                                      updateLine.mutate({ id: line.id, subAreaId: sa.id });
+                                      if (!isOnline) {
+                                        enqueue("sessions.updateLine", { id: line.id, subAreaId: sa.id });
+                                        // Optimistic cache update for sub-area change
+                                        utils.sessions.getById.setData({ id: id! }, (old: any) => {
+                                          if (!old) return old;
+                                          return {
+                                            ...old,
+                                            lines: old.lines.map((l: any) =>
+                                              l.id === line.id
+                                                ? { ...l, subArea: { ...l.subArea, id: sa.id, name: sa.label.split(" — ").pop() } }
+                                                : l,
+                                            ),
+                                          };
+                                        });
+                                      } else {
+                                        updateLine.mutate({ id: line.id, subAreaId: sa.id });
+                                      }
                                     }
                                   },
                                 })),
@@ -1473,15 +1549,18 @@ export default function SessionDetailScreen() {
                         <View style={styles.reviewActions}>
                           <TouchableOpacity
                             onPress={() => {
+                              // Disable edit on pending-add lines (server ID doesn't exist yet)
+                              if (pendingTempIds.has(line.id)) return;
                               setEditingLineId(line.id);
                               setEditingQty(String(line.countUnits ?? line.grossWeightGrams ?? 0));
                             }}
+                            disabled={pendingTempIds.has(line.id)}
                           >
-                            <Text style={styles.reviewQty}>
+                            <Text style={[styles.reviewQty, pendingTempIds.has(line.id) && { opacity: 0.5 }]}>
                               {formatLineValue(line)}
                             </Text>
                           </TouchableOpacity>
-                          {isOpen && !submitMode && (
+                          {isOpen && !submitMode && !pendingTempIds.has(line.id) && (
                             <TouchableOpacity
                               onPress={() =>
                                 handleDeleteLine(line.id, line.inventoryItem?.name ?? "item")
