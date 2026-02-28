@@ -3,45 +3,33 @@
  * Manages BLE connections to digital scales for bottle weighing.
  *
  * Uses react-native-ble-plx for BLE communication.
- * Supports scales that broadcast weight via BLE characteristic notifications.
+ * Supports scales via pluggable ScaleDriver strategy pattern:
+ * - Standard BLE Weight Scale (0x181D)
+ * - Skale 2 (custom protocol)
+ * - Bridge Adapter (ESP32 JSON-over-BLE)
  */
 
 import { Buffer } from "buffer";
 import { Platform, PermissionsAndroid } from "react-native";
 import { BleManager, type Device, type Subscription, State } from "react-native-ble-plx";
 import { getLastConnectedDevice, setLastConnectedDevice } from "./scale-mappings";
+import type { ScaleDriver } from "./scale-driver";
+import { ALL_DRIVERS } from "./drivers";
 
-export interface ScaleReading {
-  weightGrams: number;
-  stable: boolean;
-  deviceId: string;
-  deviceName: string;
-  timestamp: Date;
-}
+// Re-export types for backward compatibility — consumers keep importing from here
+export type { ScaleReading } from "./scale-driver";
+export type { ScaleType } from "./scale-driver";
 
-export type ScaleListener = (reading: ScaleReading) => void;
+export type ScaleListener = (reading: import("./scale-driver").ScaleReading) => void;
 
-// Standard BLE Weight Scale Service (0x181D)
-const STANDARD_WEIGHT_SERVICE_UUID = "0000181d-0000-1000-8000-00805f9b34fb";
-const STANDARD_WEIGHT_CHARACTERISTIC_UUID = "00002a9d-0000-1000-8000-00805f9b34fb";
-
-// Skale 2 custom UUIDs
-const SKALE_WEIGHT_CHARACTERISTIC_UUID = "0000ef81-0000-1000-8000-00805f9b34fb";
-const SKALE_COMMAND_CHARACTERISTIC_UUID = "0000ef80-0000-1000-8000-00805f9b34fb";
-// Skale 2 commands
-const SKALE_CMD_TARE = 0x10;
-const SKALE_CMD_UNIT_GRAMS = 0x03;
-const SKALE_CMD_DISPLAY_WEIGHT = 0xec;
-const SKALE_CMD_LED_ON = 0xed;
-const SKALE_CMD_LED_OFF = 0xee;
-
-// Standard BLE Battery Service
+// Standard BLE Battery Service (works for all devices including Bridge ESP32)
 const BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb";
 const BATTERY_LEVEL_CHARACTERISTIC_UUID = "00002a19-0000-1000-8000-00805f9b34fb";
 
-const KEEPALIVE_INTERVAL_MS = 30_000;
+// Bridge Adapter service UUID (for scan filtering)
+const BRIDGE_SERVICE_UUID = "42530001-4272-4964-6765-000000000001";
 
-type ScaleType = "standard" | "skale2";
+const KEEPALIVE_INTERVAL_MS = 30_000;
 
 let _manager: BleManager | null = null;
 
@@ -52,7 +40,7 @@ function getManager(): BleManager {
   return _manager;
 }
 
-/** Wait until the BLE adapter is powered on (up to 10 s). */
+/** Wait until the BLE adapter is powered on (up to 3 s). */
 function waitForPoweredOn(): Promise<void> {
   const manager = getManager();
   return new Promise((resolve, reject) => {
@@ -105,7 +93,7 @@ export class ScaleManager {
   private disconnectListeners: Set<DisconnectListener> = new Set();
   private connectedDeviceId: string | null = null;
   private connectedDevice: Device | null = null;
-  private scaleType: ScaleType | null = null;
+  private activeDriver: ScaleDriver | null = null;
   private monitorSubscription: Subscription | null = null;
   private batterySubscription: Subscription | null = null;
   private disconnectSubscription: Subscription | null = null;
@@ -116,7 +104,7 @@ export class ScaleManager {
 
   /**
    * Scan for nearby BLE scale devices (5 s).
-   * Filters to only show devices that advertise the standard weight service
+   * Filters to only show devices that advertise known scale services
    * or have a name matching known scale brands.
    */
   async scan(): Promise<Array<{ id: string; name: string }>> {
@@ -126,7 +114,10 @@ export class ScaleManager {
     const manager = getManager();
     const seen = new Map<string, { id: string; name: string }>();
 
-    const knownScaleNames = ["skale", "scale", "acaia", "decent", "felicita", "brewista"];
+    const knownScaleNames = [
+      "skale", "scale", "acaia", "decent", "felicita", "brewista",
+      "bridge", "barstock", "br-",
+    ];
 
     return new Promise((resolve) => {
       manager.startDeviceScan(null, null, (_error, device) => {
@@ -134,15 +125,17 @@ export class ScaleManager {
         const name = device.name ?? device.localName;
         if (!name || seen.has(device.id)) return;
 
-        // Check if device advertises the standard BLE weight service
+        // Check if device advertises a known scale service
         const services = (device.serviceUUIDs ?? []).map((s) => s.toLowerCase());
-        const hasWeightService = services.includes(STANDARD_WEIGHT_SERVICE_UUID);
+        const hasKnownService =
+          services.includes("0000181d-0000-1000-8000-00805f9b34fb") ||
+          services.includes(BRIDGE_SERVICE_UUID);
 
         // Check if name matches known scale brands
         const nameLower = name.toLowerCase();
         const hasScaleName = knownScaleNames.some((pattern) => nameLower.includes(pattern));
 
-        if (hasWeightService || hasScaleName) {
+        if (hasKnownService || hasScaleName) {
           seen.set(device.id, { id: device.id, name });
         }
       });
@@ -154,18 +147,19 @@ export class ScaleManager {
     });
   }
 
-  /** Detect whether this is a Skale 2 or standard BLE weight scale. */
-  private async detectScaleType(device: Device): Promise<ScaleType> {
-    const services = await device.services();
-    for (const service of services) {
-      const chars = await service.characteristics();
-      for (const char of chars) {
-        if (char.uuid.toLowerCase() === SKALE_WEIGHT_CHARACTERISTIC_UUID) {
-          return "skale2";
-        }
+  /** Select the best driver for a connected device based on confidence scoring. */
+  private async selectDriver(device: Device): Promise<ScaleDriver> {
+    let best: ScaleDriver | null = null;
+    let bestScore = 0;
+    for (const driver of ALL_DRIVERS) {
+      const score = await driver.canHandle(device);
+      if (score > bestScore) {
+        bestScore = score;
+        best = driver;
       }
     }
-    return "standard";
+    if (!best) throw new Error("No compatible scale driver found");
+    return best;
   }
 
   /**
@@ -180,8 +174,11 @@ export class ScaleManager {
 
     this.connectedDeviceId = deviceId;
     this.connectedDevice = device;
-    this.scaleType = await this.detectScaleType(device);
     this._intentionalDisconnect = false;
+
+    // Select and initialize the appropriate driver
+    this.activeDriver = await this.selectDriver(device);
+    await this.activeDriver.setup(device);
 
     // Persist for auto-reconnect
     setLastConnectedDevice(deviceId).catch(() => {});
@@ -191,13 +188,16 @@ export class ScaleManager {
       this.handleUnexpectedDisconnect();
     });
 
-    if (this.scaleType === "skale2") {
-      await this.sendSkaleCommand(device, SKALE_CMD_UNIT_GRAMS);
-      await this.sendSkaleCommand(device, SKALE_CMD_LED_ON);
-      this.monitorSkale2(device, deviceId);
+    // Start weight monitoring via driver
+    this.monitorSubscription = await this.activeDriver.startMonitoring(
+      device,
+      deviceId,
+      (reading) => this.listeners.forEach((l) => l(reading)),
+      () => this.handleUnexpectedDisconnect(),
+    );
+
+    if (this.activeDriver.needsKeepalive) {
       this.startKeepalive();
-    } else {
-      this.monitorStandard(device, deviceId);
     }
 
     // Attempt to read battery level (best-effort, non-blocking)
@@ -213,9 +213,10 @@ export class ScaleManager {
     this.batterySubscription = null;
     this.disconnectSubscription?.remove();
     this.disconnectSubscription = null;
+    this.activeDriver?.cleanup();
+    this.activeDriver = null;
     this.connectedDeviceId = null;
     this.connectedDevice = null;
-    this.scaleType = null;
     this._batteryLevel = null;
 
     if (this._intentionalDisconnect) {
@@ -247,84 +248,6 @@ export class ScaleManager {
       }
     };
     tryReconnect(0).catch(() => { this._reconnecting = false; });
-  }
-
-  private async monitorSkale2(device: Device, deviceId: string): Promise<void> {
-    // Find the service that contains the Skale weight characteristic
-    const services = await device.services();
-    let serviceUUID: string | null = null;
-    for (const service of services) {
-      const chars = await service.characteristics();
-      for (const char of chars) {
-        if (char.uuid.toLowerCase() === SKALE_WEIGHT_CHARACTERISTIC_UUID) {
-          serviceUUID = service.uuid;
-          break;
-        }
-      }
-      if (serviceUUID) break;
-    }
-
-    if (!serviceUUID) {
-      throw new Error("Could not find Skale 2 weight characteristic");
-    }
-
-    this.monitorSubscription = device.monitorCharacteristicForService(
-      serviceUUID,
-      SKALE_WEIGHT_CHARACTERISTIC_UUID,
-      (error, characteristic) => {
-        if (error) {
-          this.handleUnexpectedDisconnect();
-          return;
-        }
-        if (!characteristic?.value) return;
-
-        const buf = Buffer.from(characteristic.value, "base64");
-        if (buf.length < 3) return;
-
-        // Skale 2 format: byte 0 = flags, bytes 1-2 = weight as uint16 LE (tenths of grams)
-        const raw = buf.readUInt16LE(1);
-        const weightGrams = raw / 10.0;
-        const stable = buf[0] === 0x00;
-
-        const reading: ScaleReading = {
-          weightGrams: Math.max(0, weightGrams),
-          stable,
-          deviceId,
-          deviceName: device.name || "Skale 2",
-          timestamp: new Date(),
-        };
-
-        this.listeners.forEach((listener) => listener(reading));
-      }
-    );
-  }
-
-  private monitorStandard(device: Device, deviceId: string): void {
-    this.monitorSubscription = device.monitorCharacteristicForService(
-      STANDARD_WEIGHT_SERVICE_UUID,
-      STANDARD_WEIGHT_CHARACTERISTIC_UUID,
-      (error, characteristic) => {
-        if (error) {
-          this.handleUnexpectedDisconnect();
-          return;
-        }
-        if (!characteristic?.value) return;
-
-        const buf = Buffer.from(characteristic.value, "base64");
-        const weightGrams = buf.readUInt16LE(1) / 10;
-        const stable = (buf[0] & 0x01) === 0;
-
-        const reading: ScaleReading = {
-          weightGrams,
-          stable,
-          deviceId,
-          deviceName: device.name || "Scale",
-          timestamp: new Date(),
-        };
-
-        this.listeners.forEach((listener) => listener(reading));
-      }
-    );
   }
 
   /** Attempt to read and monitor battery level via standard BLE Battery Service. */
@@ -369,26 +292,11 @@ export class ScaleManager {
     }
   }
 
-  /** Send a command byte to the Skale 2. */
-  private async sendSkaleCommand(device: Device, command: number): Promise<void> {
-    const data = Buffer.from([command]).toString("base64");
-    const services = await device.services();
-    for (const service of services) {
-      const chars = await service.characteristics();
-      for (const char of chars) {
-        if (char.uuid.toLowerCase() === SKALE_COMMAND_CHARACTERISTIC_UUID) {
-          await char.writeWithoutResponse(data);
-          return;
-        }
-      }
-    }
-  }
-
   private startKeepalive(): void {
     this.stopKeepalive();
     this.keepaliveTimer = setInterval(() => {
-      if (this.connectedDevice && this.scaleType === "skale2") {
-        this.sendSkaleCommand(this.connectedDevice, SKALE_CMD_DISPLAY_WEIGHT).catch(() => {});
+      if (this.connectedDevice && this.activeDriver?.needsKeepalive) {
+        this.activeDriver.keepaliveTick(this.connectedDevice).catch(() => {});
       }
     }, KEEPALIVE_INTERVAL_MS);
   }
@@ -400,21 +308,10 @@ export class ScaleManager {
     }
   }
 
-  /** Tare (zero) the Skale 2. */
+  /** Tare (zero) the scale if the active driver supports it. */
   async tare(): Promise<void> {
-    if (this.connectedDevice && this.scaleType === "skale2") {
-      await this.sendSkaleCommand(this.connectedDevice, SKALE_CMD_TARE);
-    }
-  }
-
-  /** Flash the Skale 2 LED display (quick off/on blink). */
-  async flashLed(count = 1): Promise<void> {
-    if (!this.connectedDevice || this.scaleType !== "skale2") return;
-    for (let i = 0; i < count; i++) {
-      await this.sendSkaleCommand(this.connectedDevice, SKALE_CMD_LED_OFF);
-      await new Promise((r) => setTimeout(r, 100));
-      await this.sendSkaleCommand(this.connectedDevice, SKALE_CMD_LED_ON);
-      if (i < count - 1) await new Promise((r) => setTimeout(r, 100));
+    if (this.connectedDevice && this.activeDriver?.canTare) {
+      await this.activeDriver.tare(this.connectedDevice);
     }
   }
 
@@ -430,12 +327,13 @@ export class ScaleManager {
     this.batterySubscription = null;
     this.disconnectSubscription?.remove();
     this.disconnectSubscription = null;
+    this.activeDriver?.cleanup();
+    this.activeDriver = null;
 
     const manager = getManager();
     await manager.cancelDeviceConnection(this.connectedDeviceId);
     this.connectedDeviceId = null;
     this.connectedDevice = null;
-    this.scaleType = null;
     this._batteryLevel = null;
   }
 
@@ -470,7 +368,7 @@ export class ScaleManager {
   }
 
   get currentScaleType() {
-    return this.scaleType;
+    return this.activeDriver?.type ?? null;
   }
 
   get batteryLevel(): number | null {
