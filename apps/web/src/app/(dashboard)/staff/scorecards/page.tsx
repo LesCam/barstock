@@ -6,6 +6,8 @@ import { useLocation } from "@/components/location-context";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
+  ScatterChart, Scatter, ZAxis, ReferenceLine,
+  LineChart, Line,
 } from "recharts";
 
 const PIE_COLORS = ["#E9B44C", "#4CAF50", "#2196F3", "#FF5722", "#9C27B0", "#00BCD4", "#FF9800", "#607D8B"];
@@ -101,6 +103,26 @@ export default function StaffScorecardsPage() {
     return validSessions.reduce((sum: number, s: any) => sum + s.itemsPerHour, 0) / validSessions.length;
   }, [accountability]);
 
+  const scatterData = useMemo(() => {
+    if (!staff.length || !accountability?.sessions) return [];
+    return staff.map((s) => {
+      const userSessions = accountability.sessions.filter(
+        (sess: any) => sess.participants?.some((p: any) => p.userId === s.userId)
+      );
+      const validSessions = userSessions.filter((sess: any) => sess.itemsPerHour > 0);
+      const avgSpeed = validSessions.length > 0
+        ? validSessions.reduce((sum: number, sess: any) => sum + sess.itemsPerHour, 0) / validSessions.length
+        : 0;
+      return {
+        name: s.displayName,
+        x: Number(avgSpeed.toFixed(1)),
+        y: Number(s.accuracyRate.toFixed(1)),
+        z: s.sessionsCounted,
+        color: s.accuracyRate >= 95 ? "#4CAF50" : s.accuracyRate >= 85 ? "#E9B44C" : "#EF4444",
+      };
+    }).filter((d) => d.x > 0);
+  }, [staff, accountability]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -172,6 +194,67 @@ export default function StaffScorecardsPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Speed vs Quality Scatter Chart */}
+      {scatterData.length > 0 && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold">Speed vs Quality</h2>
+          <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+            <ResponsiveContainer width="100%" height={320}>
+              <ScatterChart margin={{ top: 10, right: 20, bottom: 40, left: 20 }}>
+                <XAxis
+                  dataKey="x"
+                  type="number"
+                  name="Items/Hr"
+                  tick={{ fill: "#EAF0FF80", fontSize: 11 }}
+                  label={{ value: "Avg Items/Hr", position: "bottom", offset: 20, fill: "#EAF0FF80", fontSize: 12 }}
+                />
+                <YAxis
+                  dataKey="y"
+                  type="number"
+                  name="Accuracy %"
+                  domain={[Math.min(70, ...scatterData.map((d) => d.y)) - 5, 100]}
+                  tick={{ fill: "#EAF0FF80", fontSize: 11 }}
+                  tickFormatter={(v) => `${v}%`}
+                  label={{ value: "Accuracy %", angle: -90, position: "insideLeft", fill: "#EAF0FF80", fontSize: 12 }}
+                />
+                <ZAxis dataKey="z" range={[60, 300]} name="Sessions" />
+                <Tooltip
+                  content={({ payload }) => {
+                    if (!payload || payload.length === 0) return null;
+                    const d = payload[0]?.payload as (typeof scatterData)[0];
+                    if (!d) return null;
+                    return (
+                      <div className="rounded border border-white/20 bg-[#0B1623] p-2 text-xs">
+                        <p className="font-medium text-[#EAF0FF]">{d.name}</p>
+                        <p className="text-[#EAF0FF]/60">Speed: {d.x} items/hr</p>
+                        <p className="text-[#EAF0FF]/60">Accuracy: {d.y}%</p>
+                        <p className="text-[#EAF0FF]/60">Sessions: {d.z}</p>
+                      </div>
+                    );
+                  }}
+                />
+                <ReferenceLine y={95} stroke="#4CAF50" strokeDasharray="4 4" opacity={0.6} />
+                {avgItemsPerHour > 0 && (
+                  <ReferenceLine x={Number(avgItemsPerHour.toFixed(1))} stroke="#EAF0FF40" strokeDasharray="4 4" />
+                )}
+                <Scatter data={scatterData}>
+                  {scatterData.map((entry, idx) => (
+                    <Cell key={idx} fill={entry.color} opacity={0.85} />
+                  ))}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+            <div className="mt-2 flex items-center justify-center gap-4 text-xs text-[#EAF0FF]/50">
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-[#4CAF50]" /> ≥95%</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-[#E9B44C]" /> 85–95%</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-[#EF4444]" /> &lt;85%</span>
+              <span className="text-[#EAF0FF]/30">|</span>
+              <span>Bubble size = session count</span>
+            </div>
           </div>
         </div>
       )}
@@ -324,6 +407,60 @@ export default function StaffScorecardsPage() {
               </div>
             </div>
           </div>
+
+          {/* Variance Rate Over Time */}
+          {accountability?.sessions && (() => {
+            const trendSessions = accountability.sessions
+              .filter((s: any) => s.participants?.some((p: any) => p.userId === expandedUserId))
+              .sort((a: any, b: any) => new Date(a.startedTs).getTime() - new Date(b.startedTs).getTime())
+              .map((s: any) => ({
+                date: new Date(s.startedTs).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                varianceRate: Number((s.varianceRate ?? 0).toFixed(1)),
+              }));
+            return trendSessions.length >= 2 ? (
+              <div>
+                <h4 className="mb-3 text-sm font-semibold text-[#EAF0FF]/80">Variance Rate Over Time</h4>
+                <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={trendSessions} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+                      <defs>
+                        <linearGradient id="greenZone" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#4CAF50" stopOpacity={0.1} />
+                          <stop offset="100%" stopColor="#4CAF50" stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="date" tick={{ fill: "#EAF0FF80", fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis
+                        tick={{ fill: "#EAF0FF80", fontSize: 11 }}
+                        tickFormatter={(v) => `${v}%`}
+                        axisLine={false}
+                        tickLine={false}
+                        domain={[0, (dataMax: number) => Math.max(25, Math.ceil(dataMax * 1.2))]}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                        formatter={(value) => [`${value}%`, "Variance Rate"]}
+                      />
+                      <ReferenceLine y={10} stroke="#4CAF50" strokeDasharray="3 3" opacity={0.5} />
+                      <ReferenceLine y={20} stroke="#EF4444" strokeDasharray="3 3" opacity={0.5} />
+                      <Line
+                        type="monotone"
+                        dataKey="varianceRate"
+                        stroke="#E9B44C"
+                        strokeWidth={2}
+                        dot={{ fill: "#E9B44C", r: 4 }}
+                        activeDot={{ r: 6, fill: "#E9B44C" }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div className="mt-2 flex items-center justify-center gap-4 text-xs text-[#EAF0FF]/50">
+                    <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 bg-[#4CAF50]" /> Good (&lt;10%)</span>
+                    <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 bg-[#EF4444]" /> High (&gt;20%)</span>
+                  </div>
+                </div>
+              </div>
+            ) : null;
+          })()}
 
           {/* Session History */}
           {accountability?.sessions && (

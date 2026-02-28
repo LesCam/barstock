@@ -1657,7 +1657,12 @@ export default function ReportsPage() {
           </div>
 
           {/* Staff accountability table */}
-          <h2 className="mb-3 text-lg font-semibold">Staff Accountability</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Staff Accountability</h2>
+            <a href="/staff/scorecards" className="text-sm font-medium text-[#E9B44C] hover:text-[#C8922E]">
+              View Scorecards &rarr;
+            </a>
+          </div>
           <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
