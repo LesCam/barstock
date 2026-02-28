@@ -1,0 +1,17 @@
+NOTICE — Subscription & Service Attribution
+
+All subscriptions and paid services used in the development of the Barstock
+software platform are paid for by T's Pub and used exclusively for Barstock
+software development.
+
+This includes, but is not limited to:
+
+  - Anthropic (Claude Code / Claude API) — AI-assisted development
+  - Google (Gemini API) — Receipt OCR and data extraction
+  - Vercel — Web application hosting and deployment
+  - PostgreSQL hosting / infrastructure
+  - Apple Developer Program — iOS app distribution
+  - Any other third-party API or SaaS subscriptions used in this project
+
+Owner: T's Pub
+Project: Barstock — Bar Inventory Management Platform
