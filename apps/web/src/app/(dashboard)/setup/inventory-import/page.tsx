@@ -7,6 +7,7 @@ import { trpc } from "@/lib/trpc";
 import Papa from "papaparse";
 import { UOM } from "@barstock/types";
 import { QRCodeSVG } from "qrcode.react";
+import { HelpLink } from "@/components/help-link";
 
 // ─── Column Mapping ──────────────────────────────────────
 
@@ -558,7 +559,10 @@ export default function InventoryImportPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Import Inventory</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Import Inventory</h1>
+          <HelpLink section="getting-started" tooltip="Learn about getting started" />
+        </div>
         <button
           onClick={handleDownloadTemplate}
           className="text-sm text-[#E9B44C] hover:text-[#E9B44C]/80"

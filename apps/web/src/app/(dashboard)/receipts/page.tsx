@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
+import { HelpLink } from "@/components/help-link";
 
 export default function ReceiptsPage() {
   const { data: session } = useSession();
@@ -33,7 +34,10 @@ export default function ReceiptsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Receipts</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Receipts</h1>
+          <HelpLink section="transfers" tooltip="Learn about receiving" />
+        </div>
         <p className="mt-1 text-sm text-[#EAF0FF]/60">
           Receipt scans and skipped items needing attention
         </p>

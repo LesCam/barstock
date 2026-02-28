@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { useRouter } from "next/navigation";
+import { HelpLink } from "@/components/help-link";
 
 interface Notification {
   id: string;
@@ -121,7 +122,10 @@ export default function NotificationsPage() {
   if (isLoading && items.length === 0) {
     return (
       <div>
-        <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">Notifications</h1>
+        <div className="flex items-center gap-2 mb-6">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Notifications</h1>
+          <HelpLink section="alerts" tooltip="Learn about alerts" />
+        </div>
         <p className="text-[#EAF0FF]/60">Loading...</p>
       </div>
     );
@@ -130,7 +134,10 @@ export default function NotificationsPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Notifications</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Notifications</h1>
+          <HelpLink section="alerts" tooltip="Learn about alerts" />
+        </div>
         {unreadCount > 0 && (
           <button
             onClick={() => markAllReadMutation.mutate()}

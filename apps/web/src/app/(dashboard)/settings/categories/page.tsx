@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { CountingMethod } from "@barstock/types";
 import Link from "next/link";
+import { HelpLink } from "@/components/help-link";
 
 const COUNTING_METHOD_LABELS: Record<string, string> = {
   weighable: "Weighable",
@@ -109,7 +110,10 @@ export default function CategoriesSettingsPage() {
           &larr; Back to Settings
         </Link>
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-[#EAF0FF]">Item Categories</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#EAF0FF]">Item Categories</h1>
+            <HelpLink section="counting-methods" tooltip="Learn about counting methods" />
+          </div>
           <button
             onClick={() => setShowCreate((v) => !v)}
             className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"

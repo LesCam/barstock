@@ -9,6 +9,7 @@ import {
   ScatterChart, Scatter, ZAxis, ReferenceLine,
   LineChart, Line,
 } from "recharts";
+import { HelpLink } from "@/components/help-link";
 
 const PIE_COLORS = ["#E9B44C", "#4CAF50", "#2196F3", "#FF5722", "#9C27B0", "#00BCD4", "#FF9800", "#607D8B"];
 
@@ -53,7 +54,10 @@ export default function StaffScorecardsPage() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Staff Scorecards</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Staff Scorecards</h1>
+          <HelpLink section="sessions" tooltip="Learn about counting sessions" />
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-24 animate-pulse rounded-lg border border-white/10 bg-[#16283F]" />
@@ -126,7 +130,10 @@ export default function StaffScorecardsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Staff Scorecards</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Staff Scorecards</h1>
+          <HelpLink section="sessions" tooltip="Learn about counting sessions" />
+        </div>
         <div className="flex items-center gap-2">
           <input
             type="date"

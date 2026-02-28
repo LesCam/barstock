@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
+import { HelpLink } from "@/components/help-link";
 
 const ACTION_LABELS: Record<string, string> = {
   "auth.login":                    "Login",
@@ -177,9 +178,12 @@ export default function UserActivityPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#EAF0FF]">
-            User Activity Timeline
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#EAF0FF]">
+              User Activity Timeline
+            </h1>
+            <HelpLink section="audit" tooltip="Learn about the audit log" />
+          </div>
           <p className="mt-1 text-sm text-[#EAF0FF]/50">
             Track who did what and when across your business
           </p>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
+import { HelpLink } from "@/components/help-link";
 
 const ROLES = [
   { value: "staff", label: "Staff" },
@@ -1074,7 +1075,10 @@ export default function StaffPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Staff Management</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Staff Management</h1>
+          <HelpLink section="settings-roles" tooltip="Learn about staff roles" />
+        </div>
         <button
           onClick={() => setShowInvite(!showInvite)}
           className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"

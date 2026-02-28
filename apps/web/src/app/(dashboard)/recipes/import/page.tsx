@@ -6,6 +6,7 @@ import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { UOM } from "@barstock/types";
+import { HelpLink } from "@/components/help-link";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -240,7 +241,10 @@ export default function RecipeImportPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#EAF0FF]">Import Recipes</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#EAF0FF]">Import Recipes</h1>
+            <HelpLink section="recipes" tooltip="Learn about recipes" />
+          </div>
           <p className="mt-1 text-sm text-[#EAF0FF]/60">
             Bulk import recipes from a CSV file.
           </p>

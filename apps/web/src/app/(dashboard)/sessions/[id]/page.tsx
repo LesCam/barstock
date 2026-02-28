@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { VarianceReason } from "@barstock/types";
+import { HelpLink } from "@/components/help-link";
 
 // --- Inline editable cell ---
 function EditableCell({
@@ -386,6 +387,7 @@ export default function SessionDetailPage({
           <h1 className="text-2xl font-bold capitalize text-[#EAF0FF]">
             {session.sessionType} Session
           </h1>
+          <HelpLink section="sessions" tooltip="Learn about counting sessions" />
           <span
             className={`rounded-full px-2 py-0.5 text-xs font-medium ${
               isOpen

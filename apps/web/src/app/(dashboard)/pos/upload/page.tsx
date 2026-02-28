@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
+import { HelpLink } from "@/components/help-link";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -327,7 +328,10 @@ export default function UploadCSVPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Upload Sales CSV</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Upload Sales CSV</h1>
+          <HelpLink section="pos-mapping" tooltip="Learn about POS mapping" />
+        </div>
         <Link
           href="/pos"
           className="text-sm text-[#EAF0FF]/60 hover:text-[#EAF0FF]"

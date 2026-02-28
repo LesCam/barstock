@@ -4,6 +4,7 @@ import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { HelpLink } from "@/components/help-link";
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 10);
@@ -163,7 +164,10 @@ export default function VendorsSettingsPage() {
           &larr; Back to Settings
         </Link>
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-[#EAF0FF]">Vendors</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#EAF0FF]">Vendors</h1>
+            <HelpLink section="orders" tooltip="Learn about vendors & ordering" />
+          </div>
           <button
             onClick={() => setShowCreate((v) => !v)}
             className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
