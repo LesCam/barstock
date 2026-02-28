@@ -10,6 +10,7 @@ import type { ExtendedPrismaClient } from "@barstock/database";
 import type { VarianceReason } from "@barstock/types";
 import { AuditService } from "./audit.service";
 import { RecipeLearningService } from "./recipe-learning.service";
+import { SettingsService } from "./settings.service";
 
 export interface AdjustmentDetail {
   itemId: string;
@@ -44,6 +45,15 @@ export class SessionService {
 
     if (!session) throw new Error("Session not found");
     if (session.endedTs) throw new Error("Session already closed");
+
+    // Close guard: block if unresolved verification items exist
+    const unresolvedVerifications = session.lines.filter(
+      (l) => l.verificationStatus === "flagged" || l.verificationStatus === "disputed"
+    );
+    if (unresolvedVerifications.length > 0) {
+      const names = unresolvedVerifications.map((l) => l.inventoryItem.name).join(", ");
+      throw new Error(`Cannot close session: ${unresolvedVerifications.length} item(s) have unresolved verification: ${names}`);
+    }
 
     let adjustmentsCreated = 0;
     let totalVariance = 0;
@@ -439,10 +449,32 @@ export class SessionService {
       });
     }
 
+    // Auto-flag candidates: check business settings for verification threshold
+    let autoFlagCandidates: string[] = [];
+    try {
+      const location = await this.prisma.location.findUnique({
+        where: { id: session.locationId },
+        select: { businessId: true },
+      });
+      if (location) {
+        const settingsSvc = new SettingsService(this.prisma);
+        const settings = await settingsSvc.getSettings(location.businessId);
+        if (settings.verification.autoFlagEnabled) {
+          const threshold = settings.verification.verificationThreshold;
+          autoFlagCandidates = previewLines
+            .filter((l) => Math.abs(l.variancePercent) > threshold && l.theoretical !== 0)
+            .map((l) => l.inventoryItemId);
+        }
+      }
+    } catch {
+      // Non-critical — don't fail preview
+    }
+
     return {
       lines: previewLines,
       totalItems: itemTotals.size,
       itemsWithVariance,
+      autoFlagCandidates,
     };
   }
 

@@ -136,6 +136,22 @@ enum SessionTypeT {
   @@map("session_type_t")
 }
 
+enum AssignmentStatusT {
+  assigned
+  accepted
+  declined
+
+  @@map("assignment_status_t")
+}
+
+enum VerificationStatusT {
+  flagged
+  verified
+  disputed
+
+  @@map("verification_status_t")
+}
+
 // ─── Art Enums ──────────────────────────────────────────────
 
 enum ArtworkStatusT {
@@ -308,6 +324,9 @@ model User {
   sentStaffInvites        StaffInvite[] @relation("InvitedByUser")
   tareObservations        TareObservation[]
   receiptCaptures         ReceiptCapture[]
+  plannedSessions         InventorySession[]    @relation("SessionPlannedBy")
+  sessionAssignments      SessionAssignment[]
+  verifiedLines           InventorySessionLine[] @relation("LineVerifiedBy")
 
   @@map("users")
 }
@@ -656,13 +675,17 @@ model InventorySession {
   endedTs     DateTime?    @map("ended_ts") @db.Timestamptz()
   createdBy   String?      @map("created_by") @db.Uuid
   closedBy    String?      @map("closed_by") @db.Uuid
+  plannedAt   DateTime?    @map("planned_at") @db.Timestamptz()
+  plannedBy   String?      @map("planned_by") @db.Uuid
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz()
 
   location           Location               @relation(fields: [locationId], references: [id])
   createdByUser      User?                  @relation("SessionCreatedBy", fields: [createdBy], references: [id])
   closedByUser       User?                  @relation("SessionClosedBy", fields: [closedBy], references: [id])
+  plannedByUser      User?                  @relation("SessionPlannedBy", fields: [plannedBy], references: [id])
   lines              InventorySessionLine[]
   participants       SessionParticipant[]
+  assignments        SessionAssignment[]
   bottleMeasurements BottleMeasurement[]
   ratioSnapshots     RecipeRatioSnapshot[]
 
@@ -686,6 +709,11 @@ model InventorySessionLine {
   confidenceLevel  String?  @map("confidence_level")
   subAreaId        String?  @map("sub_area_id") @db.Uuid
   countedBy        String?  @map("counted_by") @db.Uuid
+  verificationStatus  VerificationStatusT? @map("verification_status")
+  verifiedBy          String?              @map("verified_by") @db.Uuid
+  verificationCount   Decimal?             @map("verification_count")
+  verificationWeight  Decimal?             @map("verification_weight")
+  verifiedAt          DateTime?            @map("verified_at") @db.Timestamptz()
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -696,6 +724,7 @@ model InventorySessionLine {
   bottleTemplate BottleTemplate? @relation(fields: [bottleTemplateId], references: [id])
   subArea       SubArea?         @relation(fields: [subAreaId], references: [id])
   countedByUser User?            @relation("LineCountedBy", fields: [countedBy], references: [id])
+  verifiedByUser User?           @relation("LineVerifiedBy", fields: [verifiedBy], references: [id])
 
   @@index([sessionId], map: "ix_session_lines_session")
   @@map("inventory_session_lines")
@@ -714,6 +743,24 @@ model SessionParticipant {
 
   @@id([sessionId, userId])
   @@map("session_participants")
+}
+
+model SessionAssignment {
+  id         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId  String             @map("session_id") @db.Uuid
+  userId     String             @map("user_id") @db.Uuid
+  subAreaId  String?            @map("sub_area_id") @db.Uuid
+  focusItems String[]           @default([]) @map("focus_items") @db.Uuid
+  status     AssignmentStatusT  @default(assigned)
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  session  InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user     User             @relation(fields: [userId], references: [id])
+  subArea  SubArea?         @relation(fields: [subAreaId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@map("session_assignments")
 }
 
 // ─── Scale / Bottle ──────────────────────────────────────────
@@ -812,6 +859,7 @@ model SubArea {
   sessionLines       InventorySessionLine[]
   bottleMeasurements BottleMeasurement[]
   activeParticipants SessionParticipant[]
+  sessionAssignments SessionAssignment[]
 
   @@index([barAreaId], map: "ix_sub_areas_bar_area")
   @@map("sub_areas")

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SessionType, VarianceReason } from "@barstock/types";
+import { SessionType, VarianceReason, AssignmentStatus } from "@barstock/types";
 
 export const sessionCreateSchema = z.object({
   locationId: z.string().uuid(),
@@ -68,7 +68,54 @@ export const releaseSubAreaSchema = z.object({
   sessionId: z.string().uuid(),
 });
 
+// --- Session Planning ---
+export const sessionPlanSchema = z.object({
+  locationId: z.string().uuid(),
+  sessionType: z.nativeEnum(SessionType),
+  plannedAt: z.coerce.date(),
+  assignments: z.array(
+    z.object({
+      userId: z.string().uuid(),
+      subAreaId: z.string().uuid().optional(),
+      focusItems: z.array(z.string().uuid()).default([]),
+    })
+  ).min(1),
+});
+
+export const respondAssignmentSchema = z.object({
+  assignmentId: z.string().uuid(),
+  response: z.enum(["accepted", "declined"]),
+});
+
+export const listAssignmentsSchema = z.object({
+  sessionId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
+  status: z.nativeEnum(AssignmentStatus).optional(),
+});
+
+// --- Dual-Count Verification ---
+export const flagForVerificationSchema = z.object({
+  lineId: z.string().uuid(),
+});
+
+export const submitVerificationSchema = z.object({
+  lineId: z.string().uuid(),
+  countUnits: z.number().optional(),
+  grossWeightGrams: z.number().min(0).optional(),
+});
+
+export const resolveVerificationSchema = z.object({
+  lineId: z.string().uuid(),
+  resolution: z.enum(["original", "verification", "average"]),
+});
+
 export type SessionJoinInput = z.infer<typeof sessionJoinSchema>;
 export type SessionHeartbeatInput = z.infer<typeof sessionHeartbeatSchema>;
 export type ClaimSubAreaInput = z.infer<typeof claimSubAreaSchema>;
 export type ReleaseSubAreaInput = z.infer<typeof releaseSubAreaSchema>;
+export type SessionPlanInput = z.infer<typeof sessionPlanSchema>;
+export type RespondAssignmentInput = z.infer<typeof respondAssignmentSchema>;
+export type ListAssignmentsInput = z.infer<typeof listAssignmentsSchema>;
+export type FlagForVerificationInput = z.infer<typeof flagForVerificationSchema>;
+export type SubmitVerificationInput = z.infer<typeof submitVerificationSchema>;
+export type ResolveVerificationInput = z.infer<typeof resolveVerificationSchema>;

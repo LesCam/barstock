@@ -1,6 +1,7 @@
 import { router, protectedProcedure, checkLocationRole } from "../trpc";
-import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema, sessionJoinSchema, sessionHeartbeatSchema, claimSubAreaSchema, releaseSubAreaSchema } from "@barstock/validators";
+import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema, sessionJoinSchema, sessionHeartbeatSchema, claimSubAreaSchema, releaseSubAreaSchema, sessionPlanSchema, respondAssignmentSchema, listAssignmentsSchema, flagForVerificationSchema, submitVerificationSchema, resolveVerificationSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
+import { SettingsService } from "../services/settings.service";
 import { AuditService } from "../services/audit.service";
 import { AlertService } from "../services/alert.service";
 import { sessionEmitter } from "../lib/session-emitter";
@@ -61,7 +62,7 @@ export const sessionsRouter = router({
         include: {
           createdByUser: { select: { email: true } },
           closedByUser: { select: { email: true } },
-          _count: { select: { lines: true } },
+          _count: { select: { lines: true, assignments: true } },
         },
         orderBy: { startedTs: "desc" },
       });
@@ -84,6 +85,7 @@ export const sessionsRouter = router({
               tapLine: { select: { name: true } },
               subArea: { select: { id: true, name: true, barArea: { select: { id: true, name: true } } } },
               countedByUser: { select: { email: true, firstName: true } },
+              verifiedByUser: { select: { email: true, firstName: true } },
             },
           },
           participants: {
@@ -92,6 +94,12 @@ export const sessionsRouter = router({
               subArea: { select: { id: true, name: true } },
             },
             orderBy: { joinedAt: "asc" },
+          },
+          assignments: {
+            include: {
+              user: { select: { id: true, email: true, firstName: true, lastName: true } },
+              subArea: { select: { id: true, name: true, barArea: { select: { name: true } } } },
+            },
           },
         },
       })
@@ -244,13 +252,37 @@ export const sessionsRouter = router({
         },
       });
 
+      // Auto-claim assigned sub-area if user has an assignment
+      let assignedSubAreaId: string | null = null;
+      try {
+        const assignment = await ctx.prisma.sessionAssignment.findUnique({
+          where: {
+            sessionId_userId: {
+              sessionId: input.sessionId,
+              userId: ctx.user.userId,
+            },
+          },
+        });
+        if (assignment?.subAreaId) {
+          assignedSubAreaId = assignment.subAreaId;
+          const svc = new SessionService(ctx.prisma);
+          try {
+            await svc.claimSubArea(input.sessionId, assignment.subAreaId, ctx.user.userId);
+          } catch {
+            // Area might already be claimed — non-fatal
+          }
+        }
+      } catch {
+        // No assignment — fine
+      }
+
       try {
         const displayName =
           participant.user.firstName ||
           participant.user.email.split("@")[0];
         sessionEmitter.notifySession(input.sessionId, {
           type: "participant_joined",
-          payload: { userId: ctx.user.userId, displayName },
+          payload: { userId: ctx.user.userId, displayName, assignedSubAreaId },
         });
       } catch {
         // Best-effort SSE
@@ -761,5 +793,340 @@ export const sessionsRouter = router({
     .query(async ({ ctx, input }) => {
       const svc = new SessionService(ctx.prisma);
       return svc.previewClose(input.sessionId);
+    }),
+
+  // --- Session Planning ---
+
+  plan: protectedProcedure
+    .input(sessionPlanSchema)
+    .mutation(async ({ ctx, input }) => {
+      // Manager+ only
+      const isManager = checkLocationRole(input.locationId, Role.manager, ctx.user)
+        || ctx.user.highestRole === Role.business_admin
+        || ctx.user.highestRole === Role.platform_admin;
+      if (!isManager) throw new Error("Only managers can plan sessions");
+
+      const session = await ctx.prisma.inventorySession.create({
+        data: {
+          locationId: input.locationId,
+          sessionType: input.sessionType,
+          startedTs: input.plannedAt,
+          plannedAt: input.plannedAt,
+          plannedBy: ctx.user.userId,
+          createdBy: ctx.user.userId,
+        },
+      });
+
+      // Create assignments
+      for (const a of input.assignments) {
+        await ctx.prisma.sessionAssignment.create({
+          data: {
+            sessionId: session.id,
+            userId: a.userId,
+            subAreaId: a.subAreaId ?? null,
+            focusItems: a.focusItems,
+          },
+        });
+
+        try {
+          sessionEmitter.notifySession(session.id, {
+            type: "assignment_created",
+            payload: { userId: a.userId, subAreaId: a.subAreaId ?? null },
+          });
+        } catch {
+          // Best-effort SSE
+        }
+      }
+
+      // Create notification for each assignee
+      for (const a of input.assignments) {
+        try {
+          await ctx.prisma.notification.create({
+            data: {
+              businessId: ctx.user.businessId,
+              recipientUserId: a.userId,
+              title: "New Session Assignment",
+              body: `You've been assigned to a ${input.sessionType} session planned for ${new Date(input.plannedAt).toLocaleString()}`,
+              metadataJson: { sessionId: session.id },
+            },
+          });
+        } catch {
+          // Best-effort notification
+        }
+      }
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "session.planned",
+        objectType: "inventory_session",
+        objectId: session.id,
+        metadata: {
+          locationId: input.locationId,
+          assigneeCount: input.assignments.length,
+        },
+      });
+
+      return session;
+    }),
+
+  respondAssignment: protectedProcedure
+    .input(respondAssignmentSchema)
+    .mutation(async ({ ctx, input }) => {
+      const assignment = await ctx.prisma.sessionAssignment.findUniqueOrThrow({
+        where: { id: input.assignmentId },
+      });
+
+      if (assignment.userId !== ctx.user.userId) {
+        throw new Error("Can only respond to your own assignment");
+      }
+
+      const updated = await ctx.prisma.sessionAssignment.update({
+        where: { id: input.assignmentId },
+        data: { status: input.response },
+      });
+
+      try {
+        sessionEmitter.notifySession(assignment.sessionId, {
+          type: "assignment_responded",
+          payload: {
+            userId: ctx.user.userId,
+            assignmentId: input.assignmentId,
+            response: input.response,
+          },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+
+      return updated;
+    }),
+
+  listAssignments: protectedProcedure
+    .input(listAssignmentsSchema)
+    .query(async ({ ctx, input }) => {
+      const isManager = ctx.user.highestRole === Role.manager
+        || ctx.user.highestRole === Role.business_admin
+        || ctx.user.highestRole === Role.platform_admin;
+
+      return ctx.prisma.sessionAssignment.findMany({
+        where: {
+          ...(input.sessionId && { sessionId: input.sessionId }),
+          ...(input.status && { status: input.status }),
+          // Staff see only own, managers see all
+          ...(!isManager && { userId: ctx.user.userId }),
+          ...(isManager && input.userId && { userId: input.userId }),
+        },
+        include: {
+          user: { select: { id: true, email: true, firstName: true, lastName: true } },
+          subArea: { select: { id: true, name: true, barArea: { select: { name: true } } } },
+          session: { select: { id: true, sessionType: true, plannedAt: true, startedTs: true, endedTs: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    }),
+
+  myUpcomingAssignments: protectedProcedure
+    .query(async ({ ctx }) => {
+      return ctx.prisma.sessionAssignment.findMany({
+        where: {
+          userId: ctx.user.userId,
+          status: { in: ["assigned", "accepted"] },
+          session: { endedTs: null },
+        },
+        include: {
+          subArea: { select: { id: true, name: true, barArea: { select: { name: true } } } },
+          session: {
+            select: {
+              id: true,
+              sessionType: true,
+              plannedAt: true,
+              startedTs: true,
+              locationId: true,
+            },
+          },
+        },
+        orderBy: { session: { plannedAt: "asc" } },
+      });
+    }),
+
+  // --- Dual-Count Verification ---
+
+  flagForVerification: protectedProcedure
+    .input(flagForVerificationSchema)
+    .mutation(async ({ ctx, input }) => {
+      const line = await ctx.prisma.inventorySessionLine.findUniqueOrThrow({
+        where: { id: input.lineId },
+        include: {
+          session: { select: { locationId: true } },
+          inventoryItem: { select: { name: true } },
+        },
+      });
+
+      // Manager+ check
+      const isManager = checkLocationRole(line.session.locationId, Role.manager, ctx.user)
+        || ctx.user.highestRole === Role.business_admin
+        || ctx.user.highestRole === Role.platform_admin;
+      if (!isManager) throw new Error("Only managers can flag items for verification");
+
+      const updated = await ctx.prisma.inventorySessionLine.update({
+        where: { id: input.lineId },
+        data: { verificationStatus: "flagged" },
+      });
+
+      try {
+        sessionEmitter.notifySession(line.sessionId, {
+          type: "line_flagged",
+          payload: {
+            lineId: input.lineId,
+            itemName: line.inventoryItem.name,
+            flaggedBy: ctx.user.userId,
+          },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+
+      return updated;
+    }),
+
+  submitVerification: protectedProcedure
+    .input(submitVerificationSchema)
+    .mutation(async ({ ctx, input }) => {
+      const line = await ctx.prisma.inventorySessionLine.findUniqueOrThrow({
+        where: { id: input.lineId },
+        include: {
+          session: { select: { locationId: true } },
+          inventoryItem: { select: { name: true } },
+        },
+      });
+
+      if (line.verificationStatus !== "flagged") {
+        throw new Error("Line is not flagged for verification");
+      }
+      if (line.countedBy === ctx.user.userId) {
+        throw new Error("Cannot verify your own count — must be a different user");
+      }
+
+      // Compare with original count
+      const originalValue = line.countUnits != null ? Number(line.countUnits)
+        : line.grossWeightGrams != null ? Number(line.grossWeightGrams)
+        : 0;
+      const verificationValue = input.countUnits ?? input.grossWeightGrams ?? 0;
+
+      // Get verification threshold from business settings
+      let threshold = 10;
+      try {
+        const location = await ctx.prisma.location.findUnique({
+          where: { id: line.session.locationId },
+          select: { businessId: true },
+        });
+        if (location) {
+          const settingsSvc = new SettingsService(ctx.prisma);
+          const settings = await settingsSvc.getSettings(location.businessId);
+          threshold = settings.verification.verificationThreshold;
+        }
+      } catch {
+        // Use default threshold
+      }
+
+      // Determine if counts match within threshold
+      const diff = originalValue !== 0
+        ? Math.abs((verificationValue - originalValue) / originalValue) * 100
+        : verificationValue === 0 ? 0 : 100;
+      const isMatch = diff <= threshold;
+
+      const updated = await ctx.prisma.inventorySessionLine.update({
+        where: { id: input.lineId },
+        data: {
+          verificationStatus: isMatch ? "verified" : "disputed",
+          verifiedBy: ctx.user.userId,
+          verificationCount: input.countUnits != null ? new Prisma.Decimal(input.countUnits) : null,
+          verificationWeight: input.grossWeightGrams != null ? new Prisma.Decimal(input.grossWeightGrams) : null,
+          verifiedAt: new Date(),
+        },
+      });
+
+      try {
+        sessionEmitter.notifySession(line.sessionId, {
+          type: "verification_submitted",
+          payload: {
+            lineId: input.lineId,
+            itemName: line.inventoryItem.name,
+            verifiedBy: ctx.user.userId,
+            status: isMatch ? "verified" : "disputed",
+          },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+
+      return { ...updated, isMatch, differencePercent: diff };
+    }),
+
+  resolveVerification: protectedProcedure
+    .input(resolveVerificationSchema)
+    .mutation(async ({ ctx, input }) => {
+      const line = await ctx.prisma.inventorySessionLine.findUniqueOrThrow({
+        where: { id: input.lineId },
+        include: {
+          session: { select: { locationId: true } },
+          inventoryItem: { select: { name: true } },
+        },
+      });
+
+      // Manager+ check
+      const isManager = checkLocationRole(line.session.locationId, Role.manager, ctx.user)
+        || ctx.user.highestRole === Role.business_admin
+        || ctx.user.highestRole === Role.platform_admin;
+      if (!isManager) throw new Error("Only managers can resolve verifications");
+
+      if (line.verificationStatus !== "disputed") {
+        throw new Error("Line is not in disputed status");
+      }
+
+      // Determine final values based on resolution
+      const data: Record<string, unknown> = { verificationStatus: "verified" };
+
+      if (input.resolution === "verification") {
+        // Use the verification count
+        if (line.verificationCount != null) data.countUnits = line.verificationCount;
+        if (line.verificationWeight != null) data.grossWeightGrams = line.verificationWeight;
+      } else if (input.resolution === "average") {
+        // Average original and verification
+        if (line.countUnits != null && line.verificationCount != null) {
+          data.countUnits = new Prisma.Decimal(
+            (Number(line.countUnits) + Number(line.verificationCount)) / 2
+          );
+        }
+        if (line.grossWeightGrams != null && line.verificationWeight != null) {
+          data.grossWeightGrams = new Prisma.Decimal(
+            (Number(line.grossWeightGrams) + Number(line.verificationWeight)) / 2
+          );
+        }
+      }
+      // resolution === "original" — keep existing values, just mark verified
+
+      const updated = await ctx.prisma.inventorySessionLine.update({
+        where: { id: input.lineId },
+        data: data as any,
+      });
+
+      try {
+        sessionEmitter.notifySession(line.sessionId, {
+          type: "verification_resolved",
+          payload: {
+            lineId: input.lineId,
+            itemName: line.inventoryItem.name,
+            resolution: input.resolution,
+            resolvedBy: ctx.user.userId,
+          },
+        });
+      } catch {
+        // Best-effort SSE
+      }
+
+      return updated;
     }),
 });

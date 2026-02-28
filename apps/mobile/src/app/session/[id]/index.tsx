@@ -136,6 +136,12 @@ export default function SessionDetailScreen() {
   const heartbeatMutation = trpc.sessions.heartbeat.useMutation();
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Query assignment for current user in this session
+  const myAssignment = useMemo(() => {
+    if (!session || !authUser) return null;
+    return (session as any).assignments?.find((a: any) => a.user?.id === authUser.userId) ?? null;
+  }, [session, authUser]);
+
   // Auto-join when session loads and is open
   useEffect(() => {
     if (session && !session.endedTs) {
@@ -143,6 +149,24 @@ export default function SessionDetailScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, session?.endedTs]);
+
+  // Auto-claim assigned sub-area after join
+  useEffect(() => {
+    if (!myAssignment?.subAreaId || !session || session.endedTs) return;
+    if (selectedSubAreaId === myAssignment.subAreaId) return;
+    // Set the area selection to match assignment
+    const subArea = myAssignment.subArea;
+    if (subArea?.barArea) {
+      // Find the bar area that contains this sub-area
+      const barAreaId = areas?.find((a: any) =>
+        a.subAreas.some((sa: any) => sa.id === myAssignment.subAreaId)
+      )?.id;
+      if (barAreaId && barAreaId !== selectedAreaId) {
+        setSelectedAreaId(barAreaId);
+      }
+      setSelectedSubAreaId(myAssignment.subAreaId);
+    }
+  }, [myAssignment?.subAreaId, session?.id, areas]);
 
   // Heartbeat: fires every 30s and immediately on sub-area change (skip when offline)
   const sendHeartbeat = useCallback(() => {
@@ -1101,6 +1125,64 @@ export default function SessionDetailScreen() {
           </View>
         )}
 
+        {/* Assignment Banner */}
+        {isOpen && myAssignment && (
+          <View style={{
+            backgroundColor: "#1a1a3e",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: "rgba(124,92,252,0.3)",
+          }}>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: "#7C5CFC" }}>
+              Assignment
+            </Text>
+            {myAssignment.subArea && (
+              <Text style={{ fontSize: 12, color: "#EAF0FF", marginTop: 4 }}>
+                Area: {myAssignment.subArea.barArea?.name} / {myAssignment.subArea.name}
+              </Text>
+            )}
+            {myAssignment.focusItems?.length > 0 && (
+              <Text style={{ fontSize: 12, color: "#8899B2", marginTop: 2 }}>
+                Focus: {myAssignment.focusItems.length} item(s)
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Verification Queue (items flagged by others, blind count) */}
+        {isOpen && (() => {
+          const flaggedLines = (session?.lines ?? []).filter(
+            (l: any) => l.verificationStatus === "flagged" && l.countedBy !== authUser?.userId
+          );
+          if (flaggedLines.length === 0) return null;
+          return (
+            <View style={{
+              backgroundColor: "#1a2838",
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 12,
+              borderWidth: 1,
+              borderColor: "rgba(233,180,76,0.3)",
+            }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: "#E9B44C", marginBottom: 8 }}>
+                Verification Queue ({flaggedLines.length})
+              </Text>
+              <Text style={{ fontSize: 11, color: "#8899B2", marginBottom: 8 }}>
+                Count these items independently — original counts are hidden.
+              </Text>
+              {flaggedLines.map((line: any) => (
+                <VerificationLineItem
+                  key={line.id}
+                  line={line}
+                  sessionId={id!}
+                />
+              ))}
+            </View>
+          );
+        })()}
+
         {/* Expected Items Checklist */}
         {isOpen && expectedTotal > 0 && (
           <View style={styles.expectedSection}>
@@ -1597,6 +1679,98 @@ export default function SessionDetailScreen() {
           }}
         />
       )}
+    </View>
+  );
+}
+
+function VerificationLineItem({ line, sessionId }: { line: any; sessionId: string }) {
+  const [qty, setQty] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [result, setResult] = useState<{ isMatch: boolean; differencePercent: number } | null>(null);
+  const utils = trpc.useUtils();
+  const submitMut = trpc.sessions.submitVerification.useMutation({
+    onSuccess: (data: any) => {
+      setSubmitted(true);
+      setResult({ isMatch: data.isMatch, differencePercent: data.differencePercent });
+      utils.sessions.getById.invalidate({ id: sessionId });
+    },
+    onError: (err: any) => Alert.alert("Error", err.message),
+  });
+
+  const isWeight = line.inventoryItem?.category?.countingMethod === "weighable";
+
+  if (submitted && result) {
+    return (
+      <View style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: "rgba(255,255,255,0.05)",
+      }}>
+        <Text style={{ flex: 1, fontSize: 14, color: "#EAF0FF" }}>
+          {line.inventoryItem?.name}
+        </Text>
+        <Text style={{ fontSize: 12, color: result.isMatch ? "#4CAF50" : "#E9B44C" }}>
+          {result.isMatch ? "Match" : "Mismatch — awaiting manager"}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: "rgba(255,255,255,0.05)",
+      gap: 8,
+    }}>
+      <Text style={{ flex: 1, fontSize: 14, color: "#EAF0FF" }}>
+        {line.inventoryItem?.name}
+      </Text>
+      <TextInput
+        style={{
+          width: 70,
+          borderWidth: 1,
+          borderColor: "rgba(255,255,255,0.2)",
+          borderRadius: 8,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          color: "#EAF0FF",
+          backgroundColor: "#0B1623",
+          fontSize: 14,
+          textAlign: "right",
+        }}
+        keyboardType="decimal-pad"
+        placeholder={isWeight ? "g" : "qty"}
+        placeholderTextColor="#5A6A7A"
+        value={qty}
+        onChangeText={setQty}
+      />
+      <TouchableOpacity
+        onPress={() => {
+          const value = Number(qty);
+          if (isNaN(value)) return;
+          submitMut.mutate({
+            lineId: line.id,
+            ...(isWeight ? { grossWeightGrams: value } : { countUnits: value }),
+          });
+        }}
+        disabled={!qty || submitMut.isPending}
+        style={{
+          backgroundColor: "#E9B44C",
+          borderRadius: 8,
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          opacity: !qty || submitMut.isPending ? 0.5 : 1,
+        }}
+      >
+        <Text style={{ color: "#0B1623", fontWeight: "600", fontSize: 13 }}>
+          {submitMut.isPending ? "..." : "Verify"}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }

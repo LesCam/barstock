@@ -102,6 +102,24 @@ export const SessionType = {
 } as const;
 export type SessionType = (typeof SessionType)[keyof typeof SessionType];
 
+/** Matches PostgreSQL assignment_status_t */
+export const AssignmentStatus = {
+  assigned: "assigned",
+  accepted: "accepted",
+  declined: "declined",
+} as const;
+export type AssignmentStatus =
+  (typeof AssignmentStatus)[keyof typeof AssignmentStatus];
+
+/** Matches PostgreSQL verification_status_t */
+export const VerificationStatus = {
+  flagged: "flagged",
+  verified: "verified",
+  disputed: "disputed",
+} as const;
+export type VerificationStatus =
+  (typeof VerificationStatus)[keyof typeof VerificationStatus];
+
 /** Matches PostgreSQL artwork_status_t */
 export const ArtworkStatus = {
   on_wall: "on_wall",

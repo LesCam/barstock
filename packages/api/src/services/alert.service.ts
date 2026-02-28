@@ -85,6 +85,11 @@ export class AlertService {
         const mismatchAlerts = await this.checkDepletionMismatches(loc.id, loc.name, (rules as any).depletionMismatch.threshold);
         alerts.push(...mismatchAlerts);
       }
+
+      if ((rules as any).varianceForecastRisk?.enabled) {
+        const forecastAlerts = await this.checkVarianceForecastRisk(loc.id, loc.name, (rules as any).varianceForecastRisk.threshold);
+        alerts.push(...forecastAlerts);
+      }
     }
 
     return alerts;
@@ -569,6 +574,33 @@ export class AlertService {
         changePercent,
       },
     );
+  }
+
+  private async checkVarianceForecastRisk(locationId: string, locationName: string, thresholdPercent: number): Promise<AlertResult[]> {
+    const svc = new AnalyticsService(this.prisma);
+    try {
+      const forecasts = await svc.getVarianceForecasts(locationId);
+      // Flag items where predicted variance is worse (more negative) than -threshold
+      const flagged = forecasts.filter(
+        (f) => f.predictedVariance < -thresholdPercent && f.trend === "worsening"
+      );
+
+      if (flagged.length === 0) return [];
+
+      const itemList = flagged
+        .slice(0, 5)
+        .map((f) => `${f.itemName} (predicted ${f.predictedVariance.toFixed(1)}, ${f.trend})`)
+        .join(", ");
+
+      return [{
+        title: `Variance forecast risk at ${locationName}`,
+        body: `${flagged.length} item(s) predicted to have worsening variance: ${itemList}`,
+        linkUrl: "/analytics",
+        metadata: { rule: "varianceForecastRisk", locationId, flaggedCount: flagged.length },
+      }];
+    } catch {
+      return [];
+    }
   }
 
   async checkHighVarianceSession(

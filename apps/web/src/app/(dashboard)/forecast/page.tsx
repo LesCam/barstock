@@ -1,21 +1,24 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "@/components/location-context";
 import { PageTip } from "@/components/page-tip";
 import { HelpLink } from "@/components/help-link";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  ComposedChart, Line, ReferenceLine,
+  ComposedChart, Line, ReferenceLine, Area,
 } from "recharts";
 
 export default function ForecastPage() {
+  const router = useRouter();
   const { selectedLocationId } = useLocation();
   const [filter, setFilter] = useState("");
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<"itemName" | "forecastDailyUsage" | "daysToStockout" | "needsReorderSoon">("needsReorderSoon");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [generatingOrder, setGeneratingOrder] = useState(false);
 
   const { data: forecast, isLoading } = trpc.reports.forecastDashboard.useQuery(
     { locationId: selectedLocationId! },
@@ -31,6 +34,37 @@ export default function ForecastPage() {
     { locationId: selectedLocationId!, itemId: expandedItemId! },
     { enabled: !!selectedLocationId && !!expandedItemId }
   );
+
+  const { data: reorderSuggestions } = trpc.parLevels.suggestions.useQuery(
+    { locationId: selectedLocationId! },
+    { enabled: !!selectedLocationId }
+  );
+
+  const createOrder = trpc.purchaseOrders.create.useMutation();
+
+  const handleGenerateOrders = async () => {
+    if (!reorderSuggestions?.length || !selectedLocationId) return;
+    setGeneratingOrder(true);
+    try {
+      for (const vendor of reorderSuggestions) {
+        await createOrder.mutateAsync({
+          locationId: selectedLocationId,
+          vendorId: vendor.vendorId,
+          notes: "Auto-generated from forecast reorder suggestions",
+          lines: vendor.items.map((item) => ({
+            inventoryItemId: item.inventoryItemId,
+            orderedQty: item.orderQty,
+            orderedUom: item.parUom,
+          })),
+        });
+      }
+      router.push("/orders");
+    } catch {
+      // mutation error is surfaced by tRPC
+    } finally {
+      setGeneratingOrder(false);
+    }
+  };
 
   const toggleSort = (key: typeof sortKey) => {
     if (sortKey === key) {
@@ -113,12 +147,17 @@ export default function ForecastPage() {
           label: new Date(h.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
           historical: h.qty,
           forecast: null as number | null,
+          confidenceBand: null as [number, number] | null,
         })),
         ...itemDetail.forecast.map((f) => ({
           date: f.date,
           label: new Date(f.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
           historical: null as number | null,
           forecast: Number(f.qty.toFixed(2)),
+          confidenceBand: [
+            Number(f.confidenceLow.toFixed(2)),
+            Number(f.confidenceHigh.toFixed(2)),
+          ] as [number, number],
         })),
       ]
     : [];
@@ -138,6 +177,26 @@ export default function ForecastPage() {
         title="Demand Forecasting"
         description="Projected usage and reorder timing from historical consumption."
       />
+
+      {/* Generate Order Button */}
+      {(reorderSuggestions?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-[#E9B44C]/20 bg-[#E9B44C]/5 px-4 py-3">
+          <div className="flex-1">
+            <p className="text-sm font-medium">
+              {reorderSuggestions!.reduce((s, v) => s + v.itemCount, 0)} items need reorder from{" "}
+              {reorderSuggestions!.length} vendor{reorderSuggestions!.length > 1 ? "s" : ""} — est.{" "}
+              ${reorderSuggestions!.reduce((s, v) => s + v.totalEstimatedCost, 0).toFixed(2)}
+            </p>
+          </div>
+          <button
+            onClick={handleGenerateOrders}
+            disabled={generatingOrder}
+            className="rounded-lg bg-[#E9B44C] px-4 py-2 text-sm font-semibold text-[#0B1623] transition-colors hover:bg-[#E9B44C]/80 disabled:opacity-50"
+          >
+            {generatingOrder ? "Creating Orders..." : "Generate Orders"}
+          </button>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-4">
@@ -267,10 +326,16 @@ export default function ForecastPage() {
                     <YAxis tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} />
                     <Tooltip
                       contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
-                      formatter={(value, name) => [
-                        value != null ? Number(value).toFixed(2) : "—",
-                        name === "historical" ? "Actual" : "Forecast",
-                      ]}
+                      formatter={(value, name) => {
+                        if (name === "confidenceBand") {
+                          if (Array.isArray(value)) return [`${Number(value[0]).toFixed(2)} – ${Number(value[1]).toFixed(2)}`, "Confidence"];
+                          return [null, null];
+                        }
+                        return [
+                          value != null ? Number(value).toFixed(2) : "—",
+                          name === "historical" ? "Actual" : "Forecast",
+                        ];
+                      }}
                     />
                     {itemDetail.parLevel != null && (
                       <ReferenceLine
@@ -289,6 +354,16 @@ export default function ForecastPage() {
                       />
                     )}
                     <Bar dataKey="historical" fill="#E9B44C" radius={[2, 2, 0, 0]} name="historical" />
+                    <Area
+                      type="monotone"
+                      dataKey="confidenceBand"
+                      fill="#60A5FA"
+                      fillOpacity={0.15}
+                      stroke="none"
+                      name="confidenceBand"
+                      connectNulls={false}
+                      legendType="none"
+                    />
                     <Line
                       type="monotone"
                       dataKey="forecast"

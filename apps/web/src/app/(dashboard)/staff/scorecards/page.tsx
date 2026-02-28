@@ -312,6 +312,16 @@ export default function StaffScorecardsPage() {
                           <span>{s.linesCounted} lines</span>
                           <span>Manual: {s.manualEntryRate.toFixed(0)}%</span>
                           <span>Avg var: {s.avgVarianceMagnitude.toFixed(1)}</span>
+                          {(s as any).verificationCount > 0 && (
+                            <>
+                              <span
+                                className={((s as any).verificationAccuracy ?? 0) >= 90 ? "text-[#4CAF50]" : "text-[#E9B44C]"}
+                              >
+                                Verify: {((s as any).verificationAccuracy ?? 0).toFixed(1)}%
+                              </span>
+                              <span>({(s as any).verificationCount} verifications)</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

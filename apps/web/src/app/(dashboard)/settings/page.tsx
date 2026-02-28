@@ -68,6 +68,7 @@ export default function SettingsPage() {
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
       <AutoLockPolicySection businessId={businessId} canEdit={canEdit} />
       <AlertRulesSection businessId={businessId} canEdit={canEdit} />
+      <VerificationSettingsSection businessId={businessId} canEdit={canEdit} />
       <BenchmarkingSection businessId={businessId} canEdit={canEdit} />
       <ProductDataSharingSection businessId={businessId} canEdit={canEdit} />
       {locationId && <ScaleProfilesSection locationId={locationId} canEdit={canEdit} />}
@@ -1163,6 +1164,67 @@ function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdi
             </div>
           );
         })}
+      </div>
+
+      {updateMutation.error && (
+        <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
+      )}
+    </div>
+  );
+}
+
+function VerificationSettingsSection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {
+  const { data: settings } = trpc.settings.get.useQuery({ businessId });
+  const utils = trpc.useUtils();
+
+  const updateMutation = trpc.settings.update.useMutation({
+    onSuccess: () => utils.settings.get.invalidate({ businessId }),
+  });
+
+  const verification = (settings as any)?.verification ?? { autoFlagEnabled: false, verificationThreshold: 10 };
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <h2 className="mb-4 text-lg font-semibold">Dual-Count Verification</h2>
+      <p className="mb-4 text-sm text-[#EAF0FF]/60">
+        Auto-flag high-variance items for independent second counts during session close.
+      </p>
+
+      <div className="space-y-4">
+        <label className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={verification.autoFlagEnabled}
+            disabled={!canEdit}
+            onChange={(e) =>
+              updateMutation.mutate({
+                businessId,
+                verification: { autoFlagEnabled: e.target.checked },
+              })
+            }
+            className="h-4 w-4 rounded border-white/20 bg-[#0B1623]"
+          />
+          <span className="text-sm text-[#EAF0FF]">Auto-flag items exceeding variance threshold</span>
+        </label>
+
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-[#EAF0FF]/60">Variance threshold</label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={verification.verificationThreshold}
+            disabled={!canEdit}
+            onChange={(e) =>
+              updateMutation.mutate({
+                businessId,
+                verification: { verificationThreshold: Number(e.target.value) },
+              })
+            }
+            className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
+          />
+          <span className="text-xs text-[#EAF0FF]/40">%</span>
+        </div>
       </div>
 
       {updateMutation.error && (

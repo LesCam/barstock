@@ -112,6 +112,8 @@ export interface StaffAccountabilityScore {
   avgVarianceMagnitude: number;
   manualEntryRate: number;
   trend: "improving" | "stable" | "worsening";
+  verificationAccuracy: number;
+  verificationCount: number;
 }
 
 export interface SessionMetric {
@@ -690,6 +692,37 @@ export class VarianceService {
       }
     }
 
+    // Query D — Verification accuracy per user
+    const verificationRows = await this.prisma.$queryRaw<
+      Array<{
+        user_id: string;
+        total_verifications: bigint;
+        verified_count: bigint;
+      }>
+    >`
+      SELECT
+        sl.verified_by AS user_id,
+        COUNT(sl.id) AS total_verifications,
+        COUNT(CASE WHEN sl.verification_status = 'verified' THEN 1 END) AS verified_count
+      FROM inventory_session_lines sl
+      JOIN inventory_sessions s ON s.id = sl.session_id
+      WHERE s.location_id = ${locationId}::uuid
+        AND sl.verified_by IS NOT NULL
+        AND sl.verification_status IN ('verified', 'disputed')
+        AND (${fromDate}::timestamptz IS NULL OR s.ended_ts >= ${fromDate}::timestamptz)
+        AND (${toDate}::timestamptz IS NULL OR s.ended_ts < ${toDate}::timestamptz)
+      GROUP BY sl.verified_by
+    `;
+    const verificationMap = new Map(
+      verificationRows.map((r) => [
+        r.user_id,
+        {
+          total: Number(r.total_verifications),
+          verified: Number(r.verified_count),
+        },
+      ])
+    );
+
     // Build staff scores
     const staff: StaffAccountabilityScore[] = staffRows.map((r) => {
       const linesCounted = Number(r.lines_counted);
@@ -710,6 +743,12 @@ export class VarianceService {
         avgVarianceMagnitude: linesWithVariance > 0 ? totalVarianceMagnitude / linesWithVariance : 0,
         manualEntryRate: linesCounted > 0 ? (manualLines / linesCounted) * 100 : 0,
         trend: userTrends.get(r.user_id) ?? "stable",
+        verificationCount: verificationMap.get(r.user_id)?.total ?? 0,
+        verificationAccuracy: (() => {
+          const v = verificationMap.get(r.user_id);
+          if (!v || v.total === 0) return 0;
+          return (v.verified / v.total) * 100;
+        })(),
       };
     });
 

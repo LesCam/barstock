@@ -8,7 +8,12 @@ export interface SessionEvent {
     | "line_deleted"
     | "area_claimed"
     | "area_released"
-    | "session_closed";
+    | "session_closed"
+    | "assignment_created"
+    | "assignment_responded"
+    | "line_flagged"
+    | "verification_submitted"
+    | "verification_resolved";
   payload?: Record<string, unknown>;
 }
 

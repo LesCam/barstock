@@ -1759,16 +1759,36 @@ export class ReportService {
       return { day: label, avgUsage: avg, ratio };
     });
 
-    // 30-day forecast
-    const forecast: Array<{ date: string; qty: number }> = [];
+    // Compute std dev of daily usage for confidence bands
+    const usageValues = Array.from(dailyUsageMap.values());
+    const usageMean = usageValues.length > 0
+      ? usageValues.reduce((s, v) => s + v, 0) / usageValues.length
+      : 0;
+    const usageVariance = usageValues.length > 1
+      ? usageValues.reduce((s, v) => s + (v - usageMean) ** 2, 0) / usageValues.length
+      : 0;
+    const usageStdDev = Math.sqrt(usageVariance);
+
+    // 30-day forecast with confidence bands
+    const forecast: Array<{
+      date: string;
+      qty: number;
+      confidenceLow: number;
+      confidenceHigh: number;
+    }> = [];
     for (let d = 0; d < 30; d++) {
       const futureDate = new Date(today);
       futureDate.setDate(futureDate.getDate() + d + 1);
       const dow = futureDate.getDay();
       const ratio = dowPattern[dow]?.ratio ?? 1;
+      const qty = forecastDailyUsage * ratio;
+      // Uncertainty grows with sqrt of days ahead
+      const uncertainty = 1.5 * usageStdDev * Math.sqrt((d + 1) / 7) * ratio;
       forecast.push({
         date: futureDate.toISOString().split("T")[0]!,
-        qty: forecastDailyUsage * ratio,
+        qty,
+        confidenceLow: Math.max(0, qty - uncertainty),
+        confidenceHigh: qty + uncertainty,
       });
     }
 

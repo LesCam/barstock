@@ -8,6 +8,12 @@ import Link from "next/link";
 import { VarianceReason } from "@barstock/types";
 import { HelpLink } from "@/components/help-link";
 
+const ASSIGNMENT_STATUS_STYLES: Record<string, string> = {
+  assigned: "bg-[#E9B44C]/10 text-[#E9B44C]",
+  accepted: "bg-[#4CAF50]/10 text-[#4CAF50]",
+  declined: "bg-red-500/10 text-red-400",
+};
+
 // --- Inline editable cell ---
 function EditableCell({
   value,
@@ -256,6 +262,27 @@ export default function SessionDetailPage({
     },
   });
 
+  // --- Verification state ---
+  const [showResolveModal, setShowResolveModal] = useState<{
+    lineId: string;
+    itemName: string;
+    originalCount: number | null;
+    originalWeight: number | null;
+    verificationCount: number | null;
+    verificationWeight: number | null;
+  } | null>(null);
+
+  const flagMut = trpc.sessions.flagForVerification.useMutation({
+    onSuccess: () => utils.sessions.getById.invalidate({ id }),
+  });
+
+  const resolveVerificationMut = trpc.sessions.resolveVerification.useMutation({
+    onSuccess: () => {
+      utils.sessions.getById.invalidate({ id });
+      setShowResolveModal(null);
+    },
+  });
+
   const closeMut = trpc.sessions.close.useMutation({
     onSuccess: (result) => {
       setCloseResult(result);
@@ -276,6 +303,10 @@ export default function SessionDetailPage({
   });
 
   const isOpen = session && !session.endedTs;
+  const isManager =
+    user?.highestRole === "manager" ||
+    user?.highestRole === "business_admin" ||
+    user?.highestRole === "platform_admin";
 
   // --- Filtered inventory items for add-item picker ---
   const filteredItems = useMemo(() => {
@@ -512,6 +543,45 @@ export default function SessionDetailPage({
         </div>
       )}
 
+      {/* Assignments section */}
+      {session.assignments && session.assignments.length > 0 && (
+        <div className="mb-4 rounded-lg border border-white/10 bg-[#16283F] p-4">
+          <h2 className="mb-2 text-sm font-semibold text-[#EAF0FF]">Assignments</h2>
+          <div className="space-y-1">
+            {(session.assignments as any[]).map((a: any) => {
+              const displayName = a.user.firstName
+                ? `${a.user.firstName} ${a.user.lastName ?? ""}`.trim()
+                : a.user.email;
+              return (
+                <div key={a.id} className="flex items-center gap-3 text-sm">
+                  <span className="font-medium text-[#EAF0FF]">{displayName}</span>
+                  {a.subArea && (
+                    <span className="text-xs text-[#EAF0FF]/40">
+                      {a.subArea.barArea?.name} / {a.subArea.name}
+                    </span>
+                  )}
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${ASSIGNMENT_STATUS_STYLES[a.status] ?? ""}`}>
+                    {a.status}
+                  </span>
+                  {a.focusItems?.length > 0 && (
+                    <span className="text-xs text-[#EAF0FF]/30">
+                      {a.focusItems.length} focus item(s)
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Unresolved verification warning */}
+      {isOpen && session.lines.some((l: any) => l.verificationStatus === "flagged" || l.verificationStatus === "disputed") && (
+        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          Session has unresolved verification items — must be resolved before closing.
+        </div>
+      )}
+
       {/* Close result banner */}
       {closeResult && (
         <div className="mb-4 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-300">
@@ -532,6 +602,7 @@ export default function SessionDetailPage({
               <th className="px-4 py-3">% Remaining</th>
               <th className="px-4 py-3">Area</th>
               <th className="px-4 py-3">Counted By</th>
+              <th className="px-4 py-3">Verification</th>
               <th className="px-4 py-3">Notes</th>
               {isOpen && <th className="px-4 py-3"></th>}
             </tr>
@@ -539,7 +610,7 @@ export default function SessionDetailPage({
           <tbody className="divide-y divide-white/5 text-[#EAF0FF]">
             {session.lines.length === 0 ? (
               <tr>
-                <td colSpan={isOpen ? 9 : 8} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                <td colSpan={isOpen ? 10 : 9} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                   No items counted yet.
                 </td>
               </tr>
@@ -628,6 +699,43 @@ export default function SessionDetailPage({
                     {line.countedByUser
                       ? line.countedByUser.firstName ?? line.countedByUser.email.split("@")[0]
                       : "\u2014"}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {line.verificationStatus === "flagged" && (
+                      <span className="rounded-full bg-[#E9B44C]/10 px-2 py-0.5 text-[#E9B44C]">Flagged</span>
+                    )}
+                    {line.verificationStatus === "verified" && (
+                      <span className="rounded-full bg-[#4CAF50]/10 px-2 py-0.5 text-[#4CAF50]">Verified</span>
+                    )}
+                    {line.verificationStatus === "disputed" && (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-red-400">Disputed</span>
+                        {isManager && isOpen && (
+                          <button
+                            onClick={() => setShowResolveModal({
+                              lineId: line.id,
+                              itemName: line.inventoryItem.name,
+                              originalCount: line.countUnits != null ? Number(line.countUnits) : null,
+                              originalWeight: line.grossWeightGrams != null ? Number(line.grossWeightGrams) : null,
+                              verificationCount: line.verificationCount != null ? Number(line.verificationCount) : null,
+                              verificationWeight: line.verificationWeight != null ? Number(line.verificationWeight) : null,
+                            })}
+                            className="text-[10px] font-medium text-red-400 hover:text-red-300 underline"
+                          >
+                            Resolve
+                          </button>
+                        )}
+                      </span>
+                    )}
+                    {!line.verificationStatus && isOpen && isManager && (
+                      <button
+                        onClick={() => flagMut.mutate({ lineId: line.id })}
+                        disabled={flagMut.isPending}
+                        className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-[#EAF0FF]/40 hover:bg-white/5 hover:text-[#E9B44C]"
+                      >
+                        Flag
+                      </button>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs">
                     {line.notes ?? "\u2014"}
@@ -880,6 +988,74 @@ export default function SessionDetailPage({
             >
               {closeMut.isPending ? "Closing..." : "Close Anyway"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Verification resolve modal */}
+      {showResolveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-md rounded-lg border border-white/10 bg-[#16283F] p-6">
+            <h2 className="mb-1 text-lg font-semibold text-[#EAF0FF]">
+              Resolve Verification — {showResolveModal.itemName}
+            </h2>
+            <p className="mb-4 text-sm text-[#EAF0FF]/60">
+              The original and verification counts differ. Choose a resolution.
+            </p>
+
+            <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
+              <div className="rounded-md border border-white/10 bg-[#0B1623] p-3">
+                <p className="text-xs text-[#EAF0FF]/60">Original Count</p>
+                <p className="text-lg font-bold text-[#EAF0FF]">
+                  {showResolveModal.originalCount ?? showResolveModal.originalWeight ?? "—"}
+                  <span className="text-xs font-normal text-[#EAF0FF]/40">
+                    {showResolveModal.originalWeight != null ? " g" : ""}
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-[#0B1623] p-3">
+                <p className="text-xs text-[#EAF0FF]/60">Verification Count</p>
+                <p className="text-lg font-bold text-[#EAF0FF]">
+                  {showResolveModal.verificationCount ?? showResolveModal.verificationWeight ?? "—"}
+                  <span className="text-xs font-normal text-[#EAF0FF]/40">
+                    {showResolveModal.verificationWeight != null ? " g" : ""}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => resolveVerificationMut.mutate({ lineId: showResolveModal.lineId, resolution: "original" })}
+                disabled={resolveVerificationMut.isPending}
+                className="rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF] hover:bg-white/5"
+              >
+                Keep Original
+              </button>
+              <button
+                onClick={() => resolveVerificationMut.mutate({ lineId: showResolveModal.lineId, resolution: "verification" })}
+                disabled={resolveVerificationMut.isPending}
+                className="rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF] hover:bg-white/5"
+              >
+                Use Verification
+              </button>
+              <button
+                onClick={() => resolveVerificationMut.mutate({ lineId: showResolveModal.lineId, resolution: "average" })}
+                disabled={resolveVerificationMut.isPending}
+                className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"
+              >
+                Use Average
+              </button>
+              <button
+                onClick={() => setShowResolveModal(null)}
+                className="px-4 py-2 text-sm text-[#EAF0FF]/40 hover:text-[#EAF0FF]"
+              >
+                Cancel
+              </button>
+            </div>
+            {resolveVerificationMut.error && (
+              <p className="mt-2 text-sm text-red-400">{resolveVerificationMut.error.message}</p>
+            )}
           </div>
         </div>
       )}

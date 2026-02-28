@@ -128,6 +128,8 @@ export default function NewCountScreen() {
         );
       })()}
 
+      <UpcomingAssignments />
+
       {openSessions && openSessions.length > 0 && (
         <>
           <Text style={[styles.sectionTitle, { marginTop: 32 }]}>
@@ -188,6 +190,85 @@ export default function NewCountScreen() {
         </>
       )}
     </ScrollView>
+  );
+}
+
+function UpcomingAssignments() {
+  const { data: assignments } = trpc.sessions.myUpcomingAssignments.useQuery();
+  const respondMut = trpc.sessions.respondAssignment.useMutation();
+  const utils = trpc.useUtils();
+
+  if (!assignments || assignments.length === 0) return null;
+
+  return (
+    <>
+      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+        Upcoming Assignments
+      </Text>
+      {assignments.map((a: any) => (
+        <View key={a.id} style={styles.assignmentCard}>
+          <View style={[styles.accentBar, { backgroundColor: "#7C5CFC" }]} />
+          <View style={styles.assignmentContent}>
+            <Text style={styles.assignmentType}>
+              {a.session.sessionType.charAt(0).toUpperCase() + a.session.sessionType.slice(1)} Session
+            </Text>
+            <Text style={styles.assignmentDate}>
+              {a.session.plannedAt
+                ? new Date(a.session.plannedAt).toLocaleString()
+                : new Date(a.session.startedTs).toLocaleString()}
+            </Text>
+            {a.subArea && (
+              <Text style={styles.assignmentArea}>
+                Area: {a.subArea.barArea?.name} / {a.subArea.name}
+              </Text>
+            )}
+            {a.focusItems?.length > 0 && (
+              <Text style={styles.assignmentFocus}>
+                {a.focusItems.length} focus item(s)
+              </Text>
+            )}
+            <View style={styles.assignmentActions}>
+              {a.status === "assigned" && (
+                <>
+                  <TouchableOpacity
+                    onPress={() => {
+                      respondMut.mutate(
+                        { assignmentId: a.id, response: "accepted" },
+                        { onSuccess: () => utils.sessions.myUpcomingAssignments.invalidate() }
+                      );
+                    }}
+                    disabled={respondMut.isPending}
+                  >
+                    <Text style={styles.acceptText}>Accept</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      respondMut.mutate(
+                        { assignmentId: a.id, response: "declined" },
+                        { onSuccess: () => utils.sessions.myUpcomingAssignments.invalidate() }
+                      );
+                    }}
+                    disabled={respondMut.isPending}
+                  >
+                    <Text style={styles.declineText}>Decline</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {a.status === "accepted" && (
+                <TouchableOpacity
+                  onPress={() => router.push(`/session/${a.session.id}`)}
+                >
+                  <Text style={styles.startText}>Start</Text>
+                </TouchableOpacity>
+              )}
+              <Text style={styles.statusBadge}>
+                {a.status}
+              </Text>
+            </View>
+          </View>
+        </View>
+      ))}
+    </>
   );
 }
 
@@ -292,5 +373,63 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#E9B44C",
     marginBottom: 12,
+  },
+  assignmentCard: {
+    backgroundColor: "#152238",
+    borderRadius: 12,
+    overflow: "hidden",
+    flexDirection: "row",
+    marginBottom: 10,
+  },
+  assignmentContent: {
+    flex: 1,
+    padding: 16,
+  },
+  assignmentType: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#EAF0FF",
+  },
+  assignmentDate: {
+    fontSize: 12,
+    color: "#8899B2",
+    marginTop: 2,
+  },
+  assignmentArea: {
+    fontSize: 13,
+    color: "#7C5CFC",
+    marginTop: 4,
+  },
+  assignmentFocus: {
+    fontSize: 12,
+    color: "#6B7FA0",
+    marginTop: 2,
+  },
+  assignmentActions: {
+    flexDirection: "row",
+    gap: 16,
+    marginTop: 10,
+    alignItems: "center",
+  },
+  acceptText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#4CAF50",
+  },
+  declineText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#dc2626",
+  },
+  startText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#42A5F5",
+  },
+  statusBadge: {
+    fontSize: 11,
+    color: "#8899B2",
+    textTransform: "capitalize",
+    marginLeft: "auto",
   },
 });

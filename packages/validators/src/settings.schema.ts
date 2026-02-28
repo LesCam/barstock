@@ -45,6 +45,7 @@ export const alertRulesSchema = z.object({
   usageSpike: alertRuleSchema.default({ enabled: true, threshold: 2.5 }),
   depletionMismatch: alertRuleSchema.default({ enabled: true, threshold: 1.5 }),
   priceChange: alertRuleSchema.default({ enabled: true, threshold: 5 }),
+  varianceForecastRisk: alertRuleSchema.default({ enabled: true, threshold: 10 }),
 });
 
 export type AlertRules = z.infer<typeof alertRulesSchema>;
@@ -70,6 +71,13 @@ export const subscriptionOverridesSchema = z.object({
 
 export type SubscriptionOverrides = z.infer<typeof subscriptionOverridesSchema>;
 
+export const verificationSettingsSchema = z.object({
+  autoFlagEnabled: z.boolean().default(false),
+  verificationThreshold: z.number().min(0).max(100).default(10),
+});
+
+export type VerificationSettings = z.infer<typeof verificationSettingsSchema>;
+
 export const settingsUpdateSchema = z.object({
   businessId: z.string().uuid(),
   capabilities: capabilityTogglesSchema.partial().optional(),
@@ -80,6 +88,7 @@ export const settingsUpdateSchema = z.object({
   benchmarking: benchmarkingSettingsSchema.partial().optional(),
   masterProductSharing: masterProductSharingSchema.partial().optional(),
   subscriptionOverrides: subscriptionOverridesSchema.optional(),
+  verification: verificationSettingsSchema.partial().optional(),
 });
 
 export const settingsGetSchema = z.object({

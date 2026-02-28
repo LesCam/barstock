@@ -1,5 +1,5 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
-import type { CapabilityToggles, AutoLockPolicy, AlertRules, SubscriptionOverrides } from "@barstock/validators";
+import type { CapabilityToggles, AutoLockPolicy, AlertRules, SubscriptionOverrides, VerificationSettings } from "@barstock/validators";
 
 export interface BenchmarkingSettings {
   optedIn: boolean;
@@ -20,6 +20,7 @@ export interface BusinessSettingsData {
   benchmarking: BenchmarkingSettings;
   masterProductSharing: MasterProductSharingSettings;
   subscriptionOverrides?: SubscriptionOverrides;
+  verification: VerificationSettings;
 }
 
 export const DEFAULT_SETTINGS: BusinessSettingsData = {
@@ -56,6 +57,7 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     usageSpike: { enabled: true, threshold: 2.5 },
     depletionMismatch: { enabled: true, threshold: 1.5 },
     priceChange: { enabled: true, threshold: 5 },
+    varianceForecastRisk: { enabled: true, threshold: 10 },
   },
   lastAlertEvaluation: undefined,
   endOfDayTime: "04:00",
@@ -66,6 +68,10 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
   masterProductSharing: {
     optedIn: false,
     optedInAt: null,
+  },
+  verification: {
+    autoFlagEnabled: false,
+    verificationThreshold: 10,
   },
 };
 
@@ -104,6 +110,10 @@ export class SettingsService {
         ...stored.masterProductSharing,
       },
       subscriptionOverrides: stored.subscriptionOverrides,
+      verification: {
+        ...DEFAULT_SETTINGS.verification,
+        ...stored.verification,
+      },
     };
   }
 
@@ -118,6 +128,7 @@ export class SettingsService {
       benchmarking?: Partial<BenchmarkingSettings>;
       masterProductSharing?: Partial<MasterProductSharingSettings>;
       subscriptionOverrides?: SubscriptionOverrides;
+      verification?: Partial<VerificationSettings>;
     }
   ): Promise<BusinessSettingsData> {
     const current = await this.getSettings(businessId);
@@ -145,6 +156,10 @@ export class SettingsService {
         ...patch.masterProductSharing,
       },
       subscriptionOverrides: patch.subscriptionOverrides ?? current.subscriptionOverrides,
+      verification: {
+        ...current.verification,
+        ...patch.verification,
+      },
     };
 
     await this.prisma.businessSettings.upsert({
