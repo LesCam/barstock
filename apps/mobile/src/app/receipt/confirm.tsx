@@ -103,11 +103,35 @@ export default function ReceiptConfirmScreen() {
   const confirmMutation = trpc.receipts.confirm.useMutation({
     onSuccess: (data) => {
       utils.receipts.list.invalidate();
-      Alert.alert(
-        "Receipt Processed",
-        `${data.eventIds.length} item${data.eventIds.length === 1 ? "" : "s"} received successfully.`,
-        [{ text: "OK", onPress: () => router.replace("/receive") }]
+
+      // Check for skipped lines that could be created as new items
+      const skippedLines = editableLines.filter(
+        (l) => l.skipped && !l.inventoryItemId
       );
+
+      if (skippedLines.length > 0) {
+        Alert.alert(
+          "Receipt Processed",
+          `${data.eventIds.length} item${data.eventIds.length === 1 ? "" : "s"} received.\n\n${skippedLines.length} item${skippedLines.length === 1 ? " was" : "s were"} skipped. Would you like to add them as inventory items?`,
+          [
+            { text: "Not Now", style: "cancel", onPress: () => router.replace("/receive") },
+            {
+              text: "Add Items",
+              onPress: () =>
+                router.replace({
+                  pathname: "/receipt/add-skipped",
+                  params: { receiptCaptureId: receiptCaptureId! },
+                }),
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          "Receipt Processed",
+          `${data.eventIds.length} item${data.eventIds.length === 1 ? "" : "s"} received successfully.`,
+          [{ text: "OK", onPress: () => router.replace("/receive") }]
+        );
+      }
     },
     onError: (err) => {
       Alert.alert("Error", err.message);

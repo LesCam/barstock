@@ -25,6 +25,7 @@ const RULE_LABELS: Record<string, string> = {
   largeAdjustment: "Large Adjustment",
   shrinkagePattern: "Shrinkage",
   parReorderAlert: "Par Reorder",
+  priceChange: "Price Change",
 };
 
 const RULE_COLORS: Record<string, string> = {
@@ -36,6 +37,7 @@ const RULE_COLORS: Record<string, string> = {
   largeAdjustment: "#EF4444",
   shrinkagePattern: "#FB923C",
   parReorderAlert: "#34D399",
+  priceChange: "#F59E0B",
 };
 
 function formatTimeAgo(dateStr: string | undefined): string {

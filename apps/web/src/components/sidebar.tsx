@@ -26,6 +26,7 @@ const navItems = [
   { href: "/pos/unmapped", label: "Unmapped Items", icon: "⚠️" },
   { href: "/pos/upload", label: "Upload Sales", icon: "📤" },
   { href: "/recipes", label: "Recipes", icon: "🍹" },
+  { href: "/receipts", label: "Receipts", icon: "🧾" },
   { href: "/draft", label: "Draft / Kegs", icon: "🍺" },
   { href: "/par", label: "Par Levels", icon: "\uD83C\uDFAF" },
   { href: "/forecast", label: "Forecast", icon: "\uD83D\uDD2E" },

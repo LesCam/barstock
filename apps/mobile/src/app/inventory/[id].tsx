@@ -106,6 +106,26 @@ export default function InventoryItemDetailScreen() {
 
       <UsageChartCard itemId={id!} locationId={item.locationId} />
 
+      {/* Price History */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Price History</Text>
+        {item.priceHistory && item.priceHistory.length > 0 ? (
+          item.priceHistory.map((ph: any, idx: number) => (
+            <DetailRow
+              key={ph.id ?? idx}
+              label={`$${Number(ph.unitCost).toFixed(2)}/${item.baseUom}`}
+              value={new Date(ph.effectiveFromTs).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            />
+          ))
+        ) : (
+          <Text style={styles.emptyText}>No price history</Text>
+        )}
+      </View>
+
       {parInfo && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Par Status</Text>
@@ -163,4 +183,5 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   statusBadgeText: { fontSize: 12, fontWeight: "600", color: "#FFF" },
+  emptyText: { fontSize: 13, color: "#5A6A7A", paddingVertical: 8 },
 });

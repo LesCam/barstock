@@ -55,6 +55,7 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     parReorderAlert: { enabled: false, threshold: 3 },
     usageSpike: { enabled: true, threshold: 2.5 },
     depletionMismatch: { enabled: true, threshold: 1.5 },
+    priceChange: { enabled: true, threshold: 5 },
   },
   lastAlertEvaluation: undefined,
   endOfDayTime: "04:00",

@@ -16,6 +16,13 @@ export function mapNotificationRoute(linkUrl: string | null | undefined): string
   const inventoryMatch = path.match(/^\/inventory\/([a-f0-9-]+)/);
   if (inventoryMatch) return `/inventory/${inventoryMatch[1]}`;
 
+  // Receipt add-skipped: /receipt/add-skipped?receiptCaptureId=...
+  const addSkippedMatch = path.match(/^\/receipt\/add-skipped/);
+  if (addSkippedMatch) {
+    const qs = linkUrl.includes("?") ? linkUrl.substring(linkUrl.indexOf("?")) : "";
+    return `/receipt/add-skipped${qs}`;
+  }
+
   // Top-level tab routes
   if (path === "/sessions" || path === "/") return "/(tabs)";
   if (path === "/inventory") return "/(tabs)/inventory";

@@ -2,6 +2,7 @@ import { router, protectedProcedure, requireRole } from "../trpc";
 import { inventoryItemCreateSchema, inventoryItemUpdateSchema, inventoryItemBulkCreateSchema, priceHistoryCreateSchema, onHandQuerySchema, setItemVendorsSchema } from "@barstock/validators";
 import { InventoryService } from "../services/inventory.service";
 import { AuditService } from "../services/audit.service";
+import { AlertService } from "../services/alert.service";
 import { z } from "zod";
 
 export const inventoryRouter = router({
@@ -191,6 +192,14 @@ export const inventoryRouter = router({
           effectiveFromTs: input.effectiveFromTs,
         },
       });
+
+      // Fire price change alert (fire-and-forget)
+      const alertSvc = new AlertService(ctx.prisma);
+      const item = await ctx.prisma.inventoryItem.findUnique({
+        where: { id: input.inventoryItemId },
+        select: { location: { select: { name: true } } },
+      });
+      alertSvc.checkPriceChange(ctx.user.businessId, input.inventoryItemId, Number(price.unitCost), item?.location.name ?? "").catch(() => {});
 
       return price;
     }),

@@ -111,6 +111,10 @@ function RootNavigator() {
         options={{ title: "Review Receipt", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="receipt/add-skipped"
+        options={{ title: "Add New Items", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
         name="par-levels"
         options={{ title: "Par Levels", headerBackTitle: "Back" }}
       />

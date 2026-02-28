@@ -62,6 +62,12 @@ const RULE_CONFIG = [
     description: "Alert when items hit min level or will stockout within threshold days",
     unit: "days",
   },
+  {
+    key: "priceChange" as const,
+    label: "Price Change",
+    description: "Alert when item price changes by more than threshold %",
+    unit: "%",
+  },
 ] as const;
 
 type RuleKey = (typeof RULE_CONFIG)[number]["key"];

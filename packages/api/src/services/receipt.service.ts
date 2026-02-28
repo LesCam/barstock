@@ -565,6 +565,22 @@ Rules:
       });
     });
 
+    // Fire price change alerts for items with prices (fire-and-forget)
+    try {
+      const { AlertService } = await import("./alert.service");
+      const alertSvc = new AlertService(this.prisma);
+      const location = await this.prisma.location.findUnique({
+        where: { id: capture.locationId },
+        select: { name: true },
+      });
+      for (const line of lines) {
+        if (line.skipped || !line.inventoryItemId || line.unitPrice == null) continue;
+        alertSvc.checkPriceChange(businessId, line.inventoryItemId, line.unitPrice, location?.name ?? "").catch(() => {});
+      }
+    } catch {
+      // Don't fail if alert check fails
+    }
+
     // Learn aliases (outside transaction — non-critical)
     try {
       await this.learnAliases(receiptCaptureId, businessId);
@@ -689,6 +705,40 @@ Rules:
       })),
       nextCursor: hasMore ? items[items.length - 1]?.id : null,
     };
+  }
+
+  async listSkipped(locationId: string) {
+    const receipts = await this.prisma.receiptCapture.findMany({
+      where: {
+        locationId,
+        status: "processed",
+        lines: {
+          some: {
+            skipped: true,
+            inventoryItemId: null,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        vendor: { select: { name: true } },
+        lines: {
+          where: {
+            skipped: true,
+            inventoryItemId: null,
+          },
+          select: { id: true },
+        },
+      },
+    });
+
+    return receipts.map((r) => ({
+      id: r.id,
+      vendorName: r.vendor?.name ?? r.vendorNameRaw ?? null,
+      invoiceDate: r.invoiceDate,
+      createdAt: r.createdAt,
+      skippedCount: r.lines.length,
+    }));
   }
 
   async getById(id: string) {

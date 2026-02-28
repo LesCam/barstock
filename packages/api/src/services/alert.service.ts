@@ -518,6 +518,59 @@ export class AlertService {
     }
   }
 
+  async checkPriceChange(
+    businessId: string,
+    inventoryItemId: string,
+    newUnitCost: number,
+    locationName: string,
+  ): Promise<void> {
+    const settingsSvc = new SettingsService(this.prisma);
+    const settings = await settingsSvc.getSettings(businessId);
+    const rule = (settings.alertRules as any).priceChange;
+    if (!rule?.enabled) return;
+
+    // Fetch the item name
+    const item = await this.prisma.inventoryItem.findUnique({
+      where: { id: inventoryItemId },
+      select: { name: true },
+    });
+    if (!item) return;
+
+    // Fetch previous price (skip the one just created)
+    const previousPrice = await this.prisma.priceHistory.findFirst({
+      where: { inventoryItemId },
+      orderBy: { effectiveFromTs: "desc" },
+      skip: 1,
+      select: { unitCost: true },
+    });
+    if (!previousPrice) return; // First price — nothing to compare
+
+    const oldUnitCost = Number(previousPrice.unitCost);
+    if (oldUnitCost === 0) return;
+
+    const changePercent = Math.abs((newUnitCost - oldUnitCost) / oldUnitCost) * 100;
+    if (changePercent < rule.threshold) return;
+
+    const direction = newUnitCost > oldUnitCost ? "+" : "-";
+    const oldFormatted = `$${oldUnitCost.toFixed(2)}`;
+    const newFormatted = `$${newUnitCost.toFixed(2)}`;
+
+    await this.notifyAdmins(
+      businessId,
+      `Price Change: ${item.name}`,
+      `${item.name} price changed from ${oldFormatted} to ${newFormatted} (${direction}${changePercent.toFixed(1)}%) at ${locationName}`,
+      `/inventory/${inventoryItemId}`,
+      {
+        rule: "priceChange",
+        itemId: inventoryItemId,
+        itemName: item.name,
+        oldPrice: oldUnitCost,
+        newPrice: newUnitCost,
+        changePercent,
+      },
+    );
+  }
+
   async checkHighVarianceSession(
     businessId: string,
     adjustments: AdjustmentItem[],

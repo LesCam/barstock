@@ -293,6 +293,9 @@ export default function ReceiveStockScreen() {
           <Text style={styles.scanReceiptBtnText}>Scan Receipt</Text>
         </TouchableOpacity>
 
+        {/* Skipped Items */}
+        <SkippedReceipts locationId={selectedLocationId} />
+
         {/* Pending Receipts */}
         <PendingReceipts locationId={selectedLocationId} />
 
@@ -716,6 +719,76 @@ export default function ReceiveStockScreen() {
     </View>
   );
 }
+
+// ── Skipped Receipts Component ───────────────────────────────
+function SkippedReceipts({ locationId }: { locationId: string | null }) {
+  if (!locationId) return null;
+
+  const { data } = trpc.receipts.listSkipped.useQuery(
+    { locationId },
+    { enabled: !!locationId }
+  );
+
+  if (!data?.length) return null;
+
+  return (
+    <View style={skippedStyles.container}>
+      <Text style={skippedStyles.label}>Skipped Items Needing Attention</Text>
+      {data.map((r: any) => (
+        <TouchableOpacity
+          key={r.id}
+          style={skippedStyles.row}
+          onPress={() =>
+            router.push({
+              pathname: "/receipt/add-skipped",
+              params: { receiptCaptureId: r.id },
+            })
+          }
+        >
+          <View style={skippedStyles.info}>
+            <Text style={skippedStyles.vendor}>
+              {r.vendorName ?? "Unknown vendor"}
+            </Text>
+            <Text style={skippedStyles.meta}>
+              {r.skippedCount} skipped item{r.skippedCount !== 1 ? "s" : ""}
+              {" · "}
+              {r.invoiceDate
+                ? new Date(r.invoiceDate).toLocaleDateString()
+                : new Date(r.createdAt).toLocaleDateString()}
+            </Text>
+          </View>
+          <Text style={skippedStyles.action}>Add Items</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+const skippedStyles = StyleSheet.create({
+  container: { marginBottom: 16 },
+  label: {
+    color: "#E9B44C",
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#16283F",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#E9B44C",
+  },
+  info: { flex: 1 },
+  vendor: { color: "#EAF0FF", fontSize: 15, fontWeight: "600" },
+  meta: { color: "#5A6A7A", fontSize: 12, marginTop: 2 },
+  action: { color: "#E9B44C", fontSize: 14, fontWeight: "600" },
+});
 
 // ── Pending Receipts Component ───────────────────────────────
 function PendingReceipts({ locationId }: { locationId: string | null }) {

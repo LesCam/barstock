@@ -36,8 +36,26 @@ export const receiptGetByIdSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const receiptListSkippedSchema = z.object({
+  locationId: z.string().uuid(),
+});
+
+export const createFromSkippedSchema = z.object({
+  receiptLineId: z.string().uuid(),
+  categoryId: z.string().uuid(),
+  locationId: z.string().uuid(),
+  name: z.string().min(1).optional(),
+});
+
+export const requestItemCreationSchema = z.object({
+  receiptLineId: z.string().uuid(),
+});
+
 export type ReceiptCaptureInput = z.infer<typeof receiptCaptureSchema>;
 export type ReceiptConfirmLineInput = z.infer<typeof receiptConfirmLineSchema>;
 export type ReceiptConfirmInput = z.infer<typeof receiptConfirmSchema>;
 export type ReceiptListInput = z.infer<typeof receiptListSchema>;
 export type ReceiptGetByIdInput = z.infer<typeof receiptGetByIdSchema>;
+export type CreateFromSkippedInput = z.infer<typeof createFromSkippedSchema>;
+export type RequestItemCreationInput = z.infer<typeof requestItemCreationSchema>;
+export type ReceiptListSkippedInput = z.infer<typeof receiptListSkippedSchema>;
