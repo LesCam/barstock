@@ -171,6 +171,10 @@ function RootNavigator() {
         options={{ title: "Reorder", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="forecast"
+        options={{ title: "Demand Forecast", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
         name="help"
         options={{ title: "Help", headerBackTitle: "Back" }}
       />

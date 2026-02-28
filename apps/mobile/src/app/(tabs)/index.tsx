@@ -168,12 +168,21 @@ export default function SessionsTab() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={styles.shoppingListButton}
-        onPress={() => router.push("/shopping-list")}
-      >
-        <Text style={styles.shoppingListButtonText}>Shopping List</Text>
-      </TouchableOpacity>
+      <View style={styles.secondaryRow}>
+        <TouchableOpacity
+          style={styles.forecastButton}
+          onPress={() => router.push("/forecast")}
+        >
+          <Text style={styles.forecastButtonText}>Demand Forecast</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.shoppingListButton}
+          onPress={() => router.push("/shopping-list")}
+        >
+          <Text style={styles.shoppingListButtonText}>Shopping List</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Open Sessions */}
       {openSessions.length > 0 && (
@@ -287,11 +296,18 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#42A5F5",
   },
   transferButtonText: { color: "#42A5F5", fontSize: 14, fontWeight: "700" },
+  forecastButton: {
+    flex: 1,
+    backgroundColor: "#16283F", borderRadius: 8,
+    padding: 14, alignItems: "center",
+    borderWidth: 1, borderColor: "#2BA8A0",
+  },
+  forecastButtonText: { color: "#2BA8A0", fontSize: 14, fontWeight: "700" },
   shoppingListButton: {
+    flex: 1,
     backgroundColor: "#16283F", borderRadius: 8,
     padding: 14, alignItems: "center",
     borderWidth: 1, borderColor: "#E9B44C",
-    marginBottom: 16,
   },
   shoppingListButtonText: { color: "#E9B44C", fontSize: 14, fontWeight: "700" },
 
