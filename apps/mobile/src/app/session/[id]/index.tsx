@@ -157,31 +157,15 @@ export default function SessionDetailScreen() {
     return (session as any).assignments?.find((a: any) => a.user?.id === authUser.userId) ?? null;
   }, [session, authUser]);
 
-  // Auto-join when session loads and is open
+  // Auto-join when session loads and is open (defer until online)
+  const hasJoinedRef = useRef(false);
   useEffect(() => {
-    if (session && !session.endedTs) {
+    if (session && !session.endedTs && isOnline && !hasJoinedRef.current) {
       joinMutation.mutate({ sessionId: session.id });
+      hasJoinedRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id, session?.endedTs]);
-
-  // Auto-claim assigned sub-area after join
-  useEffect(() => {
-    if (!myAssignment?.subAreaId || !session || session.endedTs) return;
-    if (selectedSubAreaId === myAssignment.subAreaId) return;
-    // Set the area selection to match assignment
-    const subArea = myAssignment.subArea;
-    if (subArea?.barArea) {
-      // Find the bar area that contains this sub-area
-      const barAreaId = areas?.find((a: any) =>
-        a.subAreas.some((sa: any) => sa.id === myAssignment.subAreaId)
-      )?.id;
-      if (barAreaId && barAreaId !== selectedAreaId) {
-        setSelectedAreaId(barAreaId);
-      }
-      setSelectedSubAreaId(myAssignment.subAreaId);
-    }
-  }, [myAssignment?.subAreaId, session?.id, areas]);
+  }, [session?.id, session?.endedTs, isOnline]);
 
   // Heartbeat: fires every 30s and immediately on sub-area change (skip when offline)
   const sendHeartbeat = useCallback(() => {
@@ -278,7 +262,7 @@ export default function SessionDetailScreen() {
     }
   }, [id, authUser?.userId, utils]);
 
-  useSessionSSE(id, !!session && !session?.endedTs, handleSSEEvent);
+  useSessionSSE(id, !!session && !session?.endedTs, handleSSEEvent, isOnline);
 
   // Count participants per sub-area (excluding current user)
   const subAreaParticipantCounts = useMemo(() => {
@@ -314,6 +298,22 @@ export default function SessionDetailScreen() {
     { enabled: !!selectedLocationId, staleTime: 5 * 60 * 1000 }
   );
 
+  // Auto-claim assigned sub-area after join
+  useEffect(() => {
+    if (!myAssignment?.subAreaId || !session || session.endedTs) return;
+    if (selectedSubAreaId === myAssignment.subAreaId) return;
+    const subArea = myAssignment.subArea;
+    if (subArea?.barArea) {
+      const barAreaId = areas?.find((a: any) =>
+        a.subAreas.some((sa: any) => sa.id === myAssignment.subAreaId)
+      )?.id;
+      if (barAreaId && barAreaId !== selectedAreaId) {
+        setSelectedAreaId(barAreaId);
+      }
+      setSelectedSubAreaId(myAssignment.subAreaId);
+    }
+  }, [myAssignment?.subAreaId, session?.id, areas]);
+
   // Live expected items for currently selected area
   const { data: expectedItemsForArea } = trpc.sessions.expectedItemsForArea.useQuery(
     {
@@ -330,6 +330,19 @@ export default function SessionDetailScreen() {
     { locationId: selectedLocationId!, sortMode },
     { enabled: !!selectedLocationId, staleTime: 15_000 }
   );
+
+  // Prefetch count hints for offline availability
+  useEffect(() => {
+    if (!selectedLocationId || !session || session.endedTs) return;
+    if (!expectedItemsForLocation) return;
+    const allItemIds = (expectedItemsForLocation as any[]).map((i: any) => i.inventoryItemId);
+    if (allItemIds.length > 0) {
+      utils.sessions.itemCountHints.prefetch({
+        locationId: selectedLocationId,
+        inventoryItemIds: allItemIds,
+      });
+    }
+  }, [selectedLocationId, expectedItemsForLocation, session?.endedTs]);
 
   const expectedItems = fullLocationMode ? expectedItemsForLocation : expectedItemsForArea;
 

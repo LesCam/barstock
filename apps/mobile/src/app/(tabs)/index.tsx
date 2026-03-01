@@ -11,6 +11,7 @@ import {
 import { Redirect, router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth, usePermission } from "@/lib/auth-context";
+import { useNetwork } from "@/lib/network-context";
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
   shift: "Inventory Count",
@@ -37,6 +38,7 @@ export default function SessionsTab() {
   const canAccessArt = usePermission("canAccessArt");
   const canAccessInventory = usePermission("canAccessInventory");
   const canAccessGuide = usePermission("canAccessGuide");
+  const { isOnline } = useNetwork();
 
   const [creating, setCreating] = useState(false);
   const [limit, setLimit] = useState(INITIAL_LIMIT);
@@ -141,14 +143,16 @@ export default function SessionsTab() {
   return (
     <View style={styles.container}>
       <TouchableOpacity
-        style={[styles.newButton, creating && styles.newButtonDisabled]}
+        style={[styles.newButton, (creating || !isOnline) && styles.newButtonDisabled]}
         onPress={handleStartCount}
-        disabled={creating}
+        disabled={creating || !isOnline}
       >
         {creating ? (
           <ActivityIndicator color="#0B1623" />
         ) : (
-          <Text style={styles.newButtonText}>Start Inventory Count</Text>
+          <Text style={styles.newButtonText}>
+            {isOnline ? "Start Inventory Count" : "Start Inventory Count — Offline"}
+          </Text>
         )}
       </TouchableOpacity>
 

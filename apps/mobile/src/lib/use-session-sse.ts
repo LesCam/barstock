@@ -15,6 +15,7 @@ export function useSessionSSE(
   sessionId: string | undefined,
   isOpen: boolean,
   onEvent: (event: SSEEvent) => void,
+  isOnline: boolean = true,
 ) {
   const abortRef = useRef<AbortController | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -22,7 +23,7 @@ export function useSessionSSE(
   onEventRef.current = onEvent;
 
   const connect = useCallback(() => {
-    if (!sessionId) return;
+    if (!sessionId || !isOnline) return;
 
     const token = getAuthToken();
     if (!token) return;
@@ -73,16 +74,16 @@ export function useSessionSSE(
         if (err instanceof Error && err.name === "AbortError") return;
       }
 
-      // Stream ended or errored — reconnect after 5s
-      if (!abortRef.current?.signal.aborted) {
+      // Stream ended or errored — reconnect after 5s (only if online)
+      if (!abortRef.current?.signal.aborted && isOnline) {
         reconnectTimerRef.current = setTimeout(connect, 5000);
       }
     })();
-  }, [sessionId]);
+  }, [sessionId, isOnline]);
 
-  // Connect/disconnect based on session state
+  // Connect/disconnect based on session state and network
   useEffect(() => {
-    if (!sessionId || !isOpen) {
+    if (!sessionId || !isOpen || !isOnline) {
       abortRef.current?.abort();
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       return;
@@ -94,11 +95,11 @@ export function useSessionSSE(
       abortRef.current?.abort();
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     };
-  }, [sessionId, isOpen, connect]);
+  }, [sessionId, isOpen, isOnline, connect]);
 
   // Disconnect on background, reconnect on foreground
   useEffect(() => {
-    if (!sessionId || !isOpen) return;
+    if (!sessionId || !isOpen || !isOnline) return;
 
     const handleAppState = (state: AppStateStatus) => {
       if (state === "active") {
@@ -111,5 +112,5 @@ export function useSessionSSE(
 
     const sub = AppState.addEventListener("change", handleAppState);
     return () => sub.remove();
-  }, [sessionId, isOpen, connect]);
+  }, [sessionId, isOpen, isOnline, connect]);
 }

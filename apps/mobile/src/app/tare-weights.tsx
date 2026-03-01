@@ -369,7 +369,7 @@ export default function TareWeightsScreen() {
             <ScrollView style={styles.needsTareScroll} nestedScrollEnabled>
               <View style={styles.needsTareList}>
                 {needsTareItems.map((item) => {
-                  const hasSuggestion = item.barcode && tareSuggestions?.[item.barcode]?.confidence >= 30;
+                  const hasSuggestion = item.barcode && (tareSuggestions?.[item.barcode]?.confidence ?? 0) >= 30;
                   return (
                     <View key={item.id} style={styles.needsTareRow}>
                       <View style={{ flex: 1 }}>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Alert } from "react-native";
+import { useRouter } from "expo-router";
 import { useNetwork } from "@/lib/network-context";
 import { subscribe, isSyncing, retryFailed, clearFailed, type QueueEntry } from "@/lib/offline-queue";
 import { trpcVanilla } from "@/lib/trpc";
@@ -8,6 +9,7 @@ type BannerState = "hidden" | "offline" | "syncing" | "synced" | "failed";
 
 export function OfflineBanner() {
   const { isOnline } = useNetwork();
+  const router = useRouter();
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [bannerState, setBannerState] = useState<BannerState>("hidden");
   const slideAnim = useRef(new Animated.Value(-50)).current;
@@ -113,7 +115,9 @@ export function OfflineBanner() {
       <View style={[styles.banner, bgColor]}>
         {bannerState === "failed" ? (
           <View style={styles.failedRow}>
-            <Text style={styles.text}>{text}</Text>
+            <TouchableOpacity onPress={() => router.push("/sync-queue")} activeOpacity={0.7}>
+              <Text style={styles.text}>{text}</Text>
+            </TouchableOpacity>
             <View style={styles.failedButtons}>
               <TouchableOpacity
                 style={styles.retryBtn}
@@ -135,7 +139,9 @@ export function OfflineBanner() {
             </View>
           </View>
         ) : (
-          <Text style={styles.text}>{text}</Text>
+          <TouchableOpacity onPress={() => router.push("/sync-queue")} activeOpacity={0.7}>
+            <Text style={styles.text}>{text}</Text>
+          </TouchableOpacity>
         )}
       </View>
     </Animated.View>
