@@ -127,6 +127,26 @@ export const portfolioRollupQuerySchema = z.object({
   toDate: z.coerce.date(),
 });
 
+export const portfolioTrendQuerySchema = z.object({
+  businessId: z.string().uuid(),
+  weeks: z.number().int().min(2).max(52).default(12),
+});
+
+export const portfolioStaffComparisonQuerySchema = z.object({
+  businessId: z.string().uuid(),
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+});
+
+export const portfolioVarianceItemsQuerySchema = z.object({
+  businessId: z.string().uuid(),
+  limit: z.number().int().min(1).max(100).default(20),
+});
+
+export const portfolioForecastQuerySchema = z.object({
+  businessId: z.string().uuid(),
+});
+
 export const staffVarianceReasonBreakdownQuerySchema = z.object({
   locationId: z.string().uuid(),
   userId: z.string().uuid().optional(),

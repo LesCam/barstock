@@ -1,5 +1,5 @@
 import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, portfolioTrendQuerySchema, portfolioStaffComparisonQuerySchema, portfolioVarianceItemsQuerySchema, portfolioForecastQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 import { BenchmarkService } from "../services/benchmark.service";
@@ -159,6 +159,42 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new ReportService(ctx.prisma);
       return svc.getPortfolioRollup(input.businessId, input.fromDate, input.toDate);
+    }),
+
+  portfolioTrend: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(portfolioTrendQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getPortfolioTrend(input.businessId, input.weeks);
+    }),
+
+  portfolioStaffComparison: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(portfolioStaffComparisonQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new VarianceService(ctx.prisma);
+      return svc.getPortfolioStaffComparison(input.businessId, input.fromDate, input.toDate);
+    }),
+
+  portfolioVarianceItems: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(portfolioVarianceItemsQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new VarianceService(ctx.prisma);
+      return svc.getPortfolioVarianceItems(input.businessId, input.limit);
+    }),
+
+  portfolioForecast: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(portfolioForecastQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReportService(ctx.prisma);
+      return svc.getPortfolioForecast(input.businessId);
     }),
 
   staffVarianceReasonBreakdown: protectedProcedure

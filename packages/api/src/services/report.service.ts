@@ -1807,6 +1807,89 @@ export class ReportService {
     };
   }
 
+  async getPortfolioTrend(businessId: string, weeks = 12) {
+    const since = new Date(Date.now() - weeks * 7 * 24 * 60 * 60 * 1000);
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        snapshot_date: Date;
+        on_hand_value: number;
+        cogs_7d: number;
+        variance_impact: number;
+        pour_cost_pct: number | null;
+      }>
+    >`
+      SELECT
+        snapshot_date,
+        AVG((metrics_json->>'onHandValue')::float)::float as on_hand_value,
+        AVG((metrics_json->>'cogs7d')::float)::float as cogs_7d,
+        AVG((metrics_json->>'varianceImpact')::float)::float as variance_impact,
+        AVG((metrics_json->>'pourCostPct')::float)::float as pour_cost_pct
+      FROM benchmark_snapshots
+      WHERE business_id = ${businessId}::uuid
+        AND snapshot_date >= ${since}::date
+      GROUP BY snapshot_date
+      ORDER BY snapshot_date
+    `;
+
+    return rows.map((r) => ({
+      date: r.snapshot_date.toISOString().split("T")[0]!,
+      onHandValue: r.on_hand_value,
+      cogs7d: r.cogs_7d,
+      varianceImpact: r.variance_impact,
+      pourCostPct: r.pour_cost_pct,
+    }));
+  }
+
+  async getPortfolioForecast(businessId: string) {
+    const locations = await this.prisma.location.findMany({
+      where: { businessId, active: true },
+    });
+
+    const locationForecasts = await Promise.all(
+      locations.map(async (loc) => {
+        const forecast = await this.getForecastDashboard(loc.id);
+        const stockoutRiskItems = forecast.items.filter(
+          (i) => i.daysToStockout != null && i.daysToStockout <= 7
+        );
+        const topByUsage = [...forecast.items]
+          .sort((a, b) => b.forecastDailyUsage - a.forecastDailyUsage)
+          .slice(0, 3);
+
+        return {
+          locationId: loc.id,
+          locationName: loc.name,
+          itemsTracked: forecast.summary.totalItems,
+          stockoutRiskCount: stockoutRiskItems.length,
+          projectedCogs7d: forecast.summary.projectedCogs7d,
+          topItems: topByUsage.map((i) => ({
+            itemName: i.itemName,
+            forecastDailyUsage: i.forecastDailyUsage,
+            daysToStockout: i.daysToStockout,
+          })),
+        };
+      })
+    );
+
+    return {
+      locations: locationForecasts,
+      totals: {
+        totalItemsTracked: locationForecasts.reduce(
+          (s, l) => s + l.itemsTracked,
+          0
+        ),
+        totalStockoutRisk: locationForecasts.reduce(
+          (s, l) => s + l.stockoutRiskCount,
+          0
+        ),
+        totalProjectedCogs7d: locationForecasts.reduce(
+          (s, l) => s + l.projectedCogs7d,
+          0
+        ),
+      },
+    };
+  }
+
   async getBusinessRollup(businessId: string, asOfDate?: Date) {
     const locations = await this.prisma.location.findMany({
       where: { businessId },

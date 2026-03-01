@@ -48,6 +48,7 @@ const navItems = [
 const adminNavItems = [
   { href: "/staff", label: "Staff", icon: "👥" },
   { href: "/staff/scorecards", label: "Scorecards", icon: "\uD83C\uDFC6" },
+  { href: "/portfolio", label: "Portfolio", icon: "🏢" },
   { href: "/benchmarking", label: "Benchmarking", icon: "\uD83D\uDCCA" },
 ];
 

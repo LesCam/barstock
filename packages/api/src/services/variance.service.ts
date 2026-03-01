@@ -967,4 +967,193 @@ export class VarianceService {
 
     return Array.from(staffMap.values());
   }
+
+  async getPortfolioStaffComparison(
+    businessId: string,
+    fromDate?: Date,
+    toDate?: Date
+  ) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        user_id: string;
+        display_name: string;
+        email: string;
+        location_names: string;
+        total_sessions_counted: bigint;
+        total_lines_counted: bigint;
+        total_manual_lines: bigint;
+        total_lines_with_variance: bigint;
+      }>
+    >`
+      SELECT
+        u.id as user_id,
+        COALESCE(TRIM(CONCAT(u.first_name, ' ', u.last_name)), u.email) as display_name,
+        u.email,
+        STRING_AGG(DISTINCT l.name, ', ') as location_names,
+        COUNT(DISTINCT s.id) as total_sessions_counted,
+        COUNT(sl.id) as total_lines_counted,
+        COUNT(CASE WHEN sl.entry_method = 'manual' THEN 1 END) as total_manual_lines,
+        COUNT(CASE WHEN sl.variance_pct IS NOT NULL AND ABS(sl.variance_pct) > 0.02 THEN 1 END) as total_lines_with_variance
+      FROM inventory_session_lines sl
+      JOIN inventory_sessions s ON s.id = sl.session_id
+      JOIN locations l ON l.id = s.location_id
+      JOIN users u ON u.id = sl.counted_by
+      WHERE l.business_id = ${businessId}::uuid
+        AND l.active = true
+        AND s.ended_ts IS NOT NULL
+        AND sl.counted_by IS NOT NULL
+        AND (${fromDate ?? null}::timestamptz IS NULL OR s.ended_ts >= ${fromDate ?? null}::timestamptz)
+        AND (${toDate ?? null}::timestamptz IS NULL OR s.ended_ts < ${toDate ?? null}::timestamptz)
+      GROUP BY u.id, u.first_name, u.last_name, u.email
+      ORDER BY total_lines_counted DESC
+    `;
+
+    // Compute per-user trend from recent sessions
+    const trendRows = await this.prisma.$queryRaw<
+      Array<{
+        user_id: string;
+        session_id: string;
+        session_ended: Date;
+        lines: bigint;
+        lines_with_variance: bigint;
+      }>
+    >`
+      SELECT
+        sl.counted_by as user_id,
+        s.id as session_id,
+        s.ended_ts as session_ended,
+        COUNT(sl.id) as lines,
+        COUNT(CASE WHEN sl.variance_pct IS NOT NULL AND ABS(sl.variance_pct) > 0.02 THEN 1 END) as lines_with_variance
+      FROM inventory_session_lines sl
+      JOIN inventory_sessions s ON s.id = sl.session_id
+      JOIN locations l ON l.id = s.location_id
+      WHERE l.business_id = ${businessId}::uuid
+        AND l.active = true
+        AND s.ended_ts IS NOT NULL
+        AND sl.counted_by IS NOT NULL
+        AND (${fromDate ?? null}::timestamptz IS NULL OR s.ended_ts >= ${fromDate ?? null}::timestamptz)
+        AND (${toDate ?? null}::timestamptz IS NULL OR s.ended_ts < ${toDate ?? null}::timestamptz)
+      GROUP BY sl.counted_by, s.id, s.ended_ts
+      ORDER BY sl.counted_by, s.ended_ts
+    `;
+
+    const trendMap = new Map<string, Array<{ rate: number }>>();
+    for (const r of trendRows) {
+      if (!trendMap.has(r.user_id)) trendMap.set(r.user_id, []);
+      const lines = Number(r.lines);
+      const withVar = Number(r.lines_with_variance);
+      trendMap.get(r.user_id)!.push({ rate: lines > 0 ? withVar / lines : 0 });
+    }
+
+    return rows.map((r) => {
+      const totalLines = Number(r.total_lines_counted);
+      const linesVar = Number(r.total_lines_with_variance);
+      const varianceRate = totalLines > 0 ? linesVar / totalLines : 0;
+
+      const sessions = trendMap.get(r.user_id) ?? [];
+      let trend: "improving" | "worsening" | "stable" = "stable";
+      if (sessions.length >= 4) {
+        const mid = Math.floor(sessions.length / 2);
+        const firstHalf = sessions.slice(0, mid).reduce((s, x) => s + x.rate, 0) / mid;
+        const secondHalf = sessions.slice(mid).reduce((s, x) => s + x.rate, 0) / (sessions.length - mid);
+        if (secondHalf < firstHalf - 0.05) trend = "improving";
+        else if (secondHalf > firstHalf + 0.05) trend = "worsening";
+      }
+
+      return {
+        userId: r.user_id,
+        displayName: r.display_name,
+        email: r.email,
+        locationNames: r.location_names.split(", "),
+        totalSessionsCounted: Number(r.total_sessions_counted),
+        totalLinesCounted: totalLines,
+        totalManualLines: Number(r.total_manual_lines),
+        totalLinesWithVariance: linesVar,
+        varianceRate,
+        trend,
+      };
+    });
+  }
+
+  async getPortfolioVarianceItems(businessId: string, limit = 20) {
+    const locations = await this.prisma.location.findMany({
+      where: { businessId, active: true },
+    });
+
+    // Collect variance patterns per location
+    const allPatterns: Array<{
+      locationName: string;
+      item: VariancePatternItem;
+    }> = [];
+
+    for (const loc of locations) {
+      const patterns = await this.analyzeVariancePatterns(loc.id, 10);
+      for (const item of patterns) {
+        allPatterns.push({ locationName: loc.name, item });
+      }
+    }
+
+    // Merge by inventoryItemId
+    const merged = new Map<
+      string,
+      {
+        inventoryItemId: string;
+        itemName: string;
+        categoryName: string | null;
+        locationCount: number;
+        locationNames: string[];
+        totalEstimatedLoss: number;
+        avgVariance: number;
+        varianceSums: number;
+        varianceCounts: number;
+        trend: "improving" | "worsening" | "stable";
+        isShrinkageSuspect: boolean;
+      }
+    >();
+
+    for (const { locationName, item } of allPatterns) {
+      const existing = merged.get(item.inventoryItemId);
+      if (existing) {
+        existing.locationCount++;
+        existing.locationNames.push(locationName);
+        existing.totalEstimatedLoss += item.totalEstimatedLoss;
+        existing.varianceSums += item.avgVariance;
+        existing.varianceCounts++;
+        if (item.isShrinkageSuspect) existing.isShrinkageSuspect = true;
+        if (item.trend === "worsening") existing.trend = "worsening";
+      } else {
+        merged.set(item.inventoryItemId, {
+          inventoryItemId: item.inventoryItemId,
+          itemName: item.itemName,
+          categoryName: item.categoryName,
+          locationCount: 1,
+          locationNames: [locationName],
+          totalEstimatedLoss: item.totalEstimatedLoss,
+          avgVariance: item.avgVariance,
+          varianceSums: item.avgVariance,
+          varianceCounts: 1,
+          trend: item.trend,
+          isShrinkageSuspect: item.isShrinkageSuspect,
+        });
+      }
+    }
+
+    return Array.from(merged.values())
+      .map((m) => ({
+        inventoryItemId: m.inventoryItemId,
+        itemName: m.itemName,
+        categoryName: m.categoryName,
+        locationCount: m.locationCount,
+        locationNames: m.locationNames,
+        totalEstimatedLoss: m.totalEstimatedLoss,
+        avgVariance: m.varianceSums / m.varianceCounts,
+        trend: m.trend,
+        isShrinkageSuspect: m.isShrinkageSuspect,
+      }))
+      .sort((a, b) => {
+        if (a.locationCount !== b.locationCount) return b.locationCount - a.locationCount;
+        return b.totalEstimatedLoss - a.totalEstimatedLoss;
+      })
+      .slice(0, limit);
+  }
 }
