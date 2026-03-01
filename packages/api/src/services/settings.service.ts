@@ -11,6 +11,11 @@ export interface MasterProductSharingSettings {
   optedInAt: string | null;
 }
 
+export interface TareTrustSettings {
+  trustScore: number;
+  trustUpdatedAt: string | null;
+}
+
 export interface BusinessSettingsData {
   capabilities: CapabilityToggles;
   autoLock: AutoLockPolicy;
@@ -22,6 +27,7 @@ export interface BusinessSettingsData {
   subscriptionOverrides?: SubscriptionOverrides;
   verification: VerificationSettings;
   adaptiveDepletion: AdaptiveDepletionSettings;
+  tareTrust: TareTrustSettings;
 }
 
 export const DEFAULT_SETTINGS: BusinessSettingsData = {
@@ -80,6 +86,10 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     ratioFloor: 0.5,
     ratioCeiling: 2.0,
   },
+  tareTrust: {
+    trustScore: 50,
+    trustUpdatedAt: null,
+  },
 };
 
 export class SettingsService {
@@ -125,6 +135,10 @@ export class SettingsService {
         ...DEFAULT_SETTINGS.adaptiveDepletion,
         ...stored.adaptiveDepletion,
       },
+      tareTrust: {
+        ...DEFAULT_SETTINGS.tareTrust,
+        ...stored.tareTrust,
+      },
     };
   }
 
@@ -141,6 +155,7 @@ export class SettingsService {
       subscriptionOverrides?: SubscriptionOverrides;
       verification?: Partial<VerificationSettings>;
       adaptiveDepletion?: Partial<AdaptiveDepletionSettings>;
+      tareTrust?: Partial<TareTrustSettings>;
     }
   ): Promise<BusinessSettingsData> {
     const current = await this.getSettings(businessId);
@@ -175,6 +190,10 @@ export class SettingsService {
       adaptiveDepletion: {
         ...current.adaptiveDepletion,
         ...patch.adaptiveDepletion,
+      },
+      tareTrust: {
+        ...current.tareTrust,
+        ...patch.tareTrust,
       },
     };
 

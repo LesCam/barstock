@@ -1054,6 +1054,8 @@ model MasterProduct {
   tareConfidence          Int       @default(0) @map("tare_confidence")
   tareAlgorithmVersion    Int       @default(1) @map("tare_algorithm_version")
   tareLastUpdatedAt       DateTime? @map("tare_last_updated_at") @db.Timestamptz()
+  redesignSuspected       Boolean   @default(false) @map("redesign_suspected")
+  tareContributorCount    Int       @default(0) @map("tare_contributor_count")
 
   lastContributedByBusiness Business? @relation(fields: [lastContributedByBusinessId], references: [id])
   tareObservations          TareObservation[]

@@ -369,7 +369,9 @@ export default function TareWeightsScreen() {
             <ScrollView style={styles.needsTareScroll} nestedScrollEnabled>
               <View style={styles.needsTareList}>
                 {needsTareItems.map((item) => {
-                  const hasSuggestion = item.barcode && (tareSuggestions?.[item.barcode]?.confidence ?? 0) >= 30;
+                  const suggestion = item.barcode ? tareSuggestions?.[item.barcode] : undefined;
+                  const hasSuggestion = (suggestion?.confidence ?? 0) >= 30;
+                  const isRedesign = suggestion?.redesignSuspected ?? false;
                   return (
                     <View key={item.id} style={styles.needsTareRow}>
                       <View style={{ flex: 1 }}>
@@ -377,6 +379,9 @@ export default function TareWeightsScreen() {
                           <Text style={styles.needsTareItemName}>{item.name}</Text>
                           {hasSuggestion && (
                             <Text style={styles.globeIcon}>🌐</Text>
+                          )}
+                          {isRedesign && (
+                            <Text style={styles.redesignHint}>Redesign?</Text>
                           )}
                         </View>
                         {item.barcode && (
@@ -941,6 +946,11 @@ const styles = StyleSheet.create({
   },
   globeIcon: {
     fontSize: 14,
+  },
+  redesignHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#ea580c",
   },
   setTareBtn: {
     backgroundColor: "#FBBF24",

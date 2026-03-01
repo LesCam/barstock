@@ -1,4 +1,4 @@
-import { router, protectedProcedure } from "../trpc";
+import { router, protectedProcedure, requireRole } from "../trpc";
 import { z } from "zod";
 import { SettingsService } from "../services/settings.service";
 import { TareConsensusService } from "../services/tare-consensus.service";
@@ -72,12 +72,21 @@ export const tareObservationsRouter = router({
           tareStdDev: true,
           tareSampleCount: true,
           tareConfidence: true,
+          tareContributorCount: true,
+          redesignSuspected: true,
         },
       });
 
       const result: Record<
         string,
-        { tareWeightG: number; stdDev: number; sampleCount: number; confidence: number }
+        {
+          tareWeightG: number;
+          stdDev: number;
+          sampleCount: number;
+          confidence: number;
+          contributorCount: number;
+          redesignSuspected: boolean;
+        }
       > = {};
 
       for (const mp of products) {
@@ -86,9 +95,43 @@ export const tareObservationsRouter = router({
           stdDev: mp.tareStdDev != null ? Number(mp.tareStdDev) : 0,
           sampleCount: mp.tareSampleCount,
           confidence: mp.tareConfidence,
+          contributorCount: mp.tareContributorCount,
+          redesignSuspected: mp.redesignSuspected,
         };
       }
 
       return result;
+    }),
+
+  /** List all master products flagged as possible redesigns (platform_admin only) */
+  listRedesignSuspects: protectedProcedure
+    .use(requireRole("platform_admin"))
+    .query(async ({ ctx }) => {
+      return ctx.prisma.masterProduct.findMany({
+        where: { redesignSuspected: true },
+        select: {
+          barcode: true,
+          name: true,
+          emptyBottleWeightG: true,
+          tareStdDev: true,
+          tareSampleCount: true,
+          tareConfidence: true,
+          tareContributorCount: true,
+          tareLastUpdatedAt: true,
+        },
+        orderBy: { tareLastUpdatedAt: "desc" },
+      });
+    }),
+
+  /** Dismiss redesign flag for a barcode (platform_admin only) */
+  dismissRedesign: protectedProcedure
+    .use(requireRole("platform_admin"))
+    .input(z.object({ barcode: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.prisma.masterProduct.updateMany({
+        where: { barcode: input.barcode },
+        data: { redesignSuspected: false },
+      });
+      return { success: true };
     }),
 });

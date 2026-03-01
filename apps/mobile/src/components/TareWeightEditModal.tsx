@@ -162,6 +162,15 @@ export function TareWeightEditModal({
             </Text>
           )}
 
+          {/* Redesign warning banner */}
+          {tareSuggestion && tareSuggestion.redesignSuspected && (
+            <View style={styles.redesignBanner}>
+              <Text style={styles.redesignText}>
+                Possible bottle redesign — verify before accepting
+              </Text>
+            </View>
+          )}
+
           {/* Global tare suggestion banner */}
           {tareSuggestion && tareSuggestion.confidence >= 30 && currentTareWeightG == null && (
             <View style={styles.suggestionBanner}>
@@ -679,6 +688,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
     marginTop: 8,
+  },
+  redesignBanner: {
+    backgroundColor: "rgba(234, 88, 12, 0.1)",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  redesignText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#ea580c",
   },
   suggestionBanner: {
     flexDirection: "row",

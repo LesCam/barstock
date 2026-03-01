@@ -48,6 +48,8 @@ export const masterProductsRouter = router({
                 tareWeightG: Number(masterProduct.emptyBottleWeightG),
                 confidence: masterProduct.tareConfidence,
                 sampleCount: masterProduct.tareSampleCount,
+                contributorCount: masterProduct.tareContributorCount,
+                redesignSuspected: masterProduct.redesignSuspected,
               }
             : null;
 
