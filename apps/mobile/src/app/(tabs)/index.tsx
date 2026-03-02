@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   View,
   Text,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -141,7 +141,7 @@ export default function SessionsTab() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <TouchableOpacity
         style={[styles.newButton, (creating || !isOnline) && styles.newButtonDisabled]}
         onPress={handleStartCount}
@@ -169,22 +169,6 @@ export default function SessionsTab() {
           onPress={() => router.push("/transfer")}
         >
           <Text style={styles.transferButtonText}>Transfer Inventory</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.secondaryRow}>
-        <TouchableOpacity
-          style={styles.forecastButton}
-          onPress={() => router.push("/forecast")}
-        >
-          <Text style={styles.forecastButtonText}>Demand Forecast</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.shoppingListButton}
-          onPress={() => router.push("/shopping-list")}
-        >
-          <Text style={styles.shoppingListButtonText}>Shopping List</Text>
         </TouchableOpacity>
       </View>
 
@@ -234,47 +218,42 @@ export default function SessionsTab() {
       ) : closedSessions.length > 0 ? (
         <>
           <Text style={styles.sectionTitle}>History</Text>
-          <FlatList
-            data={closedSessions}
-            keyExtractor={(s) => s.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.card}
-                onPress={() => router.push(`/session/${item.id}`)}
-              >
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>{sessionLabel(item.sessionType)}</Text>
-                  <Text style={styles.badgeClosed}>Closed</Text>
-                </View>
-                <Text style={styles.cardDate}>
-                  {new Date(item.startedTs).toLocaleString()}
-                  {item.createdByUser?.email ? ` — ${item.createdByUser.email}` : ""}
-                </Text>
-                <Text style={styles.cardLines}>
-                  {itemsLabel(item.sessionType, item._count.lines)}
-                </Text>
-              </TouchableOpacity>
-            )}
-            ListFooterComponent={
-              closedSessions.length >= limit ? (
-                <TouchableOpacity
-                  style={styles.showMore}
-                  onPress={() => setLimit((prev) => prev + 20)}
-                >
-                  <Text style={styles.showMoreText}>Show More</Text>
-                </TouchableOpacity>
-              ) : null
-            }
-            contentContainerStyle={{ paddingBottom: 20 }}
-          />
+          {closedSessions.map((item: any) => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.card}
+              onPress={() => router.push(`/session/${item.id}`)}
+            >
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>{sessionLabel(item.sessionType)}</Text>
+                <Text style={styles.badgeClosed}>Closed</Text>
+              </View>
+              <Text style={styles.cardDate}>
+                {new Date(item.startedTs).toLocaleString()}
+                {item.createdByUser?.email ? ` — ${item.createdByUser.email}` : ""}
+              </Text>
+              <Text style={styles.cardLines}>
+                {itemsLabel(item.sessionType, item._count.lines)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {closedSessions.length >= limit && (
+            <TouchableOpacity
+              style={styles.showMore}
+              onPress={() => setLimit((prev) => prev + 20)}
+            >
+              <Text style={styles.showMoreText}>Show More</Text>
+            </TouchableOpacity>
+          )}
         </>
       ) : null}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0B1623", padding: 16 },
+  container: { flex: 1, backgroundColor: "#0B1623" },
+  contentContainer: { padding: 16, paddingBottom: 40 },
   newButton: {
     backgroundColor: "#E9B44C", borderRadius: 8,
     padding: 14, alignItems: "center", marginBottom: 12,
@@ -300,21 +279,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#42A5F5",
   },
   transferButtonText: { color: "#42A5F5", fontSize: 14, fontWeight: "700" },
-  forecastButton: {
-    flex: 1,
-    backgroundColor: "#16283F", borderRadius: 8,
-    padding: 14, alignItems: "center",
-    borderWidth: 1, borderColor: "#2BA8A0",
-  },
-  forecastButtonText: { color: "#2BA8A0", fontSize: 14, fontWeight: "700" },
-  shoppingListButton: {
-    flex: 1,
-    backgroundColor: "#16283F", borderRadius: 8,
-    padding: 14, alignItems: "center",
-    borderWidth: 1, borderColor: "#E9B44C",
-  },
-  shoppingListButtonText: { color: "#E9B44C", fontSize: 14, fontWeight: "700" },
-
   // Open sessions
   openSection: { marginBottom: 16 },
   sectionTitle: {

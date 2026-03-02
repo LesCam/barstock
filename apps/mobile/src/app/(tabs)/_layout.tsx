@@ -74,17 +74,6 @@ function TabsLayout() {
           }}
         />
         <Tabs.Screen
-          name="usage"
-          options={{
-            title: "Usage",
-            tabBarLabel: "Usage",
-            tabBarIcon: ({ color }) => (
-              <Text style={{ fontSize: 22, color }}>📊</Text>
-            ),
-            href: canAccessInventory ? undefined : null,
-          }}
-        />
-        <Tabs.Screen
           name="guide"
           options={{
             title: "Product Guide",
