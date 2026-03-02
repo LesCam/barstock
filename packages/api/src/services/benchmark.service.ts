@@ -517,6 +517,126 @@ export class BenchmarkService {
     };
   }
 
+  /**
+   * Platform admin: analytics summary per business with risk scores derived from benchmark snapshots
+   */
+  async getPlatformAnalyticsSummary() {
+    const latestDate = await this.getLatestSnapshotDate();
+    if (!latestDate) return { snapshotDate: null, businesses: [] };
+
+    const rows = await this.prisma.$queryRaw<Array<{
+      business_id: string;
+      business_name: string;
+      location_count: number;
+      on_hand_value: number;
+      cogs_7d: number;
+      variance_impact: number;
+      pour_cost_pct: number | null;
+      shrinkage_suspects: number;
+      count_frequency_days: number | null;
+      mapping_coverage_pct: number;
+      active_item_count: number;
+    }>>`
+      SELECT
+        b.id as business_id,
+        b.name as business_name,
+        COUNT(DISTINCT bs.location_id)::int as location_count,
+        SUM((bs.metrics_json->>'onHandValue')::float)::float as on_hand_value,
+        SUM((bs.metrics_json->>'cogs7d')::float)::float as cogs_7d,
+        SUM((bs.metrics_json->>'varianceImpact')::float)::float as variance_impact,
+        AVG((bs.metrics_json->>'pourCostPct')::float)::float as pour_cost_pct,
+        SUM((bs.metrics_json->>'shrinkageSuspects')::int)::int as shrinkage_suspects,
+        AVG((bs.metrics_json->>'countFrequencyDays')::float)::float as count_frequency_days,
+        AVG((bs.metrics_json->>'mappingCoveragePct')::float)::float as mapping_coverage_pct,
+        SUM((bs.metrics_json->>'activeItemCount')::int)::int as active_item_count
+      FROM benchmark_snapshots bs
+      JOIN businesses b ON b.id = bs.business_id
+      WHERE bs.snapshot_date = ${latestDate}::date
+      GROUP BY b.id, b.name
+      ORDER BY on_hand_value DESC
+    `;
+
+    return {
+      snapshotDate: latestDate.toISOString().split("T")[0],
+      businesses: rows.map((r) => {
+        // Risk score: weighted combo of variance, shrinkage, count frequency
+        const varianceRisk = Math.min(Math.abs(r.variance_impact) / 100, 1) * 40;
+        const shrinkageRisk = Math.min(r.shrinkage_suspects / 10, 1) * 30;
+        const freqRisk = r.count_frequency_days != null
+          ? Math.min(r.count_frequency_days / 14, 1) * 30
+          : 15;
+        const riskScore = Math.round(varianceRisk + shrinkageRisk + freqRisk);
+        const riskLevel = riskScore >= 70 ? "high" as const : riskScore >= 40 ? "medium" as const : "low" as const;
+
+        // Health score (inverse of risk, plus mapping coverage)
+        const healthScore = Math.max(0, Math.min(100, 100 - riskScore + Math.round(r.mapping_coverage_pct * 0.2)));
+
+        return {
+          businessId: r.business_id,
+          businessName: r.business_name,
+          locationCount: r.location_count,
+          onHandValue: r.on_hand_value,
+          cogs7d: r.cogs_7d,
+          varianceImpact: r.variance_impact,
+          pourCostPct: r.pour_cost_pct,
+          riskScore,
+          riskLevel,
+          healthScore,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Platform admin: aggregate trend across all opted-in businesses
+   */
+  async getPlatformTrend(weeks: number = 12) {
+    const since = new Date(Date.now() - weeks * 7 * 24 * 60 * 60 * 1000);
+
+    const rows = await this.prisma.$queryRaw<Array<{
+      snapshot_date: Date;
+      on_hand_value: number;
+      cogs_7d: number;
+      variance_impact: number;
+      pour_cost_pct: number | null;
+      business_count: number;
+    }>>`
+      WITH biz_agg AS (
+        SELECT
+          bs.snapshot_date,
+          bs.business_id,
+          SUM((bs.metrics_json->>'onHandValue')::float) as on_hand_value,
+          SUM((bs.metrics_json->>'cogs7d')::float) as cogs_7d,
+          AVG((bs.metrics_json->>'varianceImpact')::float) as variance_impact,
+          AVG((bs.metrics_json->>'pourCostPct')::float) as pour_cost_pct
+        FROM benchmark_snapshots bs
+        JOIN business_settings bset ON bset.business_id = bs.business_id
+        WHERE bs.snapshot_date >= ${since}::date
+          AND (bset.settings_json->'benchmarking'->>'optedIn')::boolean = true
+        GROUP BY bs.snapshot_date, bs.business_id
+      )
+      SELECT
+        snapshot_date,
+        SUM(on_hand_value)::float as on_hand_value,
+        SUM(cogs_7d)::float as cogs_7d,
+        AVG(variance_impact)::float as variance_impact,
+        AVG(pour_cost_pct)::float as pour_cost_pct,
+        COUNT(DISTINCT business_id)::int as business_count
+      FROM biz_agg
+      GROUP BY snapshot_date
+      ORDER BY snapshot_date
+    `;
+
+    return rows.map((r) => ({
+      date: r.snapshot_date.toISOString().split("T")[0],
+      onHandValue: r.on_hand_value,
+      cogs7d: r.cogs_7d,
+      varianceImpact: r.variance_impact,
+      pourCostPct: r.pour_cost_pct,
+      businessCount: r.business_count,
+    }));
+  }
+
   // ─── Helpers ──────────────────────────────────────────────
 
   private async getLatestSnapshotDate(): Promise<Date | null> {

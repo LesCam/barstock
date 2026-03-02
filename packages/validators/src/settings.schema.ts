@@ -47,6 +47,7 @@ export const alertRulesSchema = z.object({
   priceChange: alertRuleSchema.default({ enabled: true, threshold: 5 }),
   priceAnomaly: alertRuleSchema.default({ enabled: true, threshold: 2 }),
   varianceForecastRisk: alertRuleSchema.default({ enabled: true, threshold: 10 }),
+  predictiveStockout: alertRuleSchema.default({ enabled: true, threshold: 3 }),
 });
 
 export type AlertRules = z.infer<typeof alertRulesSchema>;

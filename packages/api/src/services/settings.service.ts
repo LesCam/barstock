@@ -68,6 +68,7 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     priceChange: { enabled: true, threshold: 5 },
     priceAnomaly: { enabled: true, threshold: 2 },
     varianceForecastRisk: { enabled: true, threshold: 10 },
+    predictiveStockout: { enabled: true, threshold: 3 },
   },
   lastAlertEvaluation: undefined,
   endOfDayTime: "04:00",

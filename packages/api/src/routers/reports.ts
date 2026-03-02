@@ -1,5 +1,5 @@
 import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, portfolioTrendQuerySchema, portfolioStaffComparisonQuerySchema, portfolioVarianceItemsQuerySchema, portfolioForecastQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema, varianceByCategoryQuerySchema, varianceItemTrendQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, portfolioTrendQuerySchema, portfolioStaffComparisonQuerySchema, portfolioVarianceItemsQuerySchema, portfolioForecastQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema, varianceByCategoryQuerySchema, varianceItemTrendQuerySchema, portfolioAnomalySummaryQuerySchema, portfolioHealthScorecardQuerySchema, portfolioRadarComparisonQuerySchema, platformAnalyticsSummarySchema, platformTrendQuerySchema, scaleWeightAnomaliesQuerySchema, depletionCorrelationQuerySchema, anomalyClustersQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 import { BenchmarkService } from "../services/benchmark.service";
@@ -319,5 +319,73 @@ export const reportsRouter = router({
     .query(({ ctx }) => {
       const svc = new BenchmarkService(ctx.prisma);
       return svc.getPlatformBenchmarks();
+    }),
+
+  // ─── Cross-Tenant Analytics Endpoints ─────────────────────
+
+  portfolioAnomalySummary: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(portfolioAnomalySummaryQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getPortfolioAnomalySummary(input.businessId);
+    }),
+
+  portfolioHealthScorecard: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(portfolioHealthScorecardQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getPortfolioHealthScorecard(input.businessId);
+    }),
+
+  portfolioRadarComparison: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(requireBusinessAccess())
+    .input(portfolioRadarComparisonQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getPortfolioRadarComparison(input.businessId);
+    }),
+
+  platformAnalyticsSummary: protectedProcedure
+    .use(requireRole("platform_admin"))
+    .input(platformAnalyticsSummarySchema)
+    .query(({ ctx }) => {
+      const svc = new BenchmarkService(ctx.prisma);
+      return svc.getPlatformAnalyticsSummary();
+    }),
+
+  platformTrend: protectedProcedure
+    .use(requireRole("platform_admin"))
+    .input(platformTrendQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new BenchmarkService(ctx.prisma);
+      return svc.getPlatformTrend(input.weeks);
+    }),
+
+  // ─── Predictive Analytics Endpoints ───────────────────────
+
+  scaleWeightAnomalies: protectedProcedure
+    .input(scaleWeightAnomaliesQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getScaleWeightAnomalies(input.locationId);
+    }),
+
+  depletionCorrelation: protectedProcedure
+    .input(depletionCorrelationQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getDepletionCorrelation(input.locationId);
+    }),
+
+  anomalyClusters: protectedProcedure
+    .input(anomalyClustersQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new AnalyticsService(ctx.prisma);
+      return svc.getAnomalyClusters(input.locationId);
     }),
 });

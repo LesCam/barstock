@@ -13,6 +13,11 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
 } from "recharts";
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -113,6 +118,15 @@ export default function PortfolioPage() {
 
       {/* Section D: Forecast Summary */}
       <ForecastSection businessId={businessId} />
+
+      {/* Section E: Anomaly Summary */}
+      <AnomalySummarySection businessId={businessId} />
+
+      {/* Section F: Health Scorecard */}
+      <HealthScorecardSection businessId={businessId} />
+
+      {/* Section G: Radar Comparison */}
+      <RadarComparisonSection businessId={businessId} />
     </div>
   );
 }
@@ -531,6 +545,303 @@ function ForecastSection({ businessId }: { businessId: string }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ─── Section E: Anomaly Summary ─────────────────────────────
+
+function AnomalySummarySection({ businessId }: { businessId: string }) {
+  const { data, isLoading } = trpc.reports.portfolioAnomalySummary.useQuery(
+    { businessId },
+    { staleTime: 5 * 60_000 }
+  );
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-[#16283F] p-6">
+        <div className="h-6 w-48 animate-pulse rounded bg-white/10 mb-4" />
+        <div className="h-40 animate-pulse rounded bg-white/5" />
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#16283F] p-6">
+      <h2 className="text-lg font-semibold text-[#EAF0FF] mb-4">Portfolio Risk Summary</h2>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="rounded-lg bg-white/5 p-3">
+          <div className="text-xs text-[#EAF0FF]/50">Anomalies</div>
+          <div className={`text-xl font-bold ${data.totals.anomalyCount > 0 ? "text-amber-400" : "text-green-400"}`}>
+            {data.totals.anomalyCount}
+          </div>
+        </div>
+        <div className="rounded-lg bg-white/5 p-3">
+          <div className="text-xs text-[#EAF0FF]/50">Depletion Mismatches</div>
+          <div className={`text-xl font-bold ${data.totals.depletionMismatchCount > 0 ? "text-amber-400" : "text-green-400"}`}>
+            {data.totals.depletionMismatchCount}
+          </div>
+        </div>
+        <div className="rounded-lg bg-white/5 p-3">
+          <div className="text-xs text-[#EAF0FF]/50">Forecast Risks</div>
+          <div className={`text-xl font-bold ${data.totals.varianceForecastRiskCount > 0 ? "text-red-400" : "text-green-400"}`}>
+            {data.totals.varianceForecastRiskCount}
+          </div>
+        </div>
+        <div className="rounded-lg bg-white/5 p-3">
+          <div className="text-xs text-[#EAF0FF]/50">Risk Score</div>
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-bold text-[#EAF0FF]">{data.totals.portfolioRiskScore}</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+              data.totals.portfolioRiskScore >= 70 ? "bg-red-500/20 text-red-400" :
+              data.totals.portfolioRiskScore >= 40 ? "bg-yellow-500/20 text-yellow-400" :
+              "bg-green-500/20 text-green-400"
+            }`}>
+              {data.totals.portfolioRiskScore >= 70 ? "High" : data.totals.portfolioRiskScore >= 40 ? "Medium" : "Low"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Per-location risk bars */}
+      <div className="space-y-2 mb-6">
+        {data.locations.map((loc) => (
+          <div key={loc.locationId} className="flex items-center gap-3">
+            <span className="text-sm text-[#EAF0FF] w-32 truncate">{loc.locationName}</span>
+            <div className="flex-1 h-3 rounded-full bg-white/10 overflow-hidden">
+              <div
+                className={`h-full rounded-full ${
+                  loc.riskScore >= 70 ? "bg-red-500" : loc.riskScore >= 40 ? "bg-yellow-500" : "bg-green-500"
+                }`}
+                style={{ width: `${Math.min(loc.riskScore, 100)}%` }}
+              />
+            </div>
+            <span className="text-xs text-[#EAF0FF]/60 w-8 text-right">{loc.riskScore}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Top concerns feed */}
+      {data.topConcerns.length > 0 && (
+        <div>
+          <h3 className="text-xs uppercase text-[#EAF0FF]/50 mb-2">Top Concerns</h3>
+          <div className="space-y-1">
+            {data.topConcerns.map((c, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className={`inline-block h-2 w-2 rounded-full ${
+                  c.severity === "critical" ? "bg-red-500" : c.severity === "warning" ? "bg-yellow-500" : "bg-blue-500"
+                }`} />
+                <span className="text-[#EAF0FF]/60 text-xs">{c.locationName}</span>
+                <span className="text-[#EAF0FF] font-medium">{c.itemName}</span>
+                <span className="text-[#EAF0FF]/40 text-xs">{c.detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Section F: Health Scorecard ────────────────────────────
+
+function HealthScorecardSection({ businessId }: { businessId: string }) {
+  const { data, isLoading } = trpc.reports.portfolioHealthScorecard.useQuery(
+    { businessId },
+    { staleTime: 5 * 60_000 }
+  );
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-[#16283F] p-6">
+        <div className="h-6 w-48 animate-pulse rounded bg-white/10 mb-4" />
+        <div className="h-40 animate-pulse rounded bg-white/5" />
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#16283F] p-6">
+      <h2 className="text-lg font-semibold text-[#EAF0FF] mb-4">Location Health Scorecard</h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left">
+          <thead>
+            <tr className="text-[#EAF0FF]/50 text-xs uppercase border-b border-white/10">
+              <th className="py-2 pr-4">Location</th>
+              <th className="py-2 pr-4 text-right">Health Score</th>
+              <th className="py-2 pr-4 text-right">Count Freq (days)</th>
+              <th className="py-2 pr-4 text-right">Mapping %</th>
+              <th className="py-2 pr-4 text-right">Avg Coverage (days)</th>
+              <th className="py-2 text-right">Variance Trend</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((loc) => (
+              <tr key={loc.locationId} className="border-b border-white/5 text-[#EAF0FF]">
+                <td className="py-2 pr-4 font-medium">{loc.locationName}</td>
+                <td className="py-2 pr-4 text-right">
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                    loc.overallHealthScore >= 70 ? "bg-green-500/20 text-green-400" :
+                    loc.overallHealthScore >= 40 ? "bg-yellow-500/20 text-yellow-400" :
+                    "bg-red-500/20 text-red-400"
+                  }`}>
+                    {loc.overallHealthScore}
+                  </span>
+                </td>
+                <td className={`py-2 pr-4 text-right ${
+                  loc.countFrequencyDays != null && loc.countFrequencyDays <= 7 ? "text-green-400" :
+                  loc.countFrequencyDays != null && loc.countFrequencyDays <= 14 ? "text-amber-400" : "text-red-400"
+                }`}>
+                  {loc.countFrequencyDays?.toFixed(0) ?? "--"}
+                </td>
+                <td className={`py-2 pr-4 text-right ${
+                  loc.mappingCoveragePct >= 80 ? "text-green-400" :
+                  loc.mappingCoveragePct >= 50 ? "text-amber-400" : "text-red-400"
+                }`}>
+                  {loc.mappingCoveragePct}%
+                </td>
+                <td className="py-2 pr-4 text-right text-[#EAF0FF]/60">
+                  {loc.avgCoverageDays ?? "--"}
+                </td>
+                <td className="py-2 text-right">
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                    loc.varianceTrend === "improving" ? "bg-green-500/20 text-green-400" :
+                    loc.varianceTrend === "worsening" ? "bg-red-500/20 text-red-400" :
+                    "bg-white/10 text-[#EAF0FF]/60"
+                  }`}>
+                    {loc.varianceTrend}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Section G: Radar Comparison ────────────────────────────
+
+const RADAR_COLORS = ["#E9B44C", "#3b82f6", "#ef4444", "#22c55e", "#a855f7", "#f97316"];
+const RADAR_AXES = [
+  { key: "onHandValue", label: "On-Hand Value" },
+  { key: "cogs7d", label: "COGS" },
+  { key: "varianceImpact", label: "Variance Control" },
+  { key: "pourCostPct", label: "Pour Cost" },
+  { key: "mappingCoveragePct", label: "Mapping Coverage" },
+  { key: "countFrequencyDays", label: "Count Frequency" },
+];
+
+function RadarComparisonSection({ businessId }: { businessId: string }) {
+  const [enabledLocations, setEnabledLocations] = useState<Set<string>>(new Set());
+  const { data, isLoading } = trpc.reports.portfolioRadarComparison.useQuery(
+    { businessId },
+    { staleTime: 5 * 60_000 }
+  );
+
+  // Enable all locations by default once data loads
+  const locationIds = data?.map((d) => d.locationId) ?? [];
+  if (data && enabledLocations.size === 0 && locationIds.length > 0) {
+    setEnabledLocations(new Set(locationIds));
+  }
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-[#16283F] p-6">
+        <div className="h-6 w-48 animate-pulse rounded bg-white/10 mb-4" />
+        <div className="h-[400px] animate-pulse rounded bg-white/5" />
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-[#16283F] p-6">
+        <h2 className="text-lg font-semibold text-[#EAF0FF] mb-2">Location Comparison Radar</h2>
+        <p className="text-sm text-[#EAF0FF]/50">
+          No benchmark snapshots available. Snapshots are captured daily.
+        </p>
+      </div>
+    );
+  }
+
+  // Transform data for Recharts RadarChart
+  const chartData = RADAR_AXES.map((axis) => {
+    const point: Record<string, string | number> = { subject: axis.label };
+    for (const loc of data) {
+      if (enabledLocations.has(loc.locationId)) {
+        point[loc.locationId] = (loc.axes as any)[axis.key] ?? 0;
+      }
+    }
+    return point;
+  });
+
+  function toggleLocation(locId: string) {
+    setEnabledLocations((prev) => {
+      const next = new Set(prev);
+      if (next.has(locId)) next.delete(locId);
+      else next.add(locId);
+      return next;
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#16283F] p-6">
+      <h2 className="text-lg font-semibold text-[#EAF0FF] mb-4">Location Comparison Radar</h2>
+
+      {/* Location toggles */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {data.map((loc, i) => (
+          <button
+            key={loc.locationId}
+            onClick={() => toggleLocation(loc.locationId)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition border ${
+              enabledLocations.has(loc.locationId)
+                ? "border-transparent text-[#0B1623]"
+                : "border-white/20 bg-transparent text-[#EAF0FF]/40"
+            }`}
+            style={enabledLocations.has(loc.locationId) ? { backgroundColor: RADAR_COLORS[i % RADAR_COLORS.length] } : {}}
+          >
+            {loc.locationName}
+          </button>
+        ))}
+      </div>
+
+      <ResponsiveContainer width="100%" height={400}>
+        <RadarChart data={chartData}>
+          <PolarGrid stroke="#ffffff1a" />
+          <PolarAngleAxis dataKey="subject" tick={{ fill: "#EAF0FF", fontSize: 11 }} />
+          <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+          {data
+            .filter((loc) => enabledLocations.has(loc.locationId))
+            .map((loc, i) => (
+              <Radar
+                key={loc.locationId}
+                name={loc.locationName}
+                dataKey={loc.locationId}
+                stroke={RADAR_COLORS[i % RADAR_COLORS.length]}
+                fill={RADAR_COLORS[i % RADAR_COLORS.length]}
+                fillOpacity={0.15}
+                strokeWidth={2}
+              />
+            ))}
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "#0B1623",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8,
+              color: "#EAF0FF",
+            }}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

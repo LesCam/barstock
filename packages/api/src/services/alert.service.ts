@@ -5,6 +5,7 @@ import { NotificationService } from "./notification.service";
 import { SettingsService } from "./settings.service";
 import { ParLevelService } from "./par-level.service";
 import { AnalyticsService } from "./analytics.service";
+import { ReportService } from "./report.service";
 import { deriveDefaultPermissions } from "./auth.service";
 import { Prisma } from "@prisma/client";
 import type { Role } from "@barstock/types";
@@ -89,6 +90,11 @@ export class AlertService {
       if ((rules as any).varianceForecastRisk?.enabled) {
         const forecastAlerts = await this.checkVarianceForecastRisk(loc.id, loc.name, (rules as any).varianceForecastRisk.threshold);
         alerts.push(...forecastAlerts);
+      }
+
+      if ((rules as any).predictiveStockout?.enabled) {
+        const stockoutAlerts = await this.checkPredictiveStockout(businessId, loc.id, loc.name, (rules as any).predictiveStockout.threshold);
+        alerts.push(...stockoutAlerts);
       }
     }
 
@@ -677,6 +683,74 @@ export class AlertService {
         linkUrl: "/analytics",
         metadata: { rule: "varianceForecastRisk", locationId, flaggedCount: flagged.length },
       }];
+    } catch {
+      return [];
+    }
+  }
+
+  private async checkPredictiveStockout(
+    businessId: string,
+    locationId: string,
+    locationName: string,
+    threshold: number
+  ): Promise<AlertResult[]> {
+    const parSvc = new ParLevelService(this.prisma);
+    const reportSvc = new ReportService(this.prisma);
+
+    try {
+      const [parItems, expectedItems] = await Promise.all([
+        parSvc.list(locationId),
+        reportSvc.getExpectedOnHandDashboard(locationId),
+      ]);
+
+      // Build a map of daysToStockout from expected on-hand
+      const stockoutMap = new Map(
+        expectedItems
+          .filter((e) => e.daysToStockout != null)
+          .map((e) => [e.inventoryItemId, { daysToStockout: e.daysToStockout!, name: e.itemName }])
+      );
+
+      const urgent: string[] = [];
+      const warning: string[] = [];
+
+      for (const par of parItems) {
+        const expected = stockoutMap.get(par.inventoryItemId);
+        if (!expected) continue;
+
+        const leadTime = par.leadTimeDays ?? 0;
+        const safetyDays = par.safetyStockDays ?? 0;
+        const criticalWindow = leadTime + safetyDays + threshold;
+
+        if (expected.daysToStockout <= criticalWindow) {
+          if (expected.daysToStockout <= leadTime) {
+            urgent.push(`${expected.name} (${expected.daysToStockout}d left, lead time ${leadTime}d)`);
+          } else {
+            warning.push(`${expected.name} (${expected.daysToStockout}d left)`);
+          }
+        }
+      }
+
+      const alerts: AlertResult[] = [];
+
+      if (urgent.length > 0) {
+        alerts.push({
+          title: `Urgent stockout risk at ${locationName}`,
+          body: `${urgent.length} item(s) may stock out before next delivery: ${urgent.slice(0, 3).join(", ")}`,
+          linkUrl: "/par",
+          metadata: { rule: "predictiveStockout", locationId, severity: "urgent", itemCount: urgent.length },
+        });
+      }
+
+      if (warning.length > 0) {
+        alerts.push({
+          title: `Predicted stockouts at ${locationName}`,
+          body: `${warning.length} item(s) approaching stockout: ${warning.slice(0, 3).join(", ")}`,
+          linkUrl: "/forecast",
+          metadata: { rule: "predictiveStockout", locationId, severity: "warning", itemCount: warning.length },
+        });
+      }
+
+      return alerts;
     } catch {
       return [];
     }

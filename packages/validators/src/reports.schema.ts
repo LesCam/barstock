@@ -225,3 +225,37 @@ export const varianceForecastsQuerySchema = z.object({
 export const analyticsSummaryQuerySchema = z.object({
   locationId: z.string().uuid(),
 });
+
+// ─── Cross-Tenant / Portfolio Analytics Schemas ──────────────
+
+export const portfolioAnomalySummaryQuerySchema = z.object({
+  businessId: z.string().uuid(),
+});
+
+export const portfolioHealthScorecardQuerySchema = z.object({
+  businessId: z.string().uuid(),
+});
+
+export const portfolioRadarComparisonQuerySchema = z.object({
+  businessId: z.string().uuid(),
+});
+
+export const platformAnalyticsSummarySchema = z.object({});
+
+export const platformTrendQuerySchema = z.object({
+  weeks: z.number().int().min(2).max(52).default(12),
+});
+
+// ─── Predictive Analytics Schemas ───────────────────────────
+
+export const scaleWeightAnomaliesQuerySchema = z.object({
+  locationId: z.string().uuid(),
+});
+
+export const depletionCorrelationQuerySchema = z.object({
+  locationId: z.string().uuid(),
+});
+
+export const anomalyClustersQuerySchema = z.object({
+  locationId: z.string().uuid(),
+});

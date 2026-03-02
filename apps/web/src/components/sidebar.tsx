@@ -164,7 +164,10 @@ export function Sidebar({ user }: SidebarProps) {
                 Platform
               </p>
             </div>
-            {[{ href: "/businesses", label: "Businesses", icon: "🏢" }].map(
+            {[
+              { href: "/businesses", label: "Businesses", icon: "🏢" },
+              { href: "/portfolio/cross-tenant", label: "Cross-Tenant", icon: "🌐" },
+            ].map(
               (item) => {
                 const active =
                   pathname === item.href ||
