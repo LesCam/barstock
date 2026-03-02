@@ -22,6 +22,8 @@ import { useSessionSSE, type SSEEvent, type SSEMode } from "@/lib/use-session-ss
 import { VarianceReasonModal } from "@/components/VarianceReasonModal";
 import { SessionActivityFeed, type ActivityEvent } from "@/components/SessionActivityFeed";
 import { ConflictModal, type ConflictData } from "@/components/ConflictModal";
+import { PacingBar } from "@/components/PacingBar";
+import { useFatigueDetection } from "@/lib/use-fatigue-detection";
 import type { VarianceReason } from "@barstock/types";
 
 const AVATAR_COLORS = [
@@ -98,6 +100,7 @@ export default function SessionDetailScreen() {
   const [sortMode, setSortMode] = useState<"alphabetical" | "smart">("alphabetical");
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
   const [recentOtherCounts, setRecentOtherCounts] = useState<Map<string, string>>(new Map());
+  const [lastBreakAt, setLastBreakAt] = useState<{ items: number; timeMs: number } | null>(null);
   const [conflictData, setConflictData] = useState<ConflictData | null>(null);
 
   // Load persisted sort mode on mount
@@ -117,6 +120,16 @@ export default function SessionDetailScreen() {
   const { data: capabilities } = trpc.settings.capabilities.useQuery(
     { businessId: authUser?.businessId ?? "" },
     { enabled: !!authUser?.businessId, staleTime: 5 * 60 * 1000 },
+  );
+
+  // Count optimization settings + personal pacing target
+  const { data: countOptSettings } = trpc.settings.countOptimization.useQuery(
+    { businessId: authUser?.businessId ?? "" },
+    { enabled: !!authUser?.businessId, staleTime: 300_000 },
+  );
+  const { data: pacingTarget } = trpc.sessions.personalPacingTarget.useQuery(
+    { locationId: selectedLocationId! },
+    { enabled: !!selectedLocationId, staleTime: Infinity },
   );
 
   // SSE mode tracked for polling fallback — updated by useSessionSSE below
@@ -410,8 +423,43 @@ export default function SessionDetailScreen() {
     return new Map(countHints.map((h) => [h.inventoryItemId, h]));
   }, [countHints]);
 
+  // Fatigue detection
+  const fatigueResult = useFatigueDetection(
+    (session?.lines ?? []) as any[],
+    hintsMap as any,
+    countOptSettings ?? null,
+  );
+
+  // Restore lastBreakAt from AsyncStorage on mount
+  useEffect(() => {
+    if (!id) return;
+    AsyncStorage.getItem(`@barstock/lastBreakAt/${id}`).then((val) => {
+      if (val) {
+        try { setLastBreakAt(JSON.parse(val)); } catch { /* ignore */ }
+      }
+    });
+  }, [id]);
+
+  const handleDismissBreak = useCallback(() => {
+    const breakPoint = { items: session?.lines.length ?? 0, timeMs: elapsedMs };
+    setLastBreakAt(breakPoint);
+    if (id) AsyncStorage.setItem(`@barstock/lastBreakAt/${id}`, JSON.stringify(breakPoint));
+  }, [id, session?.lines.length, elapsedMs]);
+
   const expectedTotal = expectedChecklist.length;
   const expectedCounted = expectedChecklist.filter((i: any) => i.counted).length;
+
+  // Compute priority score quartiles for colored dot indicators
+  const priorityQuartiles = useMemo(() => {
+    const uncounted = expectedChecklist.filter((i: any) => !i.counted);
+    const scores = uncounted.map((i: any) => (i.priorityScore as number) ?? 0).sort((a, b) => a - b);
+    if (scores.length === 0) return { q25: 0, q50: 0, q75: 0 };
+    return {
+      q25: scores[Math.floor(scores.length * 0.25)] ?? 0,
+      q50: scores[Math.floor(scores.length * 0.5)] ?? 0,
+      q75: scores[Math.floor(scores.length * 0.75)] ?? 0,
+    };
+  }, [expectedChecklist]);
 
   function formatHint(hint: { lastCountValue: number | null; lastCountDate: Date | string; avgDailyUsage: number | null; isWeight?: boolean }) {
     const parts: string[] = [];
@@ -930,15 +978,16 @@ export default function SessionDetailScreen() {
         {lineCount > 0 ? ` — ${lineCount} item${lineCount !== 1 ? "s" : ""}` : ""}
       </Text>
       {isOpen && elapsedMs > 0 && (
-        <Text style={styles.pacingText}>
-          Elapsed: {elapsedMs >= 3600000
-            ? `${Math.floor(elapsedMs / 3600000)}h ${Math.floor((elapsedMs % 3600000) / 60000)}m`
-            : `${Math.floor(elapsedMs / 60000)}m`}
-          {lineCount > 0 ? ` · ${lineCount} item${lineCount !== 1 ? "s" : ""}` : ""}
-          {lineCount > 0 && elapsedMs > 60000
-            ? ` · ${(lineCount / (elapsedMs / 3600000)).toFixed(1)}/hr`
-            : ""}
-        </Text>
+        <PacingBar
+          elapsedMs={elapsedMs}
+          lineCount={lineCount}
+          targetItemsPerHour={pacingTarget?.targetItemsPerHour ?? null}
+          breakAfterItems={countOptSettings?.breakAfterItems ?? 40}
+          breakAfterMinutes={countOptSettings?.breakAfterMinutes ?? 45}
+          fatigueDetected={fatigueResult.detected}
+          lastBreakAt={lastBreakAt}
+          onDismissBreak={handleDismissBreak}
+        />
       )}
 
       {/* Participant Chips */}
@@ -1347,10 +1396,15 @@ export default function SessionDetailScreen() {
                           <View style={{ flex: 1 }}>
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                               <Text style={styles.expectedName}>{item.name}</Text>
-                              {sortMode === "smart" && (item as any).varianceFlagCount > 0 && (
-                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
-                              )}
+                              {sortMode === "smart" && (() => {
+                                const ps = (item as any).priorityScore ?? 0;
+                                const color = ps >= priorityQuartiles.q75 ? "#EF4444" : ps >= priorityQuartiles.q50 ? "#F97316" : ps >= priorityQuartiles.q25 ? "#E9B44C" : null;
+                                return color ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /> : null;
+                              })()}
                             </View>
+                            {!(item as any).lastCountedAt && sortMode === "smart" && (
+                              <Text style={{ fontSize: 10, color: "#F97316", marginTop: 1 }}>Never counted</Text>
+                            )}
                             {hint && (
                               <Text style={styles.hintText}>{formatHint(hint)}</Text>
                             )}
@@ -1399,10 +1453,15 @@ export default function SessionDetailScreen() {
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                         <Text style={styles.expectedName}>{item.name}</Text>
-                        {sortMode === "smart" && (item as any).varianceFlagCount > 0 && (
-                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
-                        )}
+                        {sortMode === "smart" && (() => {
+                          const ps = (item as any).priorityScore ?? 0;
+                          const color = ps >= priorityQuartiles.q75 ? "#EF4444" : ps >= priorityQuartiles.q50 ? "#F97316" : ps >= priorityQuartiles.q25 ? "#E9B44C" : null;
+                          return color ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /> : null;
+                        })()}
                       </View>
+                      {!(item as any).lastCountedAt && sortMode === "smart" && (
+                        <Text style={{ fontSize: 10, color: "#F97316", marginTop: 1 }}>Never counted</Text>
+                      )}
                       {hint && (
                         <Text style={styles.hintText}>{formatHint(hint)}</Text>
                       )}

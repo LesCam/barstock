@@ -478,6 +478,39 @@ export class SessionService {
     };
   }
 
+  /**
+   * Get co-adjacency scores: how often items are counted consecutively.
+   * Used for adaptive ordering to cluster items that are physically near each other.
+   */
+  async getCoAdjacencyScores(
+    locationId: string,
+    subAreaId?: string | null,
+  ): Promise<Map<string, Map<string, number>>> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ item_a: string; item_b: string; adjacency_count: number }>
+    >(Prisma.sql`
+      WITH ordered_lines AS (
+        SELECT sl.inventory_item_id, sl.session_id,
+          LEAD(sl.inventory_item_id) OVER (PARTITION BY sl.session_id ORDER BY sl.created_at) AS next_item_id
+        FROM inventory_session_lines sl
+        INNER JOIN inventory_sessions s ON s.id = sl.session_id
+        WHERE s.location_id = ${locationId}::uuid AND s.ended_ts IS NOT NULL
+          AND s.started_ts >= NOW() - INTERVAL '90 days'
+          AND (${subAreaId}::uuid IS NULL OR sl.sub_area_id = ${subAreaId}::uuid)
+      )
+      SELECT inventory_item_id AS item_a, next_item_id AS item_b, COUNT(*)::int AS adjacency_count
+      FROM ordered_lines WHERE next_item_id IS NOT NULL
+      GROUP BY inventory_item_id, next_item_id
+    `);
+
+    const map = new Map<string, Map<string, number>>();
+    for (const row of rows) {
+      if (!map.has(row.item_a)) map.set(row.item_a, new Map());
+      map.get(row.item_a)!.set(row.item_b, row.adjacency_count);
+    }
+    return map;
+  }
+
   private getActualFromLine(line: {
     countUnits: Prisma.Decimal | null;
     derivedOz: Prisma.Decimal | null;

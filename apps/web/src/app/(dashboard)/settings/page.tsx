@@ -68,6 +68,7 @@ export default function SettingsPage() {
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
       <AutoLockPolicySection businessId={businessId} canEdit={canEdit} />
       <AlertRulesSection businessId={businessId} canEdit={canEdit} />
+      <CountOptimizationSection businessId={businessId} canEdit={canEdit} />
       <VerificationSettingsSection businessId={businessId} canEdit={canEdit} />
       <AdaptiveDepletionSection businessId={businessId} canEdit={canEdit} />
       <ReceiptMatchingSection businessId={businessId} canEdit={canEdit} />
@@ -1191,6 +1192,110 @@ function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdi
             </div>
           );
         })}
+      </div>
+
+      {updateMutation.error && (
+        <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
+      )}
+    </div>
+  );
+}
+
+function CountOptimizationSection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {
+  const { data: settings } = trpc.settings.get.useQuery({ businessId });
+  const utils = trpc.useUtils();
+
+  const updateMutation = trpc.settings.update.useMutation({
+    onSuccess: () => utils.settings.get.invalidate({ businessId }),
+  });
+
+  const opt = (settings as any)?.countOptimization ?? {
+    breakAfterItems: 40,
+    breakAfterMinutes: 45,
+    fatigueDetectionEnabled: true,
+    fatigueVarianceThresholdMultiplier: 1.5,
+  };
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <h2 className="mb-4 text-lg font-semibold">Count Optimization</h2>
+      <p className="mb-4 text-sm text-[#EAF0FF]/60">
+        Configure break reminders and fatigue detection during counting sessions.
+      </p>
+
+      <div className="space-y-4">
+        <label className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={opt.fatigueDetectionEnabled}
+            disabled={!canEdit}
+            onChange={(e) =>
+              updateMutation.mutate({
+                businessId,
+                countOptimization: { fatigueDetectionEnabled: e.target.checked },
+              })
+            }
+            className="h-4 w-4 rounded border-white/20 bg-[#0B1623]"
+          />
+          <span className="text-sm text-[#EAF0FF]">Enable fatigue detection</span>
+        </label>
+
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-[#EAF0FF]/60">Break after items</label>
+          <input
+            type="number"
+            min={10}
+            max={200}
+            value={opt.breakAfterItems}
+            disabled={!canEdit}
+            onChange={(e) =>
+              updateMutation.mutate({
+                businessId,
+                countOptimization: { breakAfterItems: Number(e.target.value) },
+              })
+            }
+            className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
+          />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-[#EAF0FF]/60">Break after minutes</label>
+          <input
+            type="number"
+            min={15}
+            max={120}
+            value={opt.breakAfterMinutes}
+            disabled={!canEdit}
+            onChange={(e) =>
+              updateMutation.mutate({
+                businessId,
+                countOptimization: { breakAfterMinutes: Number(e.target.value) },
+              })
+            }
+            className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
+          />
+          <span className="text-xs text-[#EAF0FF]/40">min</span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-[#EAF0FF]/60">Fatigue sensitivity</label>
+          <input
+            type="number"
+            min={1.0}
+            max={5.0}
+            step={0.1}
+            value={opt.fatigueVarianceThresholdMultiplier}
+            disabled={!canEdit}
+            onChange={(e) =>
+              updateMutation.mutate({
+                businessId,
+                countOptimization: { fatigueVarianceThresholdMultiplier: Number(e.target.value) },
+              })
+            }
+            className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
+          />
+          <span className="text-xs text-[#EAF0FF]/40">x multiplier (higher = less sensitive)</span>
+        </div>
       </div>
 
       {updateMutation.error && (

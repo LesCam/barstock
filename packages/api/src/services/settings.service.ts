@@ -1,5 +1,5 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
-import type { CapabilityToggles, AutoLockPolicy, AlertRules, SubscriptionOverrides, VerificationSettings, AdaptiveDepletionSettings, ReceiptMatchingSettings } from "@barstock/validators";
+import type { CapabilityToggles, AutoLockPolicy, AlertRules, SubscriptionOverrides, VerificationSettings, AdaptiveDepletionSettings, ReceiptMatchingSettings, CountOptimizationSettings } from "@barstock/validators";
 
 export interface BenchmarkingSettings {
   optedIn: boolean;
@@ -28,6 +28,7 @@ export interface BusinessSettingsData {
   verification: VerificationSettings;
   adaptiveDepletion: AdaptiveDepletionSettings;
   receiptMatching: ReceiptMatchingSettings;
+  countOptimization: CountOptimizationSettings;
   tareTrust: TareTrustSettings;
 }
 
@@ -91,6 +92,12 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
   receiptMatching: {
     fuzzyThreshold: 0.3,
   },
+  countOptimization: {
+    breakAfterItems: 40,
+    breakAfterMinutes: 45,
+    fatigueDetectionEnabled: true,
+    fatigueVarianceThresholdMultiplier: 1.5,
+  },
   tareTrust: {
     trustScore: 50,
     trustUpdatedAt: null,
@@ -144,6 +151,10 @@ export class SettingsService {
         ...DEFAULT_SETTINGS.receiptMatching,
         ...stored.receiptMatching,
       },
+      countOptimization: {
+        ...DEFAULT_SETTINGS.countOptimization,
+        ...stored.countOptimization,
+      },
       tareTrust: {
         ...DEFAULT_SETTINGS.tareTrust,
         ...stored.tareTrust,
@@ -165,6 +176,7 @@ export class SettingsService {
       verification?: Partial<VerificationSettings>;
       adaptiveDepletion?: Partial<AdaptiveDepletionSettings>;
       receiptMatching?: Partial<ReceiptMatchingSettings>;
+      countOptimization?: Partial<CountOptimizationSettings>;
       tareTrust?: Partial<TareTrustSettings>;
     }
   ): Promise<BusinessSettingsData> {
@@ -204,6 +216,10 @@ export class SettingsService {
       receiptMatching: {
         ...current.receiptMatching,
         ...patch.receiptMatching,
+      },
+      countOptimization: {
+        ...current.countOptimization,
+        ...patch.countOptimization,
       },
       tareTrust: {
         ...current.tareTrust,

@@ -10,6 +10,50 @@ import type { VarianceReason } from "@barstock/types";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 
+/**
+ * Greedy nearest-neighbor reorder using co-adjacency scores.
+ * Starts with highest-priority item, then picks the next item with the
+ * highest adjacency count to the current item (tie-break by priorityScore).
+ */
+function adjacencyReorder<T extends { inventoryItemId: string; priorityScore: number }>(
+  items: T[],
+  adjacency: Map<string, Map<string, number>>,
+): T[] {
+  if (items.length <= 1 || adjacency.size === 0) return items;
+
+  const remaining = new Set(items.map((_, i) => i));
+  const result: T[] = [];
+
+  // Start with highest-priority item (first after composite sort)
+  let currentIdx = 0;
+  remaining.delete(currentIdx);
+  result.push(items[currentIdx]);
+
+  while (remaining.size > 0) {
+    const currentId = items[currentIdx].inventoryItemId;
+    const neighbors = adjacency.get(currentId);
+    let bestIdx = -1;
+    let bestScore = -1;
+
+    for (const idx of remaining) {
+      const itemId = items[idx].inventoryItemId;
+      const adjCount = neighbors?.get(itemId) ?? 0;
+      // Score: adjacency count * 1000 + priority score (adjacency dominates, priority breaks ties)
+      const score = adjCount * 1000 + items[idx].priorityScore;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = idx;
+      }
+    }
+
+    remaining.delete(bestIdx);
+    result.push(items[bestIdx]);
+    currentIdx = bestIdx;
+  }
+
+  return result;
+}
+
 export const sessionsRouter = router({
   create: protectedProcedure
     .input(sessionCreateSchema)
@@ -547,6 +591,9 @@ export const sessionsRouter = router({
           last_counted_at: Date;
           variance_flag_count: number;
           frequency_count: number;
+          staleness_days: number;
+          avg_daily_usage: number;
+          priority_score: number;
         }>
       >(Prisma.sql`
         WITH ranked AS (
@@ -585,6 +632,21 @@ export const sessionsRouter = router({
             AND s2.ended_ts IS NOT NULL
             AND s2.started_ts >= NOW() - INTERVAL '180 days'
           GROUP BY sl2.inventory_item_id
+        ),
+        staleness AS (
+          SELECT sl3.inventory_item_id,
+            EXTRACT(EPOCH FROM NOW() - MAX(sl3.created_at)) / 86400.0 AS days_since_count
+          FROM inventory_session_lines sl3
+          INNER JOIN inventory_sessions s3 ON s3.id = sl3.session_id
+          WHERE s3.location_id = ${input.locationId}::uuid AND s3.ended_ts IS NOT NULL
+          GROUP BY sl3.inventory_item_id
+        ),
+        depletion AS (
+          SELECT ce2.inventory_item_id,
+            ABS(SUM(CASE WHEN ce2.event_type = 'pos_sale' AND ce2.created_at >= NOW() - INTERVAL '30 days' THEN ce2.quantity_delta ELSE 0 END)) / 30.0 AS avg_daily
+          FROM consumption_events ce2
+          WHERE ce2.location_id = ${input.locationId}::uuid AND ce2.reversal_of_event_id IS NULL
+          GROUP BY ce2.inventory_item_id
         )
         SELECT
           r.inventory_item_id,
@@ -596,20 +658,30 @@ export const sessionsRouter = router({
           sa.name AS sub_area_name,
           r.created_at AS last_counted_at,
           COALESCE(vf.flag_count, 0)::int AS variance_flag_count,
-          COALESCE(f.session_count, 0)::int AS frequency_count
+          COALESCE(f.session_count, 0)::int AS frequency_count,
+          COALESCE(st.days_since_count, 30)::float AS staleness_days,
+          COALESCE(d.avg_daily, 0)::float AS avg_daily_usage,
+          (
+            (COALESCE(st.days_since_count, 30) / 30.0) * 0.30
+            + CASE WHEN d.avg_daily > 0 THEN LEAST(d.avg_daily / GREATEST(1, 0.1), 1.0) * 0.25 ELSE 0 END
+            + (COALESCE(vf.flag_count, 0)::float / GREATEST((SELECT MAX(flag_count) FROM variance_flags), 1)) * 0.25
+            + (COALESCE(f.session_count, 0)::float / GREATEST((SELECT MAX(session_count) FROM freq), 1)) * 0.20
+          )::float AS priority_score
         FROM ranked r
         INNER JOIN inventory_items i ON i.id = r.inventory_item_id
         LEFT JOIN inventory_item_categories c ON c.id = i.category_id
         INNER JOIN sub_areas sa ON sa.id = r.sub_area_id
         LEFT JOIN variance_flags vf ON vf.inventory_item_id = r.inventory_item_id
         LEFT JOIN freq f ON f.inventory_item_id = r.inventory_item_id
+        LEFT JOIN staleness st ON st.inventory_item_id = r.inventory_item_id
+        LEFT JOIN depletion d ON d.inventory_item_id = r.inventory_item_id
         WHERE r.rn = 1
           AND r.sub_area_id = ANY(${subAreaIds}::uuid[])
         ORDER BY
-          ${useSmart ? Prisma.sql`COALESCE(vf.flag_count, 0) DESC, COALESCE(f.session_count, 0) DESC, i.name ASC` : Prisma.sql`i.name ASC`}
+          ${useSmart ? Prisma.sql`priority_score DESC, i.name ASC` : Prisma.sql`i.name ASC`}
       `);
 
-      return items.map((item) => ({
+      let mapped = items.map((item) => ({
         inventoryItemId: item.inventory_item_id,
         name: item.name,
         countingMethod: item.counting_method,
@@ -620,7 +692,27 @@ export const sessionsRouter = router({
         lastCountedAt: item.last_counted_at,
         varianceFlagCount: item.variance_flag_count ?? 0,
         frequencyCount: item.frequency_count ?? 0,
+        stalenessDays: item.staleness_days ?? 30,
+        priorityScore: item.priority_score ?? 0,
       }));
+
+      // Apply adjacency-based reorder in smart mode
+      if (useSmart && mapped.length > 1) {
+        try {
+          const svc = new SessionService(ctx.prisma);
+          const adjacency = await svc.getCoAdjacencyScores(
+            input.locationId,
+            input.subAreaId ?? null,
+          );
+          if (adjacency.size > 0) {
+            mapped = adjacencyReorder(mapped, adjacency);
+          }
+        } catch {
+          // Non-critical — keep composite sort order
+        }
+      }
+
+      return mapped;
     }),
 
   expectedItemsForLocation: protectedProcedure
@@ -646,6 +738,9 @@ export const sessionsRouter = router({
           bar_area_name: string | null;
           variance_flag_count: number;
           frequency_count: number;
+          staleness_days: number;
+          avg_daily_usage: number;
+          priority_score: number;
         }>
       >(Prisma.sql`
         WITH distinct_placements AS (
@@ -679,6 +774,21 @@ export const sessionsRouter = router({
             AND s2.ended_ts IS NOT NULL
             AND s2.started_ts >= NOW() - INTERVAL '180 days'
           GROUP BY sl2.inventory_item_id
+        ),
+        staleness AS (
+          SELECT sl3.inventory_item_id,
+            EXTRACT(EPOCH FROM NOW() - MAX(sl3.created_at)) / 86400.0 AS days_since_count
+          FROM inventory_session_lines sl3
+          INNER JOIN inventory_sessions s3 ON s3.id = sl3.session_id
+          WHERE s3.location_id = ${input.locationId}::uuid AND s3.ended_ts IS NOT NULL
+          GROUP BY sl3.inventory_item_id
+        ),
+        depletion AS (
+          SELECT ce2.inventory_item_id,
+            ABS(SUM(CASE WHEN ce2.event_type = 'pos_sale' AND ce2.created_at >= NOW() - INTERVAL '30 days' THEN ce2.quantity_delta ELSE 0 END)) / 30.0 AS avg_daily
+          FROM consumption_events ce2
+          WHERE ce2.location_id = ${input.locationId}::uuid AND ce2.reversal_of_event_id IS NULL
+          GROUP BY ce2.inventory_item_id
         )
         SELECT
           i.id,
@@ -690,7 +800,15 @@ export const sessionsRouter = router({
           sa.name AS sub_area_name,
           ba.name AS bar_area_name,
           COALESCE(vf.flag_count, 0)::int AS variance_flag_count,
-          COALESCE(f.session_count, 0)::int AS frequency_count
+          COALESCE(f.session_count, 0)::int AS frequency_count,
+          COALESCE(st.days_since_count, 30)::float AS staleness_days,
+          COALESCE(d.avg_daily, 0)::float AS avg_daily_usage,
+          (
+            (COALESCE(st.days_since_count, 30) / 30.0) * 0.30
+            + CASE WHEN d.avg_daily > 0 THEN LEAST(d.avg_daily / GREATEST(1, 0.1), 1.0) * 0.25 ELSE 0 END
+            + (COALESCE(vf.flag_count, 0)::float / GREATEST((SELECT MAX(flag_count) FROM variance_flags), 1)) * 0.25
+            + (COALESCE(f.session_count, 0)::float / GREATEST((SELECT MAX(session_count) FROM freq), 1)) * 0.20
+          )::float AS priority_score
         FROM inventory_items i
         LEFT JOIN inventory_item_categories c ON c.id = i.category_id
         LEFT JOIN distinct_placements dp ON dp.inventory_item_id = i.id
@@ -698,13 +816,15 @@ export const sessionsRouter = router({
         LEFT JOIN bar_areas ba ON ba.id = sa.bar_area_id
         LEFT JOIN variance_flags vf ON vf.inventory_item_id = i.id
         LEFT JOIN freq f ON f.inventory_item_id = i.id
+        LEFT JOIN staleness st ON st.inventory_item_id = i.id
+        LEFT JOIN depletion d ON d.inventory_item_id = i.id
         WHERE i.location_id = ${input.locationId}::uuid
           AND i.active = true
         ORDER BY
-          ${useSmart ? Prisma.sql`COALESCE(vf.flag_count, 0) DESC, COALESCE(f.session_count, 0) DESC, i.name ASC` : Prisma.sql`ba.name NULLS LAST, sa.name NULLS LAST, i.name ASC`}
+          ${useSmart ? Prisma.sql`priority_score DESC, i.name ASC` : Prisma.sql`ba.name NULLS LAST, sa.name NULLS LAST, i.name ASC`}
       `);
 
-      return items.map((item) => ({
+      let mapped = items.map((item) => ({
         inventoryItemId: item.id,
         name: item.name,
         countingMethod: item.counting_method,
@@ -716,7 +836,24 @@ export const sessionsRouter = router({
           : "Unassigned",
         varianceFlagCount: item.variance_flag_count ?? 0,
         frequencyCount: item.frequency_count ?? 0,
+        stalenessDays: item.staleness_days ?? 30,
+        priorityScore: item.priority_score ?? 0,
       }));
+
+      // Apply adjacency-based reorder in smart mode
+      if (useSmart && mapped.length > 1) {
+        try {
+          const svc = new SessionService(ctx.prisma);
+          const adjacency = await svc.getCoAdjacencyScores(input.locationId);
+          if (adjacency.size > 0) {
+            mapped = adjacencyReorder(mapped, adjacency);
+          }
+        } catch {
+          // Non-critical — keep composite sort order
+        }
+      }
+
+      return mapped;
     }),
 
   itemCountHints: protectedProcedure
@@ -793,6 +930,43 @@ export const sessionsRouter = router({
     .query(async ({ ctx, input }) => {
       const svc = new SessionService(ctx.prisma);
       return svc.previewClose(input.sessionId);
+    }),
+
+  personalPacingTarget: protectedProcedure
+    .input(z.object({ locationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.$queryRaw<
+        Array<{ total_items: number; duration_minutes: number }>
+      >(Prisma.sql`
+        SELECT
+          COUNT(sl.id)::int AS total_items,
+          EXTRACT(EPOCH FROM (s.ended_ts - s.started_ts)) / 60.0 AS duration_minutes
+        FROM inventory_sessions s
+        INNER JOIN session_participants sp ON sp.session_id = s.id
+        INNER JOIN inventory_session_lines sl ON sl.session_id = s.id AND sl.counted_by = ${ctx.user.userId}::uuid
+        WHERE s.location_id = ${input.locationId}::uuid
+          AND sp.user_id = ${ctx.user.userId}::uuid
+          AND s.ended_ts IS NOT NULL
+          AND s.started_ts >= NOW() - INTERVAL '90 days'
+        GROUP BY s.id, s.started_ts, s.ended_ts
+        ORDER BY s.started_ts DESC
+        LIMIT 5
+      `);
+
+      if (rows.length === 0) {
+        return { targetItemsPerHour: null, avgDurationMinutes: null, sessionCount: 0 };
+      }
+
+      const totalItems = rows.reduce((sum, r) => sum + r.total_items, 0);
+      const totalMinutes = rows.reduce((sum, r) => sum + r.duration_minutes, 0);
+      const avgItemsPerHour = totalMinutes > 0 ? (totalItems / totalMinutes) * 60 : null;
+      const avgDurationMinutes = totalMinutes / rows.length;
+
+      return {
+        targetItemsPerHour: avgItemsPerHour ? Math.round(avgItemsPerHour * 10) / 10 : null,
+        avgDurationMinutes: Math.round(avgDurationMinutes),
+        sessionCount: rows.length,
+      };
     }),
 
   // --- Session Planning ---

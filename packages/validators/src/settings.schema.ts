@@ -92,6 +92,14 @@ export const adaptiveDepletionSettingsSchema = z.object({
 });
 export type AdaptiveDepletionSettings = z.infer<typeof adaptiveDepletionSettingsSchema>;
 
+export const countOptimizationSettingsSchema = z.object({
+  breakAfterItems: z.number().int().min(10).max(200).default(40),
+  breakAfterMinutes: z.number().int().min(15).max(120).default(45),
+  fatigueDetectionEnabled: z.boolean().default(true),
+  fatigueVarianceThresholdMultiplier: z.number().min(1.0).max(5.0).default(1.5),
+});
+export type CountOptimizationSettings = z.infer<typeof countOptimizationSettingsSchema>;
+
 export const settingsUpdateSchema = z.object({
   businessId: z.string().uuid(),
   capabilities: capabilityTogglesSchema.partial().optional(),
@@ -105,6 +113,7 @@ export const settingsUpdateSchema = z.object({
   verification: verificationSettingsSchema.partial().optional(),
   adaptiveDepletion: adaptiveDepletionSettingsSchema.partial().optional(),
   receiptMatching: receiptMatchingSettingsSchema.partial().optional(),
+  countOptimization: countOptimizationSettingsSchema.partial().optional(),
 });
 
 export const settingsGetSchema = z.object({
