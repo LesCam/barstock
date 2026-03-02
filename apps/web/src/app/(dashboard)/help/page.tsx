@@ -43,6 +43,26 @@ const SECTION_SEARCH_TEXT: Record<string, string> = {
     "orders purchasing purchase order PO vendor management fulfillment pickup trends spend",
   benchmarking:
     "benchmarking industry comparison portfolio metrics opt-in anonymized pour cost snapshot trend",
+  "receipt-capture":
+    "receipt capture scan OCR Gemini camera photo auto-match alias barcode vendor SKU fuzzy confirm skipped items price history",
+  "product-guide":
+    "product guide menu public QR code image lookup barcode drag reorder categories catalog browse",
+  "art-gallery":
+    "art gallery artwork artist consignment agreement sale tracking status lifecycle QR label printing photo capture",
+  "voice-commands":
+    "voice commands mic button continuous listening weight input say weight session add item confirm retry shorthand numbers",
+  "session-planning":
+    "session planning assignment manager staff sub-area focus items accept decline auto-claim upcoming assignments",
+  verification:
+    "verification dual-count blind second count auto-flag variance threshold queue resolve original average close guard",
+  notifications:
+    "notifications real-time SSE delivery alert rules system events notification center dedup admin",
+  portfolio:
+    "portfolio analytics cross-location performance comparison on-hand value COGS variance pour cost mapping coverage trend",
+  "usage-trends":
+    "usage trends charts filter category item date range trend visualization over time",
+  "scan-import":
+    "barcode scanning import mobile web pairing bridge relay quick-create modal CSV bulk find image",
 };
 
 const sections: Section[] = [
@@ -170,6 +190,15 @@ const sections: Section[] = [
               depletion proportionally based on actual usage patterns.
             </p>
           </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Adaptive Learning</h4>
+            <p>
+              The system tracks implied ingredient ratios from each count session and uses an EWMA
+              (exponentially weighted moving average) to auto-adjust recipe depletion ratios over
+              time. Per-ingredient trend charts show how ratios evolve, improving accuracy without
+              manual tuning.
+            </p>
+          </div>
         </div>
       </div>
     ),
@@ -228,6 +257,14 @@ const sections: Section[] = [
               When closing a session, the system checks for items with significant variance. You must provide
               variance reasons for flagged items before the session can be finalized. Closed sessions become
               part of the permanent audit trail.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Session Planning</h4>
+            <p>
+              Managers can plan sessions ahead of time and assign staff to specific sub-areas with focus items.
+              See <a href="/help#session-planning" className="text-[#E9B44C] hover:underline">Session Planning & Assignment</a> for
+              details on the full planning and assignment workflow.
             </p>
           </div>
         </div>
@@ -441,16 +478,16 @@ const sections: Section[] = [
             <h4 className="font-medium text-[#EAF0FF]/90">Rule Types</h4>
             <p>
               Available rules: variance percent, low stock, stale count days, keg near empty,
-              login failures, large adjustment, shrinkage pattern, and par reorder. Enable or
-              disable each rule and set custom thresholds in Settings.
+              login failures, large adjustment, shrinkage pattern, par reorder, and price anomaly.
+              Enable or disable each rule and set custom thresholds in Settings.
             </p>
           </div>
           <div>
             <h4 className="font-medium text-[#EAF0FF]/90">Evaluation & Notifications</h4>
             <p>
-              Rules are evaluated periodically and on demand. Triggered alerts appear as
-              notifications on the dashboard and in the alert history. The Alert Dashboard shows
-              frequency charts and top triggered items.
+              Rules are evaluated periodically and on demand. Triggered alerts are delivered via
+              real-time notifications (see <a href="/help#notifications" className="text-[#E9B44C] hover:underline">Notifications</a>).
+              The Alert Dashboard shows frequency charts and top triggered items.
             </p>
           </div>
         </div>
@@ -605,6 +642,348 @@ const sections: Section[] = [
               Multi-location businesses can compare performance across their own locations in the My
               Locations table. See on-hand value, COGS, variance, pour cost, and mapping coverage
               side by side. The Trend view tracks your business vs. industry median over time.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "receipt-capture",
+    title: "Receipt Capture",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Scan vendor receipts using your camera or upload a photo. Gemini OCR extracts line items
+          automatically, then Barstock matches them to your inventory.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Auto-Matching</h4>
+            <p>
+              Each extracted line is matched using a cascade: vendor alias, barcode, vendor SKU, then
+              fuzzy name matching. Matched items are pre-filled for quick confirmation. Unmatched items
+              can be manually assigned or skipped.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Skipped Items</h4>
+            <p>
+              Items that couldn&apos;t be matched are marked as skipped. Managers can create new
+              inventory items directly from skipped lines, or staff can request their creation.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Learning & Price History</h4>
+            <p>
+              Each confirmed match teaches the system — vendor aliases and barcode associations are
+              saved for future receipts. Price history is tracked per item per vendor for cost
+              trend analysis.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "product-guide",
+    title: "Product Guide & Menu",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          The Product Guide is your internal catalog of items with images, descriptions, prices,
+          and tasting notes. It also powers the public-facing menu.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Public Menu</h4>
+            <p>
+              Each location has a shareable public menu page. Customers scan a QR code (with your
+              business logo embedded) to browse your offerings on their phone. Categories display
+              as sticky pills with card layouts and thumbnails.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Image Lookup & Bulk Import</h4>
+            <p>
+              Use &quot;Find Image&quot; to search external databases by barcode and auto-import
+              product photos. Bulk import lets you add multiple inventory items to the guide at
+              once by selecting from your catalog.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Drag-to-Reorder</h4>
+            <p>
+              Reorder categories and items within a category by dragging. The sort order is
+              reflected on the public menu.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "art-gallery",
+    title: "Art Gallery",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Manage artwork displayed in your venue — track artists, consignment agreements, sales,
+          and generate QR labels for customers.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Artwork Lifecycle</h4>
+            <p>
+              Each piece moves through statuses: on wall, reserved, sold, or removed. Status
+              transitions are tracked with timestamps for a complete audit trail.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Artist Profiles</h4>
+            <p>
+              Create artist profiles with contact info, default commission percentages, payout
+              method, and bio. Each artist&apos;s artworks are listed on their detail page.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">QR Labels & Photos</h4>
+            <p>
+              Print wall labels with QR codes that link to the artwork&apos;s public page. Upload
+              up to 3 photos per piece. Labels include title, artist, medium, dimensions, and price.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "voice-commands",
+    title: "Voice Commands",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Use voice input on mobile to speed up counting sessions and weight entry.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Continuous Listening</h4>
+            <p>
+              Long-press the mic button for continuous listening mode. Speak item names to add them
+              to the current session. The system is session-aware and matches spoken names to your
+              inventory.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Voice Weight Input</h4>
+            <p>
+              Tap &quot;Say Weight&quot; during manual entry to speak the weight value. Handles
+              digits, decimals, compound words, and shorthand (e.g. &quot;seven twenty&quot; becomes
+              720g). After capture, say &quot;submit&quot; to confirm or &quot;retry&quot; to
+              re-record.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "session-planning",
+    title: "Session Planning & Assignment",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Managers can plan counting sessions in advance and assign staff to specific areas.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Planning a Session</h4>
+            <p>
+              From the web dashboard, click &quot;Plan Session&quot; to schedule a future count. Assign
+              staff members to sub-areas (e.g. Well, Back Bar, Walk-in Cooler) and optionally add
+              focus items for each assignment.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Accept / Decline</h4>
+            <p>
+              Assigned staff see upcoming assignments on their mobile app. They can accept or decline
+              each assignment. When they join the session, their assigned sub-area is auto-claimed.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Assignment Banners</h4>
+            <p>
+              During a session, a banner on the mobile screen shows the staff member&apos;s assigned
+              area and focus items, keeping everyone aligned on what to count.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "verification",
+    title: "Dual-Count Verification",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Dual-count verification adds a second layer of accuracy by having a different person
+          recount flagged items without seeing the original count.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Flagging Items</h4>
+            <p>
+              Managers can manually flag any counted item for verification. You can also enable
+              auto-flagging in Settings — items exceeding a configurable variance threshold are
+              automatically flagged when previewing session close.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Blind Verification</h4>
+            <p>
+              The verification queue on mobile hides the original count from the verifier, ensuring
+              an unbiased second count. The verifier enters their count independently.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Resolving & Close Guard</h4>
+            <p>
+              After verification, resolve each item as: use the original count, the verification
+              count, or an average of both. Sessions cannot be closed while flagged or disputed
+              items remain unresolved.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "notifications",
+    title: "Notifications",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Notifications keep you informed of important events in real time.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Real-Time Delivery</h4>
+            <p>
+              Notifications are delivered instantly via Server-Sent Events (SSE). When an alert
+              rule fires or a system event occurs, you see it immediately in the notification
+              center without refreshing.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Notification Center</h4>
+            <p>
+              The Notifications page shows all notifications with rule-type badges, timestamps,
+              and read/unread status. Click a notification to navigate to the relevant page. Use
+              &quot;Mark All as Read&quot; to clear the unread indicator.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Deduplication</h4>
+            <p>
+              Duplicate notifications for the same event are suppressed within a 24-hour window
+              to avoid alert fatigue.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "portfolio",
+    title: "Portfolio Analytics",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          For multi-location businesses, Portfolio Analytics provides a cross-location performance
+          overview from the dashboard.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Location Comparison</h4>
+            <p>
+              Compare key metrics across all your locations side by side: on-hand value, COGS,
+              variance impact, pour cost percentage, and POS mapping coverage. Quickly identify
+              which locations need attention.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Trend Analysis</h4>
+            <p>
+              Track your business performance vs. industry benchmarks over time. The trend view
+              shows how your aggregate metrics compare to the industry median, helping you gauge
+              overall operational health.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "usage-trends",
+    title: "Usage Trends",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Usage Trends visualizes how your inventory is consumed over time.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Charts & Filters</h4>
+            <p>
+              View usage charts filtered by category or individual item. Select a date range to
+              zoom into specific periods. Trend lines help you spot seasonal patterns, unusual
+              spikes, or declining demand.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Actionable Insights</h4>
+            <p>
+              Use trend data to inform purchasing decisions, adjust par levels, and identify
+              products that may need menu changes or promotions.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "scan-import",
+    title: "Barcode Scanning & Import",
+    content: (
+      <div className="space-y-3 text-sm text-[#EAF0FF]/70">
+        <p>
+          Barcode scanning accelerates inventory management on both mobile and web.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Mobile Scanning</h4>
+            <p>
+              Scan barcodes on the mobile app to quickly find items, add them to sessions, or
+              create new inventory entries. The quick-create modal adapts its form based on the
+              item&apos;s category type (weighable, unit count, or keg).
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Web Pairing Bridge</h4>
+            <p>
+              Pair your phone with the web dashboard for real-time barcode relay. Scan on mobile
+              and the barcode appears instantly on the web interface — useful for data entry at
+              a desktop while scanning at the shelf.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Bulk CSV Import</h4>
+            <p>
+              Import inventory items in bulk via CSV upload. Map columns to fields, preview the
+              import, and confirm. Use &quot;Find Image&quot; to auto-fetch product images by
+              barcode after import.
             </p>
           </div>
         </div>

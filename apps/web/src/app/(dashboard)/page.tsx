@@ -11,6 +11,7 @@ import { useLocation } from "@/components/location-context";
 import { PortfolioOverview } from "@/components/portfolio-overview";
 import { PageTip } from "@/components/page-tip";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
+import { HelpLink } from "@/components/help-link";
 
 const TIMEZONES = [
   "America/Montreal",
@@ -267,6 +268,7 @@ export default function DashboardPage() {
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-[#EAF0FF]">Dashboard</h1>
+          <HelpLink section="getting-started" tooltip="Learn about Barstock" />
           {isAdmin && archivedCount > 0 && (
             <button
               onClick={() => setShowArchived(!showArchived)}

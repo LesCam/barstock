@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { QRCodeSVG } from "qrcode.react";
 import { trpc } from "@/lib/trpc";
+import { HelpLink } from "@/components/help-link";
 
 export default function ArtLabelsPage() {
   const { data: session } = useSession();
@@ -204,7 +205,10 @@ export default function ArtLabelsPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#EAF0FF]">Print Labels</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#EAF0FF]">Print Labels</h1>
+            <HelpLink section="art-gallery" tooltip="Learn about QR labels" />
+          </div>
           <p className="mt-1 text-sm text-[#EAF0FF]/60">
             Select artworks to generate printable wall labels with QR codes
           </p>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
+import { HelpLink } from "@/components/help-link";
 
 export default function ArtistsListPage() {
   const { data: session } = useSession();
@@ -17,7 +18,10 @@ export default function ArtistsListPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Artists</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Artists</h1>
+          <HelpLink section="art-gallery" tooltip="Learn about managing artists" />
+        </div>
         <div className="flex gap-2">
           <Link
             href="/art/artists/new"

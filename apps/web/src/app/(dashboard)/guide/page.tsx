@@ -24,6 +24,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { HelpLink } from "@/components/help-link";
 
 // ─── Sortable Category Pill ──────────────────────────────────
 
@@ -491,7 +492,10 @@ export default function ProductGuidePage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Product Guide</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Product Guide</h1>
+          <HelpLink section="product-guide" tooltip="Learn about the product guide" />
+        </div>
         <button
           onClick={() => setShowQR(!showQR)}
           className="rounded-md border border-[#E9B44C] bg-[#E9B44C] px-3 py-1.5 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"

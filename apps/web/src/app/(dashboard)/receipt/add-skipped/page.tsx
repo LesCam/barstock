@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
+import { HelpLink } from "@/components/help-link";
 
 type LineStatus = "pending" | "created" | "requested";
 
@@ -140,7 +141,10 @@ export default function AddSkippedPage() {
             &larr; Receipts
           </Link>
         </div>
-        <h1 className="mt-2 text-2xl font-bold text-[#EAF0FF]">Add Skipped Items</h1>
+        <div className="mt-2 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Add Skipped Items</h1>
+          <HelpLink section="receipt-capture" tooltip="Learn about receipt capture" />
+        </div>
         <p className="mt-1 text-sm text-[#EAF0FF]/60">
           {completedCount}/{lines.length} processed
           {receipt?.vendor?.name && <> &middot; {receipt.vendor.name}</>}

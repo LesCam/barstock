@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
+import { HelpLink } from "@/components/help-link";
 
 export default function GuideItemDetailPage() {
   const params = useParams();
@@ -158,9 +159,12 @@ export default function GuideItemDetailPage() {
 
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#EAF0FF]">
-            {item.inventoryItem.name}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#EAF0FF]">
+              {item.inventoryItem.name}
+            </h1>
+            <HelpLink section="product-guide" tooltip="Learn about product details" />
+          </div>
           <p className="text-sm text-[#EAF0FF]/60">
             {item.category.name}
           </p>

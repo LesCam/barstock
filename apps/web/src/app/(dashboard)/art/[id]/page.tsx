@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 import { StatusBadge } from "@/components/art/StatusBadge";
+import { HelpLink } from "@/components/help-link";
 
 const VALID_TRANSITIONS: Record<string, { status: string; label: string }[]> = {
   on_wall: [
@@ -107,7 +108,10 @@ export default function ArtworkDetailPage() {
 
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#EAF0FF]">{artwork.title}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#EAF0FF]">{artwork.title}</h1>
+            <HelpLink section="art-gallery" tooltip="Learn about artwork details" />
+          </div>
           {artwork.artist && (
             <Link
               href={`/art/artists/${artwork.artist.id}`}

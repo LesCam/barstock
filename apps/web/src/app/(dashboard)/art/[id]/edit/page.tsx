@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
+import { HelpLink } from "@/components/help-link";
 
 export default function EditArtworkPage() {
   const params = useParams();
@@ -95,7 +96,10 @@ export default function EditArtworkPage() {
         </Link>
       </div>
 
-      <h1 className="mb-6 text-2xl font-bold text-[#EAF0FF]">Edit Artwork</h1>
+      <div className="mb-6 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[#EAF0FF]">Edit Artwork</h1>
+        <HelpLink section="art-gallery" tooltip="Learn about editing artwork" />
+      </div>
 
       <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
         <div>

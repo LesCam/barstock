@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 import { ArtworkCard } from "@/components/art/ArtworkCard";
+import { HelpLink } from "@/components/help-link";
 
 const STATUS_FILTERS = [
   { value: undefined, label: "All" },
@@ -102,7 +103,10 @@ export default function EditArtistPage() {
       </div>
 
       <div className="mb-6 flex items-start justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Edit Artist</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Edit Artist</h1>
+          <HelpLink section="art-gallery" tooltip="Learn about artist details" />
+        </div>
         {artist.active && (
           <button
             onClick={() => {

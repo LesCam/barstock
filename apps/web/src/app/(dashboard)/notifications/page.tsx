@@ -124,7 +124,7 @@ export default function NotificationsPage() {
       <div>
         <div className="flex items-center gap-2 mb-6">
           <h1 className="text-2xl font-bold text-[#EAF0FF]">Notifications</h1>
-          <HelpLink section="alerts" tooltip="Learn about alerts" />
+          <HelpLink section="notifications" tooltip="Learn about notifications" />
         </div>
         <p className="text-[#EAF0FF]/60">Loading...</p>
       </div>
@@ -136,7 +136,7 @@ export default function NotificationsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-[#EAF0FF]">Notifications</h1>
-          <HelpLink section="alerts" tooltip="Learn about alerts" />
+          <HelpLink section="notifications" tooltip="Learn about notifications" />
         </div>
         {unreadCount > 0 && (
           <button
