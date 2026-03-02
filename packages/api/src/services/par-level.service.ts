@@ -43,6 +43,9 @@ export interface ReorderSuggestion {
   vendorPhone: string | null;
   itemCount: number;
   totalEstimatedCost: number;
+  urgentDaysToStockout: number | null;
+  vendorLeadTimeDays: number | null;
+  orderByDate: string | null;
   items: Array<{
     inventoryItemId: string;
     itemName: string;
@@ -56,6 +59,7 @@ export interface ReorderSuggestion {
     orderQty: number;
     unitCost: number | null;
     estimatedCost: number | null;
+    daysToStockout: number | null;
   }>;
 }
 
@@ -264,15 +268,34 @@ export class ParLevelService {
       (i) => i.needsReorder && i.vendorId && i.parLevelId
     );
 
+    // Fetch actual vendor lead times from PO history
+    const leadTimeRows = await this.prisma.$queryRaw<
+      Array<{ vendor_id: string; avg_days: number }>
+    >`
+      SELECT
+        vendor_id,
+        AVG(EXTRACT(EPOCH FROM (closed_at - created_at)) / 86400)::float AS avg_days
+      FROM purchase_orders
+      WHERE location_id = ${locationId}::uuid
+        AND status = 'closed'
+        AND closed_at IS NOT NULL
+        AND created_at >= NOW() - INTERVAL '90 days'
+      GROUP BY vendor_id
+    `;
+    const actualLeadTimes = new Map(leadTimeRows.map((r) => [r.vendor_id, r.avg_days]));
+
     if (vendorId) {
       const filtered = reorderItems.filter((i) => i.vendorId === vendorId);
-      return this.groupByVendor(filtered);
+      return this.groupByVendor(filtered, actualLeadTimes);
     }
 
-    return this.groupByVendor(reorderItems);
+    return this.groupByVendor(reorderItems, actualLeadTimes);
   }
 
-  private groupByVendor(items: ParLevelDashboardItem[]): ReorderSuggestion[] {
+  private groupByVendor(
+    items: ParLevelDashboardItem[],
+    actualLeadTimes: Map<string, number>
+  ): ReorderSuggestion[] {
     const vendorMap = new Map<string, ReorderSuggestion>();
 
     for (const item of items) {
@@ -288,6 +311,9 @@ export class ParLevelService {
           vendorPhone: item.vendorPhone,
           itemCount: 0,
           totalEstimatedCost: 0,
+          urgentDaysToStockout: null,
+          vendorLeadTimeDays: null,
+          orderByDate: null,
           items: [],
         });
       }
@@ -310,12 +336,53 @@ export class ParLevelService {
         orderQty,
         unitCost: item.unitCost,
         estimatedCost,
+        daysToStockout: item.daysToStockout,
       });
     }
 
-    return Array.from(vendorMap.values()).sort((a, b) =>
-      a.vendorName.localeCompare(b.vendorName)
-    );
+    // Compute urgency per vendor
+    for (const vendor of vendorMap.values()) {
+      // Find minimum daysToStockout across items
+      const stockoutValues = vendor.items
+        .map((i) => i.daysToStockout)
+        .filter((d): d is number => d != null);
+      vendor.urgentDaysToStockout = stockoutValues.length > 0
+        ? Math.min(...stockoutValues)
+        : null;
+
+      // Vendor lead time: actual from PO history, else item configured, else null
+      const actualLead = actualLeadTimes.get(vendor.vendorId);
+      if (actualLead != null) {
+        vendor.vendorLeadTimeDays = Math.ceil(actualLead);
+      } else {
+        // Fall back to max configured lead time across items
+        const configuredLeads = vendor.items
+          .map((i) => {
+            const dashItem = items.find((d) => d.inventoryItemId === i.inventoryItemId);
+            return dashItem?.leadTimeDays;
+          })
+          .filter((d): d is number => d != null);
+        vendor.vendorLeadTimeDays = configuredLeads.length > 0
+          ? Math.max(...configuredLeads)
+          : null;
+      }
+
+      // Order-by date
+      if (vendor.urgentDaysToStockout != null && vendor.vendorLeadTimeDays != null) {
+        const daysUntilOrder = Math.max(0, vendor.urgentDaysToStockout - vendor.vendorLeadTimeDays);
+        const orderBy = new Date();
+        orderBy.setDate(orderBy.getDate() + daysUntilOrder);
+        vendor.orderByDate = orderBy.toISOString().split("T")[0];
+      }
+    }
+
+    // Sort by urgency (earliest orderByDate first), then alphabetically
+    return Array.from(vendorMap.values()).sort((a, b) => {
+      if (a.orderByDate && b.orderByDate) return a.orderByDate.localeCompare(b.orderByDate);
+      if (a.orderByDate) return -1;
+      if (b.orderByDate) return 1;
+      return a.vendorName.localeCompare(b.vendorName);
+    });
   }
 
   async suggestParLevels(

@@ -55,6 +55,17 @@ export interface VariancePatternItem {
   unitCost: number | null;
   totalEstimatedLossDollars: number | null;
   avgVarianceDollars: number | null;
+  varianceHistory: number[];
+}
+
+export interface VarianceItemTrendPoint {
+  sessionId: string;
+  sessionDate: string;
+  expectedQuantity: number;
+  actualQuantity: number;
+  varianceUnits: number;
+  varianceDollars: number | null;
+  countedBy: string | null;
 }
 
 export interface VarianceByCategoryItem {
@@ -424,6 +435,7 @@ export class VarianceService {
         unitCost,
         totalEstimatedLossDollars: unitCost != null ? totalEstimatedLoss * unitCost : null,
         avgVarianceDollars: unitCost != null ? avgVariance * unitCost : null,
+        varianceHistory: chronological,
       });
     }
 
@@ -1271,5 +1283,70 @@ export class VarianceService {
         ? { itemName: r.worst_item_name, variance: Number(r.worst_item_variance ?? 0) }
         : null,
     }));
+  }
+
+  async getVarianceItemTrend(
+    locationId: string,
+    itemId: string,
+    sessionCount = 10
+  ): Promise<VarianceItemTrendPoint[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        session_id: string;
+        session_date: Date;
+        expected_quantity: string | null;
+        actual_quantity: string | null;
+        variance_units: string | null;
+        unit_cost: string | null;
+        counted_by_name: string | null;
+      }>
+    >`
+      SELECT
+        s.id AS session_id,
+        s.ended_ts AS session_date,
+        oh.total AS expected_quantity,
+        COALESCE(sl.count_units, sl.gross_weight_grams) AS actual_quantity,
+        COALESCE(sl.count_units, sl.gross_weight_grams) - COALESCE(oh.total, 0) AS variance_units,
+        ph.unit_cost,
+        u.email AS counted_by_name
+      FROM inventory_session_lines sl
+      JOIN inventory_sessions s ON s.id = sl.session_id
+      LEFT JOIN LATERAL (
+        SELECT SUM(ce.quantity_delta) AS total
+        FROM consumption_events ce
+        WHERE ce.inventory_item_id = sl.inventory_item_id
+          AND ce.location_id = s.location_id
+          AND ce.event_ts < s.started_ts
+      ) oh ON true
+      LEFT JOIN LATERAL (
+        SELECT ph2.unit_cost
+        FROM price_history ph2
+        WHERE ph2.inventory_item_id = sl.inventory_item_id
+        ORDER BY ph2.effective_from_ts DESC
+        LIMIT 1
+      ) ph ON true
+      LEFT JOIN users u ON u.id = sl.counted_by
+      WHERE sl.inventory_item_id = ${itemId}::uuid
+        AND s.location_id = ${locationId}::uuid
+        AND s.ended_ts IS NOT NULL
+      ORDER BY s.ended_ts DESC
+      LIMIT ${sessionCount}
+    `;
+
+    return rows.reverse().map((r) => {
+      const expectedQuantity = Number(r.expected_quantity ?? 0);
+      const actualQuantity = Number(r.actual_quantity ?? 0);
+      const varianceUnits = Number(r.variance_units ?? 0);
+      const unitCost = r.unit_cost != null ? Number(r.unit_cost) : null;
+      return {
+        sessionId: r.session_id,
+        sessionDate: r.session_date.toISOString().split("T")[0],
+        expectedQuantity,
+        actualQuantity,
+        varianceUnits,
+        varianceDollars: unitCost != null ? varianceUnits * unitCost : null,
+        countedBy: r.counted_by_name,
+      };
+    });
   }
 }

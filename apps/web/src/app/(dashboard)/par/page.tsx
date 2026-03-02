@@ -825,6 +825,46 @@ function OrderView({
   }
 
   const [copiedVendorId, setCopiedVendorId] = useState<string | null>(null);
+  const [bulkCreating, setBulkCreating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
+  const [bulkDone, setBulkDone] = useState(false);
+
+  async function handleGenerateAll() {
+    if (!locationId || !suggestions) return;
+    const pendingVendors = suggestions.filter(
+      (v: any) => !createdVendorIds.has(v.vendorId)
+    );
+    if (pendingVendors.length === 0) return;
+
+    setBulkCreating(true);
+    setBulkProgress({ current: 0, total: pendingVendors.length });
+
+    for (let i = 0; i < pendingVendors.length; i++) {
+      const vendor = pendingVendors[i];
+      setBulkProgress({ current: i + 1, total: pendingVendors.length });
+      const lines = vendor.items
+        .filter((item: any) => !excludedItems.has(item.inventoryItemId))
+        .map((item: any) => ({
+          inventoryItemId: item.inventoryItemId,
+          orderedQty: getOrderQty(item.inventoryItemId, item.orderQty),
+          orderedUom: item.parUom ?? "unit",
+        }));
+      if (lines.length === 0) continue;
+      try {
+        await createPOMutation.mutateAsync({
+          locationId,
+          vendorId: vendor.vendorId,
+          notes: notesMap.get(vendor.vendorId) || undefined,
+          lines,
+        });
+      } catch {
+        // individual vendor failure — continue with others
+      }
+    }
+
+    setBulkCreating(false);
+    setBulkDone(true);
+  }
 
   function uomLabel(item: any, qty: number): string {
     if (item.parUom === "package" && item.packSize) {
@@ -943,12 +983,29 @@ function OrderView({
             <option key={v.id} value={v.id}>{v.name}</option>
           ))}
         </select>
-        <button
-          onClick={exportAllCsv}
-          className="ml-auto rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF]/80 hover:bg-white/5"
-        >
-          Export All (CSV)
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {bulkDone ? (
+            <span className="flex items-center gap-1.5 rounded-md bg-green-500/10 border border-green-500/30 px-4 py-2 text-sm font-medium text-green-400">
+              All POs created <a href="/orders" className="underline hover:text-green-300">View Orders</a>
+            </span>
+          ) : (
+            <button
+              onClick={handleGenerateAll}
+              disabled={bulkCreating || suggestions.every((v: any) => createdVendorIds.has(v.vendorId))}
+              className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+            >
+              {bulkCreating
+                ? `Creating ${bulkProgress.current} of ${bulkProgress.total}...`
+                : "Generate All Orders"}
+            </button>
+          )}
+          <button
+            onClick={exportAllCsv}
+            className="rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF]/80 hover:bg-white/5"
+          >
+            Export All (CSV)
+          </button>
+        </div>
       </div>
 
       {createPOMutation.error && (
@@ -961,7 +1018,28 @@ function OrderView({
             {/* Vendor header */}
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
               <div>
-                <h3 className="text-lg font-semibold text-[#EAF0FF]">{vendor.vendorName}</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-semibold text-[#EAF0FF]">{vendor.vendorName}</h3>
+                  {vendor.orderByDate && (() => {
+                    const today = new Date().toISOString().split("T")[0];
+                    const threeDays = new Date();
+                    threeDays.setDate(threeDays.getDate() + 3);
+                    const threeDaysStr = threeDays.toISOString().split("T")[0];
+                    const isOverdue = vendor.orderByDate <= today;
+                    const isUrgent = !isOverdue && vendor.orderByDate <= threeDaysStr;
+                    return (
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        isOverdue
+                          ? "bg-red-500/20 text-red-400"
+                          : isUrgent
+                            ? "bg-amber-500/20 text-amber-400"
+                            : "bg-green-500/20 text-green-400"
+                      }`}>
+                        Order by {vendor.orderByDate}
+                      </span>
+                    );
+                  })()}
+                </div>
                 <div className="mt-1 flex gap-4 text-xs text-[#EAF0FF]/50">
                   {vendor.vendorEmail && <span>{vendor.vendorEmail}</span>}
                   {vendor.vendorPhone && <span>{vendor.vendorPhone}</span>}
@@ -969,6 +1047,9 @@ function OrderView({
                   <span className="font-medium text-[#E9B44C]">
                     Est. total: {formatCurrency(vendor.totalEstimatedCost)}
                   </span>
+                  {vendor.vendorLeadTimeDays != null && (
+                    <span>Lead time: {vendor.vendorLeadTimeDays}d</span>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -1041,6 +1122,7 @@ function OrderView({
                   <th className="px-4 py-2 font-medium text-right">Order Qty</th>
                   <th className="px-4 py-2 font-medium text-right">Unit Cost</th>
                   <th className="px-4 py-2 font-medium text-right">Line Total</th>
+                  <th className="px-4 py-2 font-medium text-right">Days Left</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -1091,6 +1173,21 @@ function OrderView({
                       </td>
                       <td className="px-4 py-2.5 text-right font-medium text-[#E9B44C]">
                         {formatCurrency(lineCost)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {item.daysToStockout != null ? (
+                          <span className={`font-medium ${
+                            item.daysToStockout <= 3
+                              ? "text-red-400"
+                              : item.daysToStockout <= 7
+                                ? "text-amber-400"
+                                : "text-[#EAF0FF]/60"
+                          }`}>
+                            {item.daysToStockout}d
+                          </span>
+                        ) : (
+                          <span className="text-[#EAF0FF]/30">—</span>
+                        )}
                       </td>
                     </tr>
                   );

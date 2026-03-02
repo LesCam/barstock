@@ -1,5 +1,5 @@
 import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, portfolioTrendQuerySchema, portfolioStaffComparisonQuerySchema, portfolioVarianceItemsQuerySchema, portfolioForecastQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema, varianceByCategoryQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, portfolioTrendQuerySchema, portfolioStaffComparisonQuerySchema, portfolioVarianceItemsQuerySchema, portfolioForecastQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema, varianceByCategoryQuerySchema, varianceItemTrendQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 import { BenchmarkService } from "../services/benchmark.service";
@@ -81,6 +81,13 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new VarianceService(ctx.prisma);
       return svc.getVarianceByCategory(input.locationId, input.fromDate, input.toDate);
+    }),
+
+  varianceItemTrend: protectedProcedure
+    .input(varianceItemTrendQuerySchema)
+    .query(({ ctx, input }) => {
+      const svc = new VarianceService(ctx.prisma);
+      return svc.getVarianceItemTrend(input.locationId, input.itemId, input.sessionCount);
     }),
 
   staffAccountability: protectedProcedure

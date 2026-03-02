@@ -87,6 +87,101 @@ function VarianceHeatmapGrid({ data }: { data: HeatmapCell[] }) {
   );
 }
 
+function VarianceItemRow({
+  item,
+  isExpanded,
+  onToggle,
+  locationId,
+}: {
+  item: { inventoryItemId: string; itemName: string; categoryName: string | null; theoretical: number; actual: number; variance: number; variancePercent: number; valueImpact: number | null };
+  isExpanded: boolean;
+  onToggle: () => void;
+  locationId: string;
+}) {
+  const { data: trendData } = trpc.reports.varianceItemTrend.useQuery(
+    { locationId, itemId: item.inventoryItemId, sessionCount: 10 },
+    { enabled: isExpanded }
+  );
+
+  return (
+    <>
+      <tr
+        className="cursor-pointer hover:bg-[#16283F]/60"
+        onClick={onToggle}
+      >
+        <td className="px-4 py-3 font-medium">
+          <span className="mr-1.5 text-xs text-[#EAF0FF]/40">{isExpanded ? "\u25BC" : "\u25B6"}</span>
+          {item.itemName}
+        </td>
+        <td className="px-4 py-3">{item.categoryName ?? "—"}</td>
+        <td className="px-4 py-3">{item.theoretical.toFixed(1)}</td>
+        <td className="px-4 py-3">{item.actual.toFixed(1)}</td>
+        <td
+          className={`px-4 py-3 font-medium ${
+            item.variance < 0 ? "text-red-400" : item.variance > 0 ? "text-green-400" : ""
+          }`}
+        >
+          {item.variance.toFixed(1)}
+        </td>
+        <td className="px-4 py-3">{item.variancePercent.toFixed(1)}%</td>
+        <td className="px-4 py-3">
+          {item.valueImpact != null ? `$${item.valueImpact.toFixed(2)}` : "—"}
+        </td>
+      </tr>
+      {isExpanded && (
+        <tr>
+          <td colSpan={7} className="bg-[#0B1623]/40 px-4 py-4">
+            {!trendData ? (
+              <p className="text-sm text-[#EAF0FF]/40">Loading variance history...</p>
+            ) : trendData.length === 0 ? (
+              <p className="text-sm text-[#EAF0FF]/40">No session data for this item.</p>
+            ) : (
+              <div>
+                <p className="mb-3 text-xs text-[#EAF0FF]/60">
+                  {trendData.length} sessions, avg variance:{" "}
+                  <span className="font-medium">
+                    {(trendData.reduce((s, d) => s + d.varianceUnits, 0) / trendData.length).toFixed(1)} units
+                  </span>
+                  {trendData[0].varianceDollars != null && (
+                    <span className="ml-1">
+                      (${(trendData.reduce((s, d) => s + (d.varianceDollars ?? 0), 0) / trendData.length).toFixed(2)})
+                    </span>
+                  )}
+                </p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <ComposedChart data={trendData}>
+                    <XAxis dataKey="sessionDate" tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={{ stroke: "#ffffff1a" }} tickLine={false} />
+                    <YAxis yAxisId="units" tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    {trendData.some((d) => d.varianceDollars != null) && (
+                      <YAxis yAxisId="dollars" orientation="right" tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                    )}
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                      formatter={(value, name) => {
+                        const v = Number(value ?? 0);
+                        if (name === "varianceDollars") return [`$${v.toFixed(2)}`, "Variance $"];
+                        return [v.toFixed(1), "Variance Units"];
+                      }}
+                    />
+                    <Bar yAxisId="units" dataKey="varianceUnits" name="varianceUnits" radius={[4, 4, 0, 0]}>
+                      {trendData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.varianceUnits >= 0 ? "#4ade80" : "#f87171"} />
+                      ))}
+                    </Bar>
+                    {trendData.some((d) => d.varianceDollars != null) && (
+                      <Line yAxisId="dollars" type="monotone" dataKey="varianceDollars" stroke="#E9B44C" strokeWidth={2} dot={{ r: 3 }} name="varianceDollars" />
+                    )}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
 /** Convert a date string + EOD time into the actual end-of-day Date.
  *  If eodTime is at or before "12:00", the business closes after midnight,
  *  so we add a day (e.g. "Feb 21" with EOD "04:00" → Feb 22 04:00). */
@@ -134,6 +229,9 @@ export default function ReportsPage() {
   const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
   const [recipeGranularity, setRecipeGranularity] = useState<"day" | "week" | "month">("day");
   const [recipeGranularityOverride, setRecipeGranularityOverride] = useState(false);
+
+  // Variance item expansion
+  const [expandedVarianceItemId, setExpandedVarianceItemId] = useState<string | null>(null);
 
   // Usage enhancements
   const [usageMetric, setUsageMetric] = useState<"cost" | "qty">("cost");
@@ -1169,23 +1267,15 @@ export default function ReportsPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {sortedVarianceItems.map((item) => (
-                  <tr key={item.inventoryItemId} className="hover:bg-[#16283F]/60">
-                    <td className="px-4 py-3 font-medium">{item.itemName}</td>
-                    <td className="px-4 py-3">{item.categoryName ?? "—"}</td>
-                    <td className="px-4 py-3">{item.theoretical.toFixed(1)}</td>
-                    <td className="px-4 py-3">{item.actual.toFixed(1)}</td>
-                    <td
-                      className={`px-4 py-3 font-medium ${
-                        item.variance < 0 ? "text-red-400" : item.variance > 0 ? "text-green-400" : ""
-                      }`}
-                    >
-                      {item.variance.toFixed(1)}
-                    </td>
-                    <td className="px-4 py-3">{item.variancePercent.toFixed(1)}%</td>
-                    <td className="px-4 py-3">
-                      {item.valueImpact != null ? `$${item.valueImpact.toFixed(2)}` : "—"}
-                    </td>
-                  </tr>
+                  <VarianceItemRow
+                    key={item.inventoryItemId}
+                    item={item}
+                    isExpanded={expandedVarianceItemId === item.inventoryItemId}
+                    onToggle={() => setExpandedVarianceItemId(
+                      expandedVarianceItemId === item.inventoryItemId ? null : item.inventoryItemId
+                    )}
+                    locationId={locationId!}
+                  />
                 ))}
                 {sortedVarianceItems.length === 0 && (
                   <tr>
@@ -1949,15 +2039,30 @@ export default function ReportsPage() {
                       {item.avgVariance.toFixed(1)}
                     </td>
                     <td className="px-4 py-3">
-                      {item.trend === "worsening" && (
-                        <span className="text-red-400" title="Worsening">&#x2193;</span>
-                      )}
-                      {item.trend === "improving" && (
-                        <span className="text-green-400" title="Improving">&#x2191;</span>
-                      )}
-                      {item.trend === "stable" && (
-                        <span className="text-[#EAF0FF]/40" title="Stable">&#x2192;</span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {item.varianceHistory && item.varianceHistory.length > 1 && (
+                          <div className="inline-block" style={{ width: 80, height: 24 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={item.varianceHistory.map((v: number) => ({ v }))} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                                <Bar dataKey="v" radius={[1, 1, 0, 0]}>
+                                  {item.varianceHistory.map((_: number, idx: number) => (
+                                    <Cell key={idx} fill={item.varianceHistory[idx] >= 0 ? "#4ade80" : "#f87171"} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+                        {item.trend === "worsening" && (
+                          <span className="text-red-400" title="Worsening">&#x2193;</span>
+                        )}
+                        {item.trend === "improving" && (
+                          <span className="text-green-400" title="Improving">&#x2191;</span>
+                        )}
+                        {item.trend === "stable" && (
+                          <span className="text-[#EAF0FF]/40" title="Stable">&#x2192;</span>
+                        )}
+                      </div>
                     </td>
                     <td className={`px-4 py-3 ${item.totalEstimatedLoss < 0 ? "text-red-400" : ""}`}>
                       {item.totalEstimatedLoss.toFixed(1)}

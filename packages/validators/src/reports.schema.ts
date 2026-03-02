@@ -182,6 +182,12 @@ export const varianceByCategoryQuerySchema = z.object({
   toDate: z.coerce.date(),
 });
 
+export const varianceItemTrendQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  sessionCount: z.number().int().min(1).max(20).default(10),
+});
+
 // ─── Benchmark Schemas ──────────────────────────────────────
 
 export const captureSnapshotsSchema = z.object({});
