@@ -14,7 +14,7 @@ interface Props {
   onComplete: () => void;
 }
 
-const FEATURES = [
+const DEFAULT_FEATURES = [
   {
     icon: "📦",
     title: "Inventory Counting",
@@ -37,6 +37,21 @@ const FEATURES = [
   },
 ];
 
+const ROLE_FEATURES: Record<string, typeof DEFAULT_FEATURES> = {
+  curator: [
+    { icon: "🎨", title: "Art Gallery", desc: "Manage artworks, artists, and consignment agreements" },
+    { icon: "📷", title: "Photo & QR Labels", desc: "Capture photos and print QR wall labels for each piece" },
+    { icon: "💰", title: "Sales Tracking", desc: "Record sales, track commissions, and manage payouts" },
+    { icon: "📋", title: "Product Guide", desc: "Browse the public menu and share your catalog" },
+  ],
+  accounting: [
+    { icon: "📊", title: "Reports", desc: "COGS, variance, usage, and staff accountability reports" },
+    { icon: "📈", title: "Analytics", desc: "Forecasting, anomaly detection, and trend analysis" },
+    { icon: "📦", title: "Purchase Orders", desc: "Review orders, vendor spend, and fulfillment status" },
+    { icon: "🔍", title: "Audit Trail", desc: "Full activity log with timestamps and actor tracking" },
+  ],
+};
+
 function getRoleLabel(role?: string) {
   switch (role) {
     case "platform_admin":
@@ -47,6 +62,10 @@ function getRoleLabel(role?: string) {
       return "Manager";
     case "staff":
       return "Staff";
+    case "curator":
+      return "Curator";
+    case "accounting":
+      return "Accounting";
     default:
       return "Team Member";
   }
@@ -70,6 +89,16 @@ function getQuickStart(role?: string) {
         title: "Configure Everything",
         desc: "Set up categories, connect your POS system, invite staff, and configure locations. Head to Settings to get started.",
       };
+    case "curator":
+      return {
+        title: "Manage Your Gallery",
+        desc: "Add artworks and artists, print QR labels for the wall, and track sales and commissions from the Art Gallery section.",
+      };
+    case "accounting":
+      return {
+        title: "Financial Overview",
+        desc: "Review reports for COGS, variance, and usage. Check purchase orders and audit trails to stay on top of the numbers.",
+      };
     default:
       return {
         title: "Get Started",
@@ -84,6 +113,7 @@ export default function OnboardingOverlay({ user, onComplete }: Props) {
 
   const roleLabel = getRoleLabel(user?.highestRole);
   const quickStart = getQuickStart(user?.highestRole);
+  const features = ROLE_FEATURES[user?.highestRole as string] ?? DEFAULT_FEATURES;
 
   return (
     <View style={styles.container}>
@@ -115,7 +145,7 @@ export default function OnboardingOverlay({ user, onComplete }: Props) {
             <>
               <Text style={styles.pageTitle}>Key Features</Text>
               <View style={styles.featureGrid}>
-                {FEATURES.map((f) => (
+                {features.map((f) => (
                   <View key={f.title} style={styles.featureCard}>
                     <Text style={styles.featureIcon}>{f.icon}</Text>
                     <Text style={styles.featureTitle}>{f.title}</Text>

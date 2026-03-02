@@ -7,6 +7,59 @@ import {
   ScrollView,
   StyleSheet,
 } from "react-native";
+import { useAuth } from "@/lib/auth-context";
+import { useHelpProgress } from "@/lib/use-help-progress";
+
+type Role = "staff" | "manager" | "business_admin" | "platform_admin" | "curator" | "accounting";
+
+const ROLE_HIERARCHY: Record<Role, number> = {
+  staff: 0,
+  curator: 1,
+  accounting: 1,
+  manager: 2,
+  business_admin: 3,
+  platform_admin: 4,
+};
+
+function hasAccess(userRole: Role | undefined, sectionRoles?: Role[]): boolean {
+  if (!sectionRoles) return true;
+  if (!userRole) return true;
+  const userLevel = ROLE_HIERARCHY[userRole] ?? 0;
+  return sectionRoles.some((r) => {
+    if (r === userRole) return true;
+    return ROLE_HIERARCHY[r] !== undefined && userLevel >= ROLE_HIERARCHY[r];
+  });
+}
+
+const SECTION_ROLES: Record<string, Role[]> = {
+  "getting-started": ["staff", "manager", "business_admin", "platform_admin", "curator", "accounting"],
+  "counting-methods": ["staff", "manager", "business_admin", "platform_admin"],
+  "pos-mapping": ["manager", "business_admin", "platform_admin"],
+  recipes: ["manager", "business_admin", "platform_admin"],
+  variance: ["staff", "manager", "business_admin", "platform_admin"],
+  sessions: ["staff", "manager", "business_admin", "platform_admin"],
+  "par-levels": ["manager", "business_admin", "platform_admin"],
+  "expected-inventory": ["manager", "business_admin", "platform_admin"],
+  reports: ["manager", "business_admin", "platform_admin", "accounting"],
+  "settings-roles": ["manager", "business_admin", "platform_admin"],
+  "draft-kegs": ["staff", "manager", "business_admin", "platform_admin"],
+  alerts: ["manager", "business_admin", "platform_admin"],
+  analytics: ["manager", "business_admin", "platform_admin", "accounting"],
+  transfers: ["staff", "manager", "business_admin", "platform_admin"],
+  audit: ["manager", "business_admin", "platform_admin", "accounting"],
+  orders: ["manager", "business_admin", "platform_admin", "accounting"],
+  benchmarking: ["business_admin", "platform_admin"],
+  "receipt-capture": ["manager", "business_admin", "platform_admin"],
+  "product-guide": ["staff", "manager", "business_admin", "platform_admin", "curator", "accounting"],
+  "art-gallery": ["curator", "manager", "business_admin", "platform_admin"],
+  "voice-commands": ["staff", "manager", "business_admin", "platform_admin"],
+  "session-planning": ["manager", "business_admin", "platform_admin"],
+  verification: ["staff", "manager", "business_admin", "platform_admin"],
+  notifications: ["staff", "manager", "business_admin", "platform_admin"],
+  portfolio: ["business_admin", "platform_admin"],
+  "usage-trends": ["manager", "business_admin", "platform_admin"],
+  "scan-import": ["staff", "manager", "business_admin", "platform_admin"],
+};
 
 interface HelpSection {
   id: string;
@@ -429,8 +482,12 @@ const sections: HelpSection[] = [
 ];
 
 export default function HelpScreen() {
+  const { user } = useAuth();
+  const userRole = user?.highestRole as Role | undefined;
   const [search, setSearch] = useState("");
+  const [showAll, setShowAll] = useState(false);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
+  const { visitedSections, percentComplete, markVisited } = useHelpProgress(sections.length);
 
   const toggleSection = (id: string) => {
     setOpenSections((prev) => {
@@ -439,20 +496,27 @@ export default function HelpScreen() {
         next.delete(id);
       } else {
         next.add(id);
+        markVisited(id);
       }
       return next;
     });
   };
 
+  const roleFiltered = showAll
+    ? sections
+    : sections.filter((s) => hasAccess(userRole, SECTION_ROLES[s.id]));
+
   const filteredSections = search.trim()
-    ? sections.filter((s) => {
+    ? roleFiltered.filter((s) => {
         const q = search.toLowerCase();
         return (
           s.title.toLowerCase().includes(q) ||
           (SECTION_SEARCH_TEXT[s.id] ?? "").toLowerCase().includes(q)
         );
       })
-    : sections;
+    : roleFiltered;
+
+  const hiddenCount = sections.length - roleFiltered.length;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -460,15 +524,40 @@ export default function HelpScreen() {
         Reference guide for Barstock concepts and features.
       </Text>
 
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search help topics..."
-        placeholderTextColor="rgba(234, 240, 255, 0.3)"
-        value={search}
-        onChangeText={setSearch}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
+      {/* Progress bar */}
+      <View style={styles.progressCard}>
+        <View style={styles.progressHeader}>
+          <Text style={styles.progressText}>
+            {visitedSections.size}/{sections.length} sections explored
+          </Text>
+          <Text style={styles.progressPercent}>{percentComplete}%</Text>
+        </View>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${percentComplete}%` }]} />
+        </View>
+      </View>
+
+      <View style={styles.searchRow}>
+        <TextInput
+          style={[styles.searchInput, { flex: 1, marginBottom: 0 }]}
+          placeholder="Search help topics..."
+          placeholderTextColor="rgba(234, 240, 255, 0.3)"
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {hiddenCount > 0 && (
+          <TouchableOpacity
+            style={styles.showAllBtn}
+            onPress={() => setShowAll(!showAll)}
+          >
+            <Text style={styles.showAllText}>
+              {showAll ? "Relevant" : `All (${sections.length})`}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {filteredSections.map((section) => {
         const isOpen = openSections.has(section.id);
@@ -479,7 +568,12 @@ export default function HelpScreen() {
               onPress={() => toggleSection(section.id)}
               activeOpacity={0.7}
             >
-              <Text style={styles.cardTitle}>{section.title}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+                <Text style={styles.cardTitle}>{section.title}</Text>
+                {visitedSections.has(section.id) && (
+                  <Text style={{ color: "#16a34a", fontSize: 12 }}>✓</Text>
+                )}
+              </View>
               <Text style={styles.expandIcon}>{isOpen ? "−" : "+"}</Text>
             </TouchableOpacity>
             {isOpen && (
@@ -517,6 +611,12 @@ const styles = StyleSheet.create({
     color: "rgba(234, 240, 255, 0.5)",
     marginBottom: 16,
   },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
   searchInput: {
     backgroundColor: "#0B1623",
     borderWidth: 1,
@@ -527,6 +627,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#EAF0FF",
     marginBottom: 16,
+  },
+  showAllBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  showAllText: {
+    fontSize: 11,
+    color: "rgba(234, 240, 255, 0.6)",
   },
   card: {
     backgroundColor: "#16283F",
@@ -577,5 +688,38 @@ const styles = StyleSheet.create({
     color: "rgba(234, 240, 255, 0.4)",
     fontSize: 14,
     marginTop: 32,
+  },
+  progressCard: {
+    backgroundColor: "#16283F",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1E3550",
+    padding: 12,
+    marginBottom: 16,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  progressText: {
+    fontSize: 12,
+    color: "rgba(234, 240, 255, 0.6)",
+  },
+  progressPercent: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#E9B44C",
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#0B1623",
+  },
+  progressFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#E9B44C",
   },
 });

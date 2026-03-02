@@ -5,7 +5,7 @@ import { useNetwork } from "@/lib/network-context";
 import { subscribe, isSyncing, retryFailed, clearFailed, type QueueEntry } from "@/lib/offline-queue";
 import { trpcVanilla } from "@/lib/trpc";
 
-type BannerState = "hidden" | "offline" | "syncing" | "synced" | "failed";
+type BannerState = "hidden" | "offline" | "syncing" | "synced" | "failed" | "conflict";
 
 export function OfflineBanner() {
   const { isOnline } = useNetwork();
@@ -23,6 +23,7 @@ export function OfflineBanner() {
   const pendingCount = queue.filter((e) => e.status === "pending").length;
   const syncingCount = queue.filter((e) => e.status === "syncing").length;
   const failedCount = queue.filter((e) => e.status === "failed").length;
+  const conflictCount = queue.filter((e) => e.status === "conflict").length;
   const totalPending = pendingCount + syncingCount;
 
   // Determine banner state
@@ -38,6 +39,8 @@ export function OfflineBanner() {
       setBannerState("offline");
     } else if (isSyncing() || syncingCount > 0) {
       setBannerState("syncing");
+    } else if (conflictCount > 0) {
+      setBannerState("conflict");
     } else if (failedCount > 0) {
       setBannerState("failed");
     } else if (bannerState === "syncing" || bannerState === "offline") {
@@ -53,7 +56,7 @@ export function OfflineBanner() {
     return () => {
       if (syncedTimeoutRef.current) clearTimeout(syncedTimeoutRef.current);
     };
-  }, [isOnline, totalPending, syncingCount, failedCount]);
+  }, [isOnline, totalPending, syncingCount, failedCount, conflictCount]);
 
   // Animate slide in/out
   useEffect(() => {
@@ -102,6 +105,10 @@ export function OfflineBanner() {
       text = "All synced";
       bgColor = styles.bgSynced;
       break;
+    case "conflict":
+      text = `${conflictCount} conflict${conflictCount !== 1 ? "s" : ""} need review`;
+      bgColor = styles.bgConflict;
+      break;
     case "failed":
       text = `${failedCount} item${failedCount !== 1 ? "s" : ""} failed to sync`;
       bgColor = styles.bgFailed;
@@ -113,7 +120,11 @@ export function OfflineBanner() {
       style={[styles.container, { transform: [{ translateY: slideAnim }] }]}
     >
       <View style={[styles.banner, bgColor]}>
-        {bannerState === "failed" ? (
+        {bannerState === "conflict" ? (
+          <TouchableOpacity onPress={() => router.push("/sync-queue")} activeOpacity={0.7}>
+            <Text style={styles.text}>{text}</Text>
+          </TouchableOpacity>
+        ) : bannerState === "failed" ? (
           <View style={styles.failedRow}>
             <TouchableOpacity onPress={() => router.push("/sync-queue")} activeOpacity={0.7}>
               <Text style={styles.text}>{text}</Text>
@@ -174,6 +185,9 @@ const styles = StyleSheet.create({
   },
   bgSynced: {
     backgroundColor: "#16a34a",
+  },
+  bgConflict: {
+    backgroundColor: "#B8860B",
   },
   bgFailed: {
     backgroundColor: "#dc2626",

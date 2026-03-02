@@ -7,6 +7,8 @@ import { trpc } from "@/lib/trpc";
 import { useVoicePreference } from "@/lib/voice-preference";
 import { useCountingPreferences } from "@/lib/counting-preferences";
 import { useLock, type UnlockMethod } from "@/lib/lock-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { WHATS_NEW_VERSION, WHATS_NEW_STORAGE_KEY } from "@/app/whats-new";
 
 export default function SettingsTab() {
   const router = useRouter();
@@ -17,6 +19,7 @@ export default function SettingsTab() {
   const { hapticEnabled, setHapticEnabled, quickEmptyEnabled, setQuickEmptyEnabled } = useCountingPreferences();
   const { lockPolicy, userUnlockMethod, setUserUnlockMethod, lockForSwitch } = useLock();
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [hasUnseenWhatsNew, setHasUnseenWhatsNew] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -24,6 +27,10 @@ export default function SettingsTab() {
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
       setBiometricAvailable(hasHardware && isEnrolled);
     })();
+    // Check for unseen What's New
+    AsyncStorage.getItem(WHATS_NEW_STORAGE_KEY).then((seen) => {
+      setHasUnseenWhatsNew(seen !== WHATS_NEW_VERSION);
+    });
   }, []);
 
   const { data: capabilities } = trpc.settings.capabilities.useQuery(
@@ -213,8 +220,25 @@ export default function SettingsTab() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>About</Text>
         <View style={styles.card}>
-          <Text style={styles.rowText}>BarStock v1.0.0</Text>
+          <Text style={styles.rowText}>BarStock v1.9.0</Text>
         </View>
+        <TouchableOpacity
+          style={[styles.card, { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+          onPress={() => {
+            setHasUnseenWhatsNew(false);
+            router.push("/whats-new");
+          }}
+        >
+          <Text style={styles.rowText}>What's New</Text>
+          {hasUnseenWhatsNew && (
+            <View style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: "#E9B44C",
+            }} />
+          )}
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>

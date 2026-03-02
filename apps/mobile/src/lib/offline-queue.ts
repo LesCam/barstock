@@ -4,15 +4,27 @@ import type { AppRouter } from "@barstock/api";
 
 const STORAGE_KEY = "@barstock/offlineQueue";
 
+export interface ConflictValues {
+  countUnits?: number;
+  grossWeightGrams?: number;
+  percentRemaining?: number;
+  updatedBy?: string;
+}
+
 export interface QueueEntry {
   id: string;
-  mutation: "sessions.addLine" | "sessions.updateLine" | "sessions.deleteLine" | "sessions.join" | "receiving.receive" | "transfers.create";
+  mutation: "sessions.addLine" | "sessions.updateLine" | "sessions.deleteLine" | "sessions.join" | "sessions.close" | "receiving.receive" | "transfers.create";
   input: Record<string, unknown>;
   tempId?: string;
   createdAt: string;
-  status: "pending" | "syncing" | "failed";
+  status: "pending" | "syncing" | "failed" | "conflict";
   retryCount: number;
   error?: string;
+  conflictData?: {
+    myValues: ConflictValues;
+    theirValues: ConflictValues;
+    theirName?: string;
+  };
 }
 
 type Listener = (queue: QueueEntry[]) => void;
@@ -87,6 +99,53 @@ export function isSyncing(): boolean {
   return syncing;
 }
 
+/**
+ * Resolve a conflict entry by choosing "mine" (re-enqueue with force) or "theirs" (discard).
+ */
+export async function resolveConflict(
+  entryId: string,
+  resolution: "mine" | "theirs",
+): Promise<void> {
+  const queue = await loadQueue();
+  const idx = queue.findIndex((e) => e.id === entryId);
+  if (idx === -1) return;
+
+  if (resolution === "theirs") {
+    // Discard the offline mutation — server value wins
+    cachedQueue = queue.filter((e) => e.id !== entryId);
+  } else {
+    // Re-enqueue as pending, strip expectedUpdatedAt so it overwrites
+    const entry = queue[idx];
+    const { expectedUpdatedAt, ...rest } = entry.input as any;
+    entry.input = rest;
+    entry.status = "pending";
+    entry.retryCount = 0;
+    entry.error = undefined;
+    entry.conflictData = undefined;
+  }
+  await persistQueue();
+  notify();
+}
+
+/**
+ * Remove all queued entries for a given session.
+ * Returns the count of entries removed.
+ */
+export async function removeEntriesForSession(sessionId: string): Promise<number> {
+  const queue = await loadQueue();
+  const before = queue.length;
+  cachedQueue = queue.filter((e) => {
+    const input = e.input as any;
+    return input.sessionId !== sessionId;
+  });
+  const removed = before - cachedQueue.length;
+  if (removed > 0) {
+    await persistQueue();
+    notify();
+  }
+  return removed;
+}
+
 async function executeMutation(
   client: CreateTRPCClient<AppRouter>,
   entry: QueueEntry,
@@ -107,6 +166,9 @@ async function executeMutation(
       break;
     case "receiving.receive":
       await client.receiving.receive.mutate(input);
+      break;
+    case "sessions.close":
+      await client.sessions.close.mutate(input);
       break;
     case "transfers.create":
       await client.transfers.create.mutate(input);
@@ -173,6 +235,7 @@ export async function retryFailed(
       entry.retryCount = 0;
       entry.error = undefined;
     }
+    // Don't auto-retry conflict entries — those need manual resolution
   }
   await persistQueue();
   notify();
@@ -203,7 +266,7 @@ export async function processQueue(
   const toRemove: string[] = [];
 
   for (const entry of queue) {
-    if (entry.status === "failed") continue; // skip already-failed entries
+    if (entry.status === "failed" || entry.status === "conflict") continue; // skip already-failed/conflict entries
 
     entry.status = "syncing";
     notify();
@@ -224,8 +287,22 @@ export async function processQueue(
         sessionClosed = true;
         break; // stop processing
       } else if (isConflictError(err)) {
-        // Server wins — discard stale offline mutation silently
-        toRemove.push(entry.id);
+        // Parse conflict data and mark entry for user resolution
+        let theirValues: Record<string, unknown> = {};
+        let theirName: string | undefined;
+        try {
+          const parsed = JSON.parse((err as Error).message);
+          theirValues = parsed.theirValues ?? {};
+          theirName = parsed.theirName;
+        } catch {
+          // Not parseable, keep defaults
+        }
+        entry.status = "conflict";
+        entry.conflictData = {
+          myValues: entry.input as any,
+          theirValues: theirValues as any,
+          theirName,
+        };
       } else if (isNotFoundError(err)) {
         entry.status = "failed";
         entry.error = (err as Error).message;

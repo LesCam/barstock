@@ -17,7 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { VoiceButton } from "@/components/VoiceButton";
 import { useCountingPreferences } from "@/lib/counting-preferences";
 import { useNetwork } from "@/lib/network-context";
-import { subscribe, enqueue, getQueue, type QueueEntry } from "@/lib/offline-queue";
+import { subscribe, enqueue, getQueue, removeEntry, removeEntriesForSession, type QueueEntry } from "@/lib/offline-queue";
 import { useSessionSSE, type SSEEvent, type SSEMode } from "@/lib/use-session-sse";
 import { VarianceReasonModal } from "@/components/VarianceReasonModal";
 import { SessionActivityFeed, type ActivityEvent } from "@/components/SessionActivityFeed";
@@ -102,6 +102,15 @@ export default function SessionDetailScreen() {
   const [recentOtherCounts, setRecentOtherCounts] = useState<Map<string, string>>(new Map());
   const [lastBreakAt, setLastBreakAt] = useState<{ items: number; timeMs: number } | null>(null);
   const [conflictData, setConflictData] = useState<ConflictData | null>(null);
+  const [pendingClose, setPendingClose] = useState(false);
+
+  // Check for pending close flag on mount
+  useEffect(() => {
+    if (!id) return;
+    AsyncStorage.getItem(`@barstock/pendingClose/${id}`).then((val) => {
+      if (val === "1") setPendingClose(true);
+    });
+  }, [id]);
 
   // Load persisted sort mode on mount
   useEffect(() => {
@@ -237,9 +246,16 @@ export default function SessionDetailScreen() {
     if (event.type === "session_closed") {
       utils.sessions.getById.invalidate({ id: id! });
       utils.sessions.list.invalidate();
-      Alert.alert("Session Closed", "This session was closed by another user.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      // Clean up orphaned queue entries for this session
+      removeEntriesForSession(id!).then((removedCount) => {
+        AsyncStorage.removeItem(`@barstock/pendingClose/${id}`);
+        const msg = removedCount > 0
+          ? `This session was closed by another user. ${removedCount} queued item${removedCount !== 1 ? "s were" : " was"} removed.`
+          : "This session was closed by another user.";
+        Alert.alert("Session Closed", msg, [
+          { text: "OK", onPress: () => router.back() },
+        ]);
+      });
       return;
     }
 
@@ -769,10 +785,44 @@ export default function SessionDetailScreen() {
     return map;
   }, [expectedItemsForLocation, session?.lines]);
 
+  // Cancel pending offline close
+  function handleCancelPendingClose() {
+    getQueue().then((q) => {
+      const closeEntry = q.find(
+        (e) => e.mutation === "sessions.close" && (e.input as any).sessionId === id,
+      );
+      if (closeEntry) removeEntry(closeEntry.id);
+    });
+    AsyncStorage.removeItem(`@barstock/pendingClose/${id}`);
+    setPendingClose(false);
+  }
+
   // Handle close session — triggers verification flow
   async function handleCloseSession() {
     if (!isOnline) {
-      Alert.alert("Offline", "Cannot close session while offline. Please reconnect first.");
+      // Offline close: enqueue and mark as pending
+      Alert.alert(
+        "Close Offline?",
+        "You're offline. The session close will be queued and submitted when you reconnect.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Queue Close",
+            onPress: () => {
+              enqueue("sessions.close", { sessionId: id!, varianceReasons });
+              AsyncStorage.setItem(`@barstock/pendingClose/${id}`, "1");
+              setPendingClose(true);
+              // Optimistically mark session as closing in cache
+              utils.sessions.getById.setData({ id: id! }, (old: any) => {
+                if (!old) return old;
+                return { ...old, _pendingClose: true };
+              });
+              Alert.alert("Queued", "Session close has been queued. It will be submitted when you're back online.");
+              router.back();
+            },
+          },
+        ],
+      );
       return;
     }
     const sessionLineIds = new Set(session?.lines.map((l: any) => l.id) ?? []);
@@ -890,13 +940,13 @@ export default function SessionDetailScreen() {
 
     if (!isOnline) {
       enqueue("sessions.updateLine", { id: lineId, countUnits: val, expectedUpdatedAt });
-      // Optimistic cache update
+      // Optimistic cache update with pending sync marker
       utils.sessions.getById.setData({ id: id! }, (old: any) => {
         if (!old) return old;
         return {
           ...old,
           lines: old.lines.map((l: any) =>
-            l.id === lineId ? { ...l, countUnits: val } : l,
+            l.id === lineId ? { ...l, countUnits: val, _pendingSync: true } : l,
           ),
         };
       });
@@ -916,12 +966,14 @@ export default function SessionDetailScreen() {
         onPress: () => {
           if (!isOnline) {
             enqueue("sessions.deleteLine", { id: lineId });
-            // Optimistic cache removal
+            // Optimistic: mark as pending delete with strikethrough instead of removing
             utils.sessions.getById.setData({ id: id! }, (old: any) => {
               if (!old) return old;
               return {
                 ...old,
-                lines: old.lines.filter((l: any) => l.id !== lineId),
+                lines: old.lines.map((l: any) =>
+                  l.id === lineId ? { ...l, _pendingDelete: true, _pendingSync: true } : l,
+                ),
               };
             });
           } else {
@@ -977,6 +1029,44 @@ export default function SessionDetailScreen() {
         Started: {new Date(session.startedTs).toLocaleString()}
         {lineCount > 0 ? ` — ${lineCount} item${lineCount !== 1 ? "s" : ""}` : ""}
       </Text>
+
+      {/* Pending Close Banner */}
+      {pendingClose && (
+        <View style={{
+          backgroundColor: "rgba(233, 180, 76, 0.15)",
+          borderWidth: 1,
+          borderColor: "rgba(233, 180, 76, 0.3)",
+          borderRadius: 8,
+          padding: 12,
+          marginHorizontal: 16,
+          marginTop: 8,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: "#E9B44C", fontSize: 13, fontWeight: "600" }}>
+              Pending Close
+            </Text>
+            <Text style={{ color: "#E9B44C", fontSize: 11, opacity: 0.7, marginTop: 2 }}>
+              Will submit when back online
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleCancelPendingClose}
+            style={{
+              borderWidth: 1,
+              borderColor: "rgba(233, 180, 76, 0.4)",
+              borderRadius: 6,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+            }}
+          >
+            <Text style={{ color: "#E9B44C", fontSize: 12, fontWeight: "600" }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {isOpen && elapsedMs > 0 && (
         <PacingBar
           elapsedMs={elapsedMs}
@@ -1545,14 +1635,21 @@ export default function SessionDetailScreen() {
                   const variance = submitMode && previewData
                     ? previewData.lines.find((v) => v.inventoryItemId === line.inventoryItemId)
                     : null;
+                  const isPendingDelete = !!(line as any)._pendingDelete;
+                  const isPendingSync = !!(line as any)._pendingSync || pendingUpdateLineIds.has(line.id);
                   return (
-                    <View key={line.id} style={styles.reviewRow}>
+                    <View key={line.id} style={[styles.reviewRow, isPendingDelete && { opacity: 0.4 }]}>
                       <View style={styles.reviewInfo}>
                         <View style={{ flexDirection: "row", alignItems: "center" }}>
-                          <Text style={styles.reviewItemName}>
+                          <Text style={[
+                            styles.reviewItemName,
+                            isPendingDelete && { textDecorationLine: "line-through" as const },
+                          ]}>
                             {line.inventoryItem?.name ?? "Unknown"}
                           </Text>
-                          {((line as any)._pendingSync && pendingTempIds.has(line.id)) || pendingUpdateLineIds.has(line.id) ? (
+                          {isPendingDelete ? (
+                            <Text style={styles.pendingSyncIcon}> deleting</Text>
+                          ) : isPendingSync || pendingTempIds.has(line.id) ? (
                             <Text style={styles.pendingSyncIcon}> syncing</Text>
                           ) : null}
                         </View>

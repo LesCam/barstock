@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 
 const STORAGE_KEY = "barstock-onboarding-complete";
 
-const FEATURES = [
+const DEFAULT_FEATURES = [
   {
     icon: "\u{1F4E6}",
     title: "Inventory Counting",
@@ -28,6 +28,53 @@ const FEATURES = [
   },
 ];
 
+const ROLE_FEATURES: Record<string, typeof DEFAULT_FEATURES> = {
+  curator: [
+    {
+      icon: "\u{1F3A8}",
+      title: "Art Gallery",
+      desc: "Manage artworks, artists, and consignment agreements",
+    },
+    {
+      icon: "\u{1F4F7}",
+      title: "Photo & QR Labels",
+      desc: "Capture photos and print QR wall labels for each piece",
+    },
+    {
+      icon: "\u{1F4B0}",
+      title: "Sales Tracking",
+      desc: "Record sales, track commissions, and manage payouts",
+    },
+    {
+      icon: "\u{1F4CB}",
+      title: "Product Guide",
+      desc: "Browse the public menu and share your catalog",
+    },
+  ],
+  accounting: [
+    {
+      icon: "\u{1F4CA}",
+      title: "Reports",
+      desc: "COGS, variance, usage, and staff accountability reports",
+    },
+    {
+      icon: "\u{1F4C8}",
+      title: "Analytics",
+      desc: "Forecasting, anomaly detection, and trend analysis",
+    },
+    {
+      icon: "\u{1F4E6}",
+      title: "Purchase Orders",
+      desc: "Review orders, vendor spend, and fulfillment status",
+    },
+    {
+      icon: "\u{1F50D}",
+      title: "Audit Trail",
+      desc: "Full activity log with timestamps and actor tracking",
+    },
+  ],
+};
+
 function getRoleLabel(role?: string) {
   switch (role) {
     case "platform_admin":
@@ -38,6 +85,10 @@ function getRoleLabel(role?: string) {
       return "Manager";
     case "staff":
       return "Staff";
+    case "curator":
+      return "Curator";
+    case "accounting":
+      return "Accounting";
     default:
       return "Team Member";
   }
@@ -60,6 +111,16 @@ function getQuickStart(role?: string) {
       return {
         title: "Configure Everything",
         desc: "Set up categories, connect your POS system, invite staff, and configure locations. Head to Settings to get started.",
+      };
+    case "curator":
+      return {
+        title: "Manage Your Gallery",
+        desc: "Add artworks and artists, print QR labels for the wall, and track sales and commissions from the Art Gallery section.",
+      };
+    case "accounting":
+      return {
+        title: "Financial Overview",
+        desc: "Review reports for COGS, variance, and usage. Check purchase orders and audit trails to stay on top of the numbers.",
       };
     default:
       return {
@@ -93,6 +154,7 @@ export function OnboardingModal() {
   const user = session.user as any;
   const roleLabel = getRoleLabel(user.highestRole);
   const quickStart = getQuickStart(user.highestRole);
+  const features = ROLE_FEATURES[user.highestRole as string] ?? DEFAULT_FEATURES;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B1623]/80 backdrop-blur-sm">
@@ -133,7 +195,7 @@ export function OnboardingModal() {
               Key Features
             </h2>
             <div className="grid grid-cols-2 gap-3">
-              {FEATURES.map((f) => (
+              {features.map((f) => (
                 <div
                   key={f.title}
                   className="flex flex-col items-center rounded-lg border border-[#1E3550] bg-[#0B1623] p-4 text-center"

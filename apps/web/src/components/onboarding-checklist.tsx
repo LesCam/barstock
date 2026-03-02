@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "@/components/location-context";
+import { useHelpProgress } from "@/hooks/use-help-progress";
 import Link from "next/link";
 
 const MANAGER_ROLES = ["platform_admin", "business_admin", "manager"];
@@ -43,6 +44,9 @@ export function OnboardingChecklist() {
     { enabled: !!locationId && isManager }
   );
 
+  // Help progress: 28 total sections, "done" at >= 50% visited
+  const { percentComplete: helpPercent } = useHelpProgress(28);
+
   if (dismissed || !locationId) return null;
 
   const steps: Step[] = isManager
@@ -65,6 +69,12 @@ export function OnboardingChecklist() {
           href: "/pos",
           done: (connections?.length ?? 0) > 0,
         },
+        {
+          id: "help",
+          label: "Explore Help Guide",
+          href: "/help",
+          done: helpPercent >= 50,
+        },
       ]
     : [
         {
@@ -72,6 +82,12 @@ export function OnboardingChecklist() {
           label: "Join a counting session",
           href: "/sessions",
           done: (sessions?.length ?? 0) > 0,
+        },
+        {
+          id: "help",
+          label: "Explore Help Guide",
+          href: "/help",
+          done: helpPercent >= 50,
         },
       ];
 

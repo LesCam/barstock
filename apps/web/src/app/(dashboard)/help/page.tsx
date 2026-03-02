@@ -1,12 +1,68 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
+import { useHelpProgress } from "@/hooks/use-help-progress";
+
+type Role = "staff" | "manager" | "business_admin" | "platform_admin" | "curator" | "accounting";
 
 interface Section {
   id: string;
   title: string;
+  roles?: Role[];
   content: React.ReactNode;
 }
+
+const ROLE_HIERARCHY: Record<Role, number> = {
+  staff: 0,
+  curator: 1,
+  accounting: 1,
+  manager: 2,
+  business_admin: 3,
+  platform_admin: 4,
+};
+
+function hasAccess(userRole: Role | undefined, sectionRoles?: Role[]): boolean {
+  if (!sectionRoles) return true; // visible to all
+  if (!userRole) return true; // no role info — show all
+  const userLevel = ROLE_HIERARCHY[userRole] ?? 0;
+  // Check if any required role matches OR if user's hierarchy level is >= a "manager+" role
+  return sectionRoles.some((r) => {
+    if (r === userRole) return true;
+    // "manager+" style: if section requires manager and user is manager/business_admin/platform_admin
+    return ROLE_HIERARCHY[r] !== undefined && userLevel >= ROLE_HIERARCHY[r];
+  });
+}
+
+const SECTION_ROLES: Record<string, Role[]> = {
+  "getting-started": ["staff", "manager", "business_admin", "platform_admin", "curator", "accounting"],
+  "counting-methods": ["staff", "manager", "business_admin", "platform_admin"],
+  "pos-mapping": ["manager", "business_admin", "platform_admin"],
+  recipes: ["manager", "business_admin", "platform_admin"],
+  variance: ["staff", "manager", "business_admin", "platform_admin"],
+  sessions: ["staff", "manager", "business_admin", "platform_admin"],
+  "par-levels": ["manager", "business_admin", "platform_admin"],
+  "expected-inventory": ["manager", "business_admin", "platform_admin"],
+  reports: ["manager", "business_admin", "platform_admin", "accounting"],
+  "settings-roles": ["manager", "business_admin", "platform_admin"],
+  "draft-kegs": ["staff", "manager", "business_admin", "platform_admin"],
+  alerts: ["manager", "business_admin", "platform_admin"],
+  analytics: ["manager", "business_admin", "platform_admin", "accounting"],
+  transfers: ["staff", "manager", "business_admin", "platform_admin"],
+  audit: ["manager", "business_admin", "platform_admin", "accounting"],
+  orders: ["manager", "business_admin", "platform_admin", "accounting"],
+  benchmarking: ["business_admin", "platform_admin"],
+  "receipt-capture": ["manager", "business_admin", "platform_admin"],
+  "product-guide": ["staff", "manager", "business_admin", "platform_admin", "curator", "accounting"],
+  "art-gallery": ["curator", "manager", "business_admin", "platform_admin"],
+  "voice-commands": ["staff", "manager", "business_admin", "platform_admin"],
+  "session-planning": ["manager", "business_admin", "platform_admin"],
+  verification: ["staff", "manager", "business_admin", "platform_admin"],
+  notifications: ["staff", "manager", "business_admin", "platform_admin"],
+  portfolio: ["business_admin", "platform_admin"],
+  "usage-trends": ["manager", "business_admin", "platform_admin"],
+  "scan-import": ["staff", "manager", "business_admin", "platform_admin"],
+};
 
 const SECTION_SEARCH_TEXT: Record<string, string> = {
   "getting-started":
@@ -993,9 +1049,13 @@ const sections: Section[] = [
 ];
 
 export default function HelpPage() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.highestRole as Role | undefined;
   const [search, setSearch] = useState("");
+  const [showAll, setShowAll] = useState(false);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const { visitedSections, percentComplete, markVisited } = useHelpProgress(sections.length);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
@@ -1014,35 +1074,69 @@ export default function HelpPage() {
         next.delete(id);
       } else {
         next.add(id);
+        markVisited(id);
       }
       return next;
     });
   };
 
+  // Apply role filter, then search filter
+  const roleFiltered = showAll
+    ? sections
+    : sections.filter((s) => hasAccess(userRole, SECTION_ROLES[s.id]));
+
   const filteredSections = search.trim()
-    ? sections.filter((s) => {
+    ? roleFiltered.filter((s) => {
         const q = search.toLowerCase();
         return (
           s.title.toLowerCase().includes(q) ||
           (SECTION_SEARCH_TEXT[s.id] ?? "").toLowerCase().includes(q)
         );
       })
-    : sections;
+    : roleFiltered;
+
+  const hiddenCount = sections.length - roleFiltered.length;
 
   return (
     <div>
       <h1 className="mb-2 text-2xl font-bold text-[#EAF0FF]">Help Center</h1>
-      <p className="mb-6 text-sm text-[#EAF0FF]/60">
+      <p className="mb-4 text-sm text-[#EAF0FF]/60">
         Reference guide for Barstock concepts and features.
       </p>
 
-      <input
-        type="text"
-        placeholder="Search help topics..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="mb-6 w-full rounded-lg border border-white/10 bg-[#0B1623] px-4 py-2.5 text-sm text-[#EAF0FF] placeholder-[#EAF0FF]/30 focus:border-[#E9B44C]/50 focus:outline-none"
-      />
+      {/* Progress bar */}
+      <div className="mb-6 rounded-lg border border-white/10 bg-[#16283F] p-3">
+        <div className="mb-2 flex items-center justify-between text-xs">
+          <span className="text-[#EAF0FF]/60">
+            {visitedSections.size}/{sections.length} sections explored
+          </span>
+          <span className="font-semibold text-[#E9B44C]">{percentComplete}%</span>
+        </div>
+        <div className="h-1.5 rounded-full bg-[#0B1623]">
+          <div
+            className="h-1.5 rounded-full bg-[#E9B44C] transition-all duration-300"
+            style={{ width: `${percentComplete}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="mb-6 flex items-center gap-3">
+        <input
+          type="text"
+          placeholder="Search help topics..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 rounded-lg border border-white/10 bg-[#0B1623] px-4 py-2.5 text-sm text-[#EAF0FF] placeholder-[#EAF0FF]/30 focus:border-[#E9B44C]/50 focus:outline-none"
+        />
+        {hiddenCount > 0 && (
+          <button
+            onClick={() => setShowAll(!showAll)}
+            className="shrink-0 rounded-lg border border-white/10 px-3 py-2.5 text-xs text-[#EAF0FF]/60 hover:border-[#E9B44C]/30 hover:text-[#EAF0FF]/80"
+          >
+            {showAll ? "Show relevant" : `Show all (${sections.length})`}
+          </button>
+        )}
+      </div>
 
       <div className="space-y-3">
         {filteredSections.map((section) => {
@@ -1058,7 +1152,12 @@ export default function HelpPage() {
                 onClick={() => toggleSection(section.id)}
                 className="flex w-full items-center justify-between px-5 py-4 text-left"
               >
-                <span className="text-base font-semibold text-[#EAF0FF]">{section.title}</span>
+                <span className="flex items-center gap-2 text-base font-semibold text-[#EAF0FF]">
+                  {section.title}
+                  {visitedSections.has(section.id) && (
+                    <span className="text-xs text-[#16a34a]">✓</span>
+                  )}
+                </span>
                 <span className="text-sm text-[#EAF0FF]/40">{isOpen ? "−" : "+"}</span>
               </button>
               {isOpen && <div className="border-t border-white/10 px-5 py-4">{section.content}</div>}
