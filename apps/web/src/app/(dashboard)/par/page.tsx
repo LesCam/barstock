@@ -308,6 +308,7 @@ function ManageView({
   const [suggestLead, setSuggestLead] = useState(2);
   const [suggestSafety, setSuggestSafety] = useState(1);
   const [suggestBuffer, setSuggestBuffer] = useState(3);
+  const [useActualLeadTimes, setUseActualLeadTimes] = useState(false);
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
 
   const { data: parSuggestions, isLoading: suggestLoading } = trpc.parLevels.suggestPars.useQuery(
@@ -316,6 +317,7 @@ function ManageView({
       leadTimeDays: suggestLead,
       safetyStockDays: suggestSafety,
       bufferDays: suggestBuffer,
+      useActualLeadTimes,
     },
     { enabled: !!locationId && showSuggest }
   );
@@ -497,6 +499,15 @@ function ManageView({
                 className="w-16 rounded border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-xs text-[#EAF0FF]"
               />
             </label>
+            <label className="flex items-center gap-1.5 text-xs text-[#EAF0FF]/70">
+              <input
+                type="checkbox"
+                checked={useActualLeadTimes}
+                onChange={(e) => setUseActualLeadTimes(e.target.checked)}
+                className="rounded"
+              />
+              Use actual vendor lead times
+            </label>
             <span className="text-xs text-[#EAF0FF]/40">
               {withoutPars > 0 && `${withoutPars} without pars`}
               {withoutPars > 0 && withPars > 0 && ", "}
@@ -524,6 +535,7 @@ function ManageView({
                       <th className="px-2 py-1.5 font-medium">Item</th>
                       <th className="px-2 py-1.5 font-medium">Vendor</th>
                       <th className="px-2 py-1.5 font-medium text-right">Avg/Day</th>
+                      <th className="px-2 py-1.5 font-medium text-right">Lead Time</th>
                       <th className="px-2 py-1.5 font-medium text-right">Current Par</th>
                       <th className="px-2 py-1.5 font-medium text-right">Suggested Par</th>
                       <th className="px-2 py-1.5 font-medium text-right">Current Min</th>
@@ -544,6 +556,14 @@ function ManageView({
                         <td className="px-2 py-1.5 text-[#EAF0FF]">{s.itemName}</td>
                         <td className="px-2 py-1.5 text-[#EAF0FF]/60">{s.vendorName ?? "—"}</td>
                         <td className="px-2 py-1.5 text-right text-[#EAF0FF]/60">{s.avgDailyUsage.toFixed(2)}</td>
+                        <td className="px-2 py-1.5 text-right">
+                          <span className="text-[#EAF0FF]/60">{s.leadTimeDays}d</span>
+                          {s.actualLeadTimeDays != null && (
+                            <span className="ml-1 text-[#E9B44C] text-[10px]" title="From PO history">
+                              (actual: {s.actualLeadTimeDays.toFixed(1)}d)
+                            </span>
+                          )}
+                        </td>
                         <td className="px-2 py-1.5 text-right text-[#EAF0FF]/40">{s.existingParLevel ?? "—"}</td>
                         <td className="px-2 py-1.5 text-right font-medium text-[#E9B44C]">{s.suggestedParLevel}</td>
                         <td className="px-2 py-1.5 text-right text-[#EAF0FF]/40">{s.existingMinLevel ?? "—"}</td>

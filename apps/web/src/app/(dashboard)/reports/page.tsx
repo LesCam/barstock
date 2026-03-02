@@ -15,7 +15,7 @@ import {
 type ActiveTab = "variance" | "cogs" | "usage" | "patterns" | "staff" | "recipes" | "pourCost" | "orders";
 type VarianceSortKey = "itemName" | "categoryName" | "variance" | "variancePercent" | "valueImpact";
 type UsageSortKey = "name" | "categoryName" | "quantityUsed" | "unitCost" | "totalCost";
-type PatternSortKey = "itemName" | "categoryName" | "sessionsAppeared" | "avgVariance" | "totalEstimatedLoss" | "trend";
+type PatternSortKey = "itemName" | "categoryName" | "sessionsAppeared" | "avgVariance" | "totalEstimatedLoss" | "trend" | "totalEstimatedLossDollars" | "avgVarianceDollars";
 type StaffSortKey = "displayName" | "sessionsCounted" | "linesCounted" | "accuracyRate" | "avgVarianceMagnitude" | "manualEntryRate" | "trend";
 type SessionSortKey = "startedTs" | "durationMinutes" | "totalLines" | "itemsPerHour" | "varianceRate" | "manualEntryRate" | "participantCount";
 type RecipeSortKey = "recipeName" | "recipeCategory" | "totalServings" | "totalCost" | "avgCostPerServing" | "pctOfTotalCost";
@@ -211,6 +211,17 @@ export default function ReportsPage() {
     { enabled: !!locationId && activeTab === "variance" }
   );
 
+  const { data: varianceByCategory } = trpc.reports.varianceByCategory.useQuery(
+    {
+      locationId: locationId!,
+      fromDate: new Date(dateRange.from),
+      toDate: toEndOfDay(dateRange.to, effectiveEod),
+    },
+    { enabled: !!locationId && activeTab === "variance" }
+  );
+
+  const [varianceCategoryFilter, setVarianceCategoryFilter] = useState<string | null>(null);
+
   const { data: staffData } = trpc.reports.staffAccountability.useQuery(
     {
       locationId: locationId!,
@@ -325,12 +336,15 @@ export default function ReportsPage() {
 
   const sortedVarianceItems = useMemo(() => {
     const lc = filter.toLowerCase();
-    const filtered = variance?.items.filter(
+    let filtered = variance?.items.filter(
       (item) =>
         item.itemName.toLowerCase().includes(lc) ||
         (item.categoryName ?? "").toLowerCase().includes(lc)
     );
     if (!filtered) return [];
+    if (varianceCategoryFilter) {
+      filtered = filtered.filter((item) => (item.categoryName ?? "Uncategorized") === varianceCategoryFilter);
+    }
     return [...filtered].sort((a, b) => {
       const aVal = a[varianceSortKey];
       const bVal = b[varianceSortKey];
@@ -342,7 +356,7 @@ export default function ReportsPage() {
       const bNum = (bVal as number) ?? 0;
       return sortDir === "asc" ? aNum - bNum : bNum - aNum;
     });
-  }, [variance, filter, varianceSortKey, sortDir]);
+  }, [variance, filter, varianceSortKey, sortDir, varianceCategoryFilter]);
 
   // --- Usage sorting ---
   function toggleUsageSort(key: UsageSortKey) {
@@ -872,7 +886,7 @@ export default function ReportsPage() {
         break;
       }
       case "patterns": {
-        const headers = ["Item", "Category", "Sessions Appeared", "Sessions w/ Variance", "Avg Variance", "Trend", "Est. Loss", "Shrinkage Suspect"];
+        const headers = ["Item", "Category", "Sessions Appeared", "Sessions w/ Variance", "Avg Variance", "Trend", "Est. Loss", "$ Impact", "Avg $/Session", "Shrinkage Suspect"];
         const rows = sortedPatternItems.map((item) => [
           item.itemName,
           item.categoryName ?? "",
@@ -881,6 +895,8 @@ export default function ReportsPage() {
           item.avgVariance.toFixed(1),
           item.trend,
           item.totalEstimatedLoss.toFixed(1),
+          item.totalEstimatedLossDollars != null ? item.totalEstimatedLossDollars.toFixed(2) : "",
+          item.avgVarianceDollars != null ? item.avgVarianceDollars.toFixed(2) : "",
           item.isShrinkageSuspect ? "Yes" : "No",
         ]);
         downloadCsv(headers, rows, `patterns-${dateSuffix}.csv`);
@@ -1036,6 +1052,9 @@ export default function ReportsPage() {
                     </div>
                     <div className="mt-2 flex gap-4 text-xs text-[#EAF0FF]/60">
                       <span>Avg: <span className="text-red-400 font-medium">{item.avgVariance.toFixed(1)}</span></span>
+                      {item.totalEstimatedLossDollars != null && (
+                        <span>Loss: <span className="text-red-400 font-medium">${item.totalEstimatedLossDollars.toFixed(2)}</span></span>
+                      )}
                       <span>Sessions: {item.sessionsWithVariance}/{item.sessionsAppeared}</span>
                       {item.isShrinkageSuspect && (
                         <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-red-400 font-medium">Shrinkage</span>
@@ -1047,8 +1066,84 @@ export default function ReportsPage() {
             );
           })()}
 
+          {/* ── Category Variance Breakdown ── */}
+          {varianceByCategory && varianceByCategory.length > 0 && (
+            <div className="mb-8">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-base font-semibold">Variance by Category</h3>
+                {varianceCategoryFilter && (
+                  <button
+                    onClick={() => setVarianceCategoryFilter(null)}
+                    className="text-xs text-[#E9B44C] hover:underline"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
+              <div className="rounded-lg border border-white/10 bg-[#16283F] p-4">
+                <ResponsiveContainer width="100%" height={Math.max(180, varianceByCategory.length * 36)}>
+                  <BarChart data={varianceByCategory} layout="vertical">
+                    <XAxis type="number" tick={{ fill: "#EAF0FF99", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${Math.abs(v).toFixed(0)}`} />
+                    <YAxis type="category" dataKey="categoryName" tick={{ fill: "#EAF0FF", fontSize: 12 }} axisLine={false} tickLine={false} width={120} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0B1623", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#EAF0FF" }}
+                      formatter={(value) => [`$${Number(value ?? 0).toFixed(2)}`, "Variance $"]}
+                    />
+                    <Bar
+                      dataKey="totalVarianceDollars"
+                      fill="#E9B44C"
+                      radius={[0, 4, 4, 0]}
+                      cursor="pointer"
+                      onClick={(data: any) => {
+                        if (data?.categoryName) {
+                          setVarianceCategoryFilter(
+                            varianceCategoryFilter === data.categoryName ? null : data.categoryName
+                          );
+                        }
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-3 overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
+                    <tr>
+                      <th className="px-4 py-3">Category</th>
+                      <th className="px-4 py-3">Items</th>
+                      <th className="px-4 py-3">Total $ Variance</th>
+                      <th className="px-4 py-3">Avg Variance %</th>
+                      <th className="px-4 py-3">Worst Item</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {varianceByCategory.map((cat) => (
+                      <tr
+                        key={cat.categoryId ?? "uncategorized"}
+                        className={`cursor-pointer hover:bg-[#0B1623]/60 ${varianceCategoryFilter === cat.categoryName ? "bg-[#E9B44C]/10" : ""}`}
+                        onClick={() => setVarianceCategoryFilter(
+                          varianceCategoryFilter === cat.categoryName ? null : cat.categoryName
+                        )}
+                      >
+                        <td className="px-4 py-3 font-medium">{cat.categoryName}</td>
+                        <td className="px-4 py-3">{cat.itemCount}</td>
+                        <td className={`px-4 py-3 font-medium ${(cat.totalVarianceDollars ?? 0) < 0 ? "text-red-400" : ""}`}>
+                          {cat.totalVarianceDollars != null ? `$${cat.totalVarianceDollars.toFixed(2)}` : "—"}
+                        </td>
+                        <td className="px-4 py-3">{cat.avgVariancePercent.toFixed(1)}%</td>
+                        <td className="px-4 py-3 text-xs text-[#EAF0FF]/60">
+                          {cat.worstItem ? `${cat.worstItem.itemName} (${cat.worstItem.variance.toFixed(1)})` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <h2 className="mb-3 text-lg font-semibold">
-            Variance Report — ${(variance?.totalVarianceValue ?? 0).toFixed(2)} impact
+            Variance Report{varianceCategoryFilter ? ` — ${varianceCategoryFilter}` : ""} — ${(variance?.totalVarianceValue ?? 0).toFixed(2)} impact
           </h2>
 
           <input
@@ -1806,6 +1901,12 @@ export default function ReportsPage() {
               <p className="text-2xl font-bold text-red-400">
                 {(patterns?.reduce((s, p) => s + p.totalEstimatedLoss, 0) ?? 0).toFixed(1)}
               </p>
+              {(() => {
+                const dollarLoss = patterns?.reduce((s, p) => s + (p.totalEstimatedLossDollars ?? 0), 0) ?? 0;
+                return dollarLoss !== 0 ? (
+                  <p className="mt-0.5 text-sm text-red-400/80">${dollarLoss.toFixed(2)}</p>
+                ) : null;
+              })()}
             </div>
           </div>
 
@@ -1827,6 +1928,8 @@ export default function ReportsPage() {
                   <PatternSortHeader label="Avg Variance" field="avgVariance" />
                   <PatternSortHeader label="Trend" field="trend" />
                   <PatternSortHeader label="Est. Loss" field="totalEstimatedLoss" />
+                  <PatternSortHeader label="$ Impact" field="totalEstimatedLossDollars" />
+                  <PatternSortHeader label="Avg $/Session" field="avgVarianceDollars" />
                   <th className="px-4 py-3">Flag</th>
                 </tr>
               </thead>
@@ -1859,6 +1962,12 @@ export default function ReportsPage() {
                     <td className={`px-4 py-3 ${item.totalEstimatedLoss < 0 ? "text-red-400" : ""}`}>
                       {item.totalEstimatedLoss.toFixed(1)}
                     </td>
+                    <td className={`px-4 py-3 ${(item.totalEstimatedLossDollars ?? 0) < 0 ? "text-red-400" : ""}`}>
+                      {item.totalEstimatedLossDollars != null ? `$${item.totalEstimatedLossDollars.toFixed(2)}` : "—"}
+                    </td>
+                    <td className={`px-4 py-3 ${(item.avgVarianceDollars ?? 0) < 0 ? "text-red-400" : ""}`}>
+                      {item.avgVarianceDollars != null ? `$${item.avgVarianceDollars.toFixed(2)}` : "—"}
+                    </td>
                     <td className="px-4 py-3">
                       {item.isShrinkageSuspect && (
                         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500/20 text-xs font-bold text-red-400">
@@ -1870,7 +1979,7 @@ export default function ReportsPage() {
                 ))}
                 {sortedPatternItems.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-[#EAF0FF]/40">
+                    <td colSpan={9} className="px-4 py-6 text-center text-[#EAF0FF]/40">
                       {filter ? "No items match your search." : "Not enough session data for pattern analysis."}
                     </td>
                   </tr>

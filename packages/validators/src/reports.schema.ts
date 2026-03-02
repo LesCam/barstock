@@ -176,6 +176,12 @@ export const forecastItemDetailQuerySchema = z.object({
   itemId: z.string().uuid(),
 });
 
+export const varianceByCategoryQuerySchema = z.object({
+  locationId: z.string().uuid(),
+  fromDate: z.coerce.date(),
+  toDate: z.coerce.date(),
+});
+
 // ─── Benchmark Schemas ──────────────────────────────────────
 
 export const captureSnapshotsSchema = z.object({});

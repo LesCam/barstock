@@ -322,15 +322,40 @@ export class ParLevelService {
     locationId: string,
     leadTimeDays = 2,
     safetyStockDays = 1,
-    bufferDays = 3
+    bufferDays = 3,
+    useActualLeadTimes = false
   ) {
     const allItems = await this.list(locationId);
+
+    // Optionally fetch actual vendor lead times from PO history
+    let vendorLeadTimes = new Map<string, number>();
+    if (useActualLeadTimes) {
+      const rows = await this.prisma.$queryRaw<
+        Array<{ vendor_id: string; avg_days: number }>
+      >`
+        SELECT
+          vendor_id,
+          AVG(EXTRACT(EPOCH FROM (closed_at - created_at)) / 86400)::float AS avg_days
+        FROM purchase_orders
+        WHERE location_id = ${locationId}::uuid
+          AND status = 'closed'
+          AND closed_at IS NOT NULL
+          AND created_at >= NOW() - INTERVAL '90 days'
+        GROUP BY vendor_id
+      `;
+      vendorLeadTimes = new Map(rows.map((r) => [r.vendor_id, r.avg_days]));
+    }
 
     return allItems
       .filter((item) => item.avgDailyUsage != null && item.avgDailyUsage > 0)
       .map((item) => {
         const avg = item.avgDailyUsage!;
-        const lead = item.leadTimeDays ?? leadTimeDays;
+        const actualLeadTimeDays = useActualLeadTimes && item.vendorId
+          ? vendorLeadTimes.get(item.vendorId) ?? null
+          : null;
+        const lead = actualLeadTimeDays != null
+          ? Math.ceil(actualLeadTimeDays)
+          : item.leadTimeDays ?? leadTimeDays;
         const safety = item.safetyStockDays ?? safetyStockDays;
 
         const suggestedMinLevel = Math.ceil(avg * lead);
@@ -351,6 +376,7 @@ export class ParLevelService {
           leadTimeDays: lead,
           safetyStockDays: safety,
           reorderQty: item.reorderQty,
+          actualLeadTimeDays,
         };
       });
   }

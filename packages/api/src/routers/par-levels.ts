@@ -106,6 +106,7 @@ export const parLevelsRouter = router({
         input.leadTimeDays,
         input.safetyStockDays,
         input.bufferDays,
+        input.useActualLeadTimes,
       );
     }),
 

@@ -501,6 +501,9 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-3 text-xs">
                         <span className="text-red-400 font-medium">{item.avgVariance.toFixed(1)}</span>
+                        {item.totalEstimatedLossDollars != null && (
+                          <span className="text-red-400">${item.totalEstimatedLossDollars.toFixed(2)}</span>
+                        )}
                         <span className={item.trend === "worsening" ? "text-red-400" : item.trend === "improving" ? "text-green-400" : "text-[#EAF0FF]/40"}>
                           {item.trend === "worsening" ? "\u2193" : item.trend === "improving" ? "\u2191" : "\u2192"}
                         </span>

@@ -241,16 +241,39 @@ export class PurchaseOrderService {
       ORDER BY month
     `;
 
-    // By vendor
+    // By vendor (with fulfillment time)
     const byVendor = await this.prisma.$queryRaw<
-      { vendor_id: string; vendor_name: string; order_count: number; total_spend: number; last_order: Date }[]
+      {
+        vendor_id: string;
+        vendor_name: string;
+        order_count: number;
+        total_spend: number;
+        last_order: Date;
+        avg_fulfillment_days: number | null;
+        last_fulfillment_days: number | null;
+      }[]
     >`
       SELECT
         v.id AS vendor_id,
         v.name AS vendor_name,
         COUNT(DISTINCT po.id)::int AS order_count,
         COALESCE(SUM(pol.ordered_qty * ii.unit_cost), 0)::float AS total_spend,
-        MAX(po.created_at) AS last_order
+        MAX(po.created_at) AS last_order,
+        AVG(
+          CASE WHEN po.status = 'closed' AND po.closed_at IS NOT NULL
+            THEN EXTRACT(EPOCH FROM (po.closed_at - po.created_at)) / 86400
+          END
+        )::float AS avg_fulfillment_days,
+        (
+          SELECT EXTRACT(EPOCH FROM (sub.closed_at - sub.created_at)) / 86400
+          FROM purchase_orders sub
+          WHERE sub.vendor_id = v.id
+            AND sub.location_id = ${locationId}::uuid
+            AND sub.status = 'closed'
+            AND sub.closed_at IS NOT NULL
+          ORDER BY sub.closed_at DESC
+          LIMIT 1
+        )::float AS last_fulfillment_days
       FROM purchase_orders po
       JOIN vendors v ON v.id = po.vendor_id
       JOIN purchase_order_lines pol ON pol.purchase_order_id = po.id
@@ -313,6 +336,8 @@ export class PurchaseOrderService {
         orderCount: v.order_count,
         totalSpend: v.total_spend,
         lastOrder: v.last_order.toISOString(),
+        avgFulfillmentDays: v.avg_fulfillment_days ?? null,
+        lastFulfillmentDays: v.last_fulfillment_days ?? null,
       })),
       topItems: topItems.map((i) => ({
         itemId: i.item_id,

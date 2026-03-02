@@ -57,6 +57,7 @@ export const parLevelSuggestSchema = z.object({
   leadTimeDays: z.number().min(0).default(2),
   safetyStockDays: z.number().min(0).default(1),
   bufferDays: z.number().min(0).default(3),
+  useActualLeadTimes: z.boolean().optional(),
 });
 
 export type ParLevelCreateInput = z.infer<typeof parLevelCreateSchema>;

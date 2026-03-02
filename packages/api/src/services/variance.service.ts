@@ -52,6 +52,19 @@ export interface VariancePatternItem {
   trend: "worsening" | "improving" | "stable";
   totalEstimatedLoss: number;
   isShrinkageSuspect: boolean;
+  unitCost: number | null;
+  totalEstimatedLossDollars: number | null;
+  avgVarianceDollars: number | null;
+}
+
+export interface VarianceByCategoryItem {
+  categoryId: string | null;
+  categoryName: string;
+  totalVarianceUnits: number;
+  totalVarianceDollars: number | null;
+  itemCount: number;
+  avgVariancePercent: number;
+  worstItem: { itemName: string; variance: number } | null;
 }
 
 export interface VarianceItem {
@@ -258,7 +271,13 @@ export class VarianceService {
         lines: {
           include: {
             inventoryItem: {
-              include: { category: { select: { name: true } } },
+              include: {
+                category: { select: { name: true } },
+                priceHistory: {
+                  take: 1,
+                  orderBy: { effectiveFromTs: "desc" },
+                },
+              },
             },
           },
         },
@@ -275,7 +294,7 @@ export class VarianceService {
     // Item metadata
     const itemMeta = new Map<
       string,
-      { name: string; categoryName: string | null }
+      { name: string; categoryName: string | null; unitCost: number | null }
     >();
 
     for (const session of sessions) {
@@ -323,9 +342,11 @@ export class VarianceService {
         variances.set(line.inventoryItemId, variance);
 
         if (!itemMeta.has(line.inventoryItemId)) {
+          const price = line.inventoryItem.priceHistory?.[0];
           itemMeta.set(line.inventoryItemId, {
             name: line.inventoryItem.name,
             categoryName: line.inventoryItem.category?.name ?? null,
+            unitCost: price ? Number(price.unitCost) : null,
           });
         }
       }
@@ -389,6 +410,7 @@ export class VarianceService {
         avgVariance < 0 &&
         negativeCount / sessionsAppeared > 0.5;
 
+      const unitCost = meta.unitCost;
       results.push({
         inventoryItemId: itemId,
         itemName: meta.name,
@@ -399,6 +421,9 @@ export class VarianceService {
         trend,
         totalEstimatedLoss,
         isShrinkageSuspect,
+        unitCost,
+        totalEstimatedLossDollars: unitCost != null ? totalEstimatedLoss * unitCost : null,
+        avgVarianceDollars: unitCost != null ? avgVariance * unitCost : null,
       });
     }
 
@@ -1155,5 +1180,96 @@ export class VarianceService {
         return b.totalEstimatedLoss - a.totalEstimatedLoss;
       })
       .slice(0, limit);
+  }
+
+  async getVarianceByCategory(
+    locationId: string,
+    fromDate: Date,
+    toDate: Date
+  ): Promise<VarianceByCategoryItem[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        category_id: string | null;
+        category_name: string;
+        total_variance_units: number | null;
+        total_variance_dollars: number | null;
+        item_count: bigint;
+        avg_variance_percent: number | null;
+        worst_item_name: string | null;
+        worst_item_variance: number | null;
+      }>
+    >`
+      WITH category_variance AS (
+        SELECT
+          c.id AS category_id,
+          COALESCE(c.name, 'Uncategorized') AS category_name,
+          i.id AS item_id,
+          i.name AS item_name,
+          SUM(ce.quantity_delta) AS item_variance,
+          lc.unit_cost
+        FROM consumption_events ce
+        JOIN inventory_items i ON i.id = ce.inventory_item_id
+        LEFT JOIN inventory_item_categories c ON c.id = i.category_id
+        LEFT JOIN LATERAL (
+          SELECT ph.unit_cost
+          FROM price_history ph
+          WHERE ph.inventory_item_id = i.id
+          ORDER BY ph.effective_from_ts DESC
+          LIMIT 1
+        ) lc ON true
+        WHERE ce.location_id = ${locationId}::uuid
+          AND ce.event_type = 'inventory_count_adjustment'
+          AND ce.reversal_of_event_id IS NULL
+          AND ce.event_ts >= ${fromDate}::timestamptz
+          AND ce.event_ts < ${toDate}::timestamptz
+        GROUP BY c.id, c.name, i.id, i.name, lc.unit_cost
+      ),
+      agg AS (
+        SELECT
+          category_id,
+          category_name,
+          SUM(item_variance) AS total_variance_units,
+          SUM(item_variance * COALESCE(unit_cost, 0)) AS total_variance_dollars,
+          COUNT(DISTINCT item_id) AS item_count,
+          CASE WHEN SUM(ABS(item_variance)) > 0
+            THEN (SUM(item_variance) / NULLIF(SUM(ABS(item_variance)), 0)) * 100
+            ELSE 0 END AS avg_variance_percent
+        FROM category_variance
+        GROUP BY category_id, category_name
+      ),
+      worst AS (
+        SELECT DISTINCT ON (category_id)
+          category_id,
+          item_name AS worst_item_name,
+          item_variance AS worst_item_variance
+        FROM category_variance
+        ORDER BY category_id, item_variance ASC
+      )
+      SELECT
+        a.category_id,
+        a.category_name,
+        a.total_variance_units::float,
+        a.total_variance_dollars::float,
+        a.item_count,
+        a.avg_variance_percent::float,
+        w.worst_item_name,
+        w.worst_item_variance::float
+      FROM agg a
+      LEFT JOIN worst w ON w.category_id IS NOT DISTINCT FROM a.category_id
+      WHERE a.total_variance_units IS NOT NULL AND a.total_variance_units != 0
+      ORDER BY a.total_variance_units ASC
+    `;
+
+    return rows.map((r) => ({
+      categoryId: r.category_id,
+      categoryName: r.category_name,
+      totalVarianceUnits: Number(r.total_variance_units ?? 0),
+      totalVarianceDollars: r.total_variance_dollars != null ? Number(r.total_variance_dollars) : null,
+      itemCount: Number(r.item_count),
+      avgVariancePercent: Number(r.avg_variance_percent ?? 0),
+      worstItem: r.worst_item_name
+        ? { itemName: r.worst_item_name, variance: Number(r.worst_item_variance ?? 0) }
+        : null,
+    }));
   }
 }

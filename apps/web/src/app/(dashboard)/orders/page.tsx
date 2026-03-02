@@ -331,6 +331,8 @@ function TrendsView({
                 <th className="px-4 py-3">Vendor</th>
                 <th className="px-4 py-3">Orders</th>
                 <th className="px-4 py-3">Total Spend</th>
+                <th className="px-4 py-3">Avg Lead Time</th>
+                <th className="px-4 py-3">Last Lead Time</th>
                 <th className="px-4 py-3">Last Order</th>
               </tr>
             </thead>
@@ -340,6 +342,12 @@ function TrendsView({
                   <td className="px-4 py-3 font-medium">{v.vendorName}</td>
                   <td className="px-4 py-3">{v.orderCount}</td>
                   <td className="px-4 py-3">${v.totalSpend.toFixed(2)}</td>
+                  <td className="px-4 py-3">
+                    {v.avgFulfillmentDays != null ? `${v.avgFulfillmentDays.toFixed(1)}d` : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {v.lastFulfillmentDays != null ? `${v.lastFulfillmentDays.toFixed(1)}d` : "—"}
+                  </td>
                   <td className="px-4 py-3 text-xs">
                     {new Date(v.lastOrder).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                   </td>
@@ -347,7 +355,7 @@ function TrendsView({
               ))}
               {(trends.byVendor ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-[#EAF0FF]/40">No vendor data.</td>
+                  <td colSpan={6} className="px-4 py-6 text-center text-[#EAF0FF]/40">No vendor data.</td>
                 </tr>
               )}
             </tbody>
