@@ -277,13 +277,13 @@ export default function ArtTab() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0B1623" },
   filterBar: {
-    maxHeight: 52,
+    flexShrink: 0,
     borderBottomWidth: 1,
     borderBottomColor: "#1E3550",
   },
   filterContent: {
     paddingHorizontal: COLUMN_GAP,
-    paddingVertical: 10,
+    paddingVertical: 12,
     gap: 8,
     flexDirection: "row",
   },
@@ -297,13 +297,13 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13, fontWeight: "500", color: "#EAF0FF" },
   pillTextActive: { color: "#0B1623" },
   sortBar: {
-    maxHeight: 40,
+    flexShrink: 0,
     borderBottomWidth: 1,
     borderBottomColor: "#1E3550",
   },
   sortContent: {
     paddingHorizontal: COLUMN_GAP,
-    paddingVertical: 6,
+    paddingVertical: 10,
     gap: 6,
     flexDirection: "row",
     alignItems: "center",
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
   sortPillText: { fontSize: 12, fontWeight: "500", color: "#5A6A7A" },
   sortPillTextActive: { color: "#EAF0FF" },
   row: { gap: COLUMN_GAP, paddingHorizontal: COLUMN_GAP },
-  grid: { paddingTop: COLUMN_GAP, paddingBottom: 24 },
+  grid: { paddingTop: COLUMN_GAP, paddingBottom: 180 },
   card: {
     backgroundColor: "#16283F",
     borderRadius: 10,
