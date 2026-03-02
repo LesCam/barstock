@@ -11,6 +11,7 @@ import {
 import { router } from "expo-router";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
+import { useNetwork } from "@/lib/network-context";
 import type { VarianceReason } from "@barstock/types";
 
 type CountMethod = "liquor" | "packaged" | "draft";
@@ -41,6 +42,7 @@ const METHODS = [
 
 export default function NewCountScreen() {
   const { selectedLocationId } = useAuth();
+  const { isOnline } = useNetwork();
   const [creating, setCreating] = useState<CountMethod | null>(null);
 
   const utils = trpc.useUtils();
@@ -62,6 +64,10 @@ export default function NewCountScreen() {
 
   const handleSelect = async (_method: CountMethod) => {
     if (creating || !selectedLocationId) return;
+    if (!isOnline) {
+      Alert.alert("Offline", "Cannot start a new session while offline. Please reconnect first.");
+      return;
+    }
     setCreating(_method);
     try {
       const session = await createSession.mutateAsync({
@@ -165,7 +171,11 @@ export default function NewCountScreen() {
                 <TouchableOpacity
                   activeOpacity={0.7}
                   disabled={closeMutation.isPending}
-                  onPress={() =>
+                  onPress={() => {
+                    if (!isOnline) {
+                      Alert.alert("Offline", "Cannot close a session while offline. Please reconnect first.");
+                      return;
+                    }
                     Alert.alert(
                       "Close Session",
                       `Close this session with ${s._count.lines} items counted?`,
@@ -178,7 +188,7 @@ export default function NewCountScreen() {
                         },
                       ]
                     )
-                  }
+                  }}
                 >
                   <Text style={styles.closeText}>
                     {closeMutation.isPending ? "Closing..." : "Close"}

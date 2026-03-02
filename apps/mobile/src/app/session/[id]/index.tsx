@@ -17,8 +17,8 @@ import { useAuth } from "@/lib/auth-context";
 import { VoiceButton } from "@/components/VoiceButton";
 import { useCountingPreferences } from "@/lib/counting-preferences";
 import { useNetwork } from "@/lib/network-context";
-import { subscribe, enqueue, type QueueEntry } from "@/lib/offline-queue";
-import { useSessionSSE, type SSEEvent } from "@/lib/use-session-sse";
+import { subscribe, enqueue, getQueue, type QueueEntry } from "@/lib/offline-queue";
+import { useSessionSSE, type SSEEvent, type SSEMode } from "@/lib/use-session-sse";
 import { VarianceReasonModal } from "@/components/VarianceReasonModal";
 import { SessionActivityFeed, type ActivityEvent } from "@/components/SessionActivityFeed";
 import { ConflictModal, type ConflictData } from "@/components/ConflictModal";
@@ -119,9 +119,12 @@ export default function SessionDetailScreen() {
     { enabled: !!authUser?.businessId, staleTime: 5 * 60 * 1000 },
   );
 
+  // SSE mode tracked for polling fallback — updated by useSessionSSE below
+  const [sseMode, setSseMode] = useState<SSEMode>("streaming");
+
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
     { id: id! },
-    { staleTime: 10_000, refetchInterval: 60_000 }
+    { staleTime: 10_000, refetchInterval: sseMode === "degraded" ? 15_000 : 60_000 }
   );
 
   // --- Cache warming: prefetch data needed for offline counting ---
@@ -157,11 +160,23 @@ export default function SessionDetailScreen() {
     return (session as any).assignments?.find((a: any) => a.user?.id === authUser.userId) ?? null;
   }, [session, authUser]);
 
-  // Auto-join when session loads and is open (defer until online)
+  // Auto-join when session loads and is open (enqueue if offline for crash-safe deferral)
   const hasJoinedRef = useRef(false);
   useEffect(() => {
-    if (session && !session.endedTs && isOnline && !hasJoinedRef.current) {
+    if (!session || session.endedTs || hasJoinedRef.current) return;
+    if (isOnline) {
       joinMutation.mutate({ sessionId: session.id });
+      hasJoinedRef.current = true;
+    } else {
+      // Persist join intent — dedup against existing queue entries
+      getQueue().then((q) => {
+        const alreadyQueued = q.some(
+          (e) => e.mutation === "sessions.join" && (e.input as any).sessionId === session.id,
+        );
+        if (!alreadyQueued) {
+          enqueue("sessions.join", { sessionId: session.id });
+        }
+      });
       hasJoinedRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,12 +202,12 @@ export default function SessionDetailScreen() {
     };
   }, [sendHeartbeat]);
 
-  // Poll participants every 60s (SSE primary, polling fallback)
+  // Poll participants (SSE primary, polling fallback — faster in degraded mode)
   const { data: participants } = trpc.sessions.listParticipants.useQuery(
     { sessionId: id! },
     {
       enabled: !!session && !session.endedTs,
-      refetchInterval: 60_000,
+      refetchInterval: sseMode === "degraded" ? 15_000 : 60_000,
     }
   );
 
@@ -262,7 +277,12 @@ export default function SessionDetailScreen() {
     }
   }, [id, authUser?.userId, utils]);
 
-  useSessionSSE(id, !!session && !session?.endedTs, handleSSEEvent, isOnline);
+  const { mode: currentSseMode } = useSessionSSE(id, !!session && !session?.endedTs, handleSSEEvent, isOnline);
+
+  // Sync SSE mode to component state so polling intervals react to degradation
+  useEffect(() => {
+    setSseMode(currentSseMode);
+  }, [currentSseMode]);
 
   // Count participants per sub-area (excluding current user)
   const subAreaParticipantCounts = useMemo(() => {

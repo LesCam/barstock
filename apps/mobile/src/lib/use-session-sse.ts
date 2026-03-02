@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { API_URL, getAuthToken } from "./trpc";
 
@@ -7,9 +7,20 @@ export interface SSEEvent {
   payload?: Record<string, unknown>;
 }
 
+export type SSEMode = "streaming" | "degraded";
+
+const MAX_FAILURES_BEFORE_DEGRADED = 3;
+const DEGRADED_RECONNECT_MS = 60_000;
+const NORMAL_RECONNECT_MS = 5_000;
+
 /**
  * SSE client hook for mobile session real-time updates.
  * Uses streaming fetch (RN 0.81.5+) since EventSource doesn't support custom headers.
+ *
+ * After 3 consecutive connection failures, enters "degraded" mode:
+ * - Reconnect interval slows to 60s
+ * - Consumers should speed up polling as a fallback
+ * On successful connection, resets to "streaming" mode.
  */
 export function useSessionSSE(
   sessionId: string | undefined,
@@ -21,6 +32,17 @@ export function useSessionSSE(
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+
+  const failCountRef = useRef(0);
+  const [mode, setMode] = useState<SSEMode>("streaming");
+
+  // Reset failure state when coming back online
+  useEffect(() => {
+    if (isOnline) {
+      failCountRef.current = 0;
+      setMode("streaming");
+    }
+  }, [isOnline]);
 
   const connect = useCallback(() => {
     if (!sessionId || !isOnline) return;
@@ -41,7 +63,24 @@ export function useSessionSSE(
           signal: abortRef.current!.signal,
         });
 
-        if (!response.ok || !response.body) return;
+        if (!response.ok || !response.body) {
+          // Non-OK response counts as a failure
+          failCountRef.current++;
+          if (failCountRef.current >= MAX_FAILURES_BEFORE_DEGRADED) {
+            setMode("degraded");
+          }
+          if (!abortRef.current?.signal.aborted && isOnline) {
+            const delay = failCountRef.current >= MAX_FAILURES_BEFORE_DEGRADED
+              ? DEGRADED_RECONNECT_MS
+              : NORMAL_RECONNECT_MS;
+            reconnectTimerRef.current = setTimeout(connect, delay);
+          }
+          return;
+        }
+
+        // Connection succeeded — reset failure tracking
+        failCountRef.current = 0;
+        setMode("streaming");
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -72,11 +111,19 @@ export function useSessionSSE(
         }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") return;
+        // Connection error — increment failure count
+        failCountRef.current++;
+        if (failCountRef.current >= MAX_FAILURES_BEFORE_DEGRADED) {
+          setMode("degraded");
+        }
       }
 
-      // Stream ended or errored — reconnect after 5s (only if online)
+      // Stream ended or errored — reconnect (only if online)
       if (!abortRef.current?.signal.aborted && isOnline) {
-        reconnectTimerRef.current = setTimeout(connect, 5000);
+        const delay = failCountRef.current >= MAX_FAILURES_BEFORE_DEGRADED
+          ? DEGRADED_RECONNECT_MS
+          : NORMAL_RECONNECT_MS;
+        reconnectTimerRef.current = setTimeout(connect, delay);
       }
     })();
   }, [sessionId, isOnline]);
@@ -113,4 +160,6 @@ export function useSessionSSE(
     const sub = AppState.addEventListener("change", handleAppState);
     return () => sub.remove();
   }, [sessionId, isOpen, isOnline, connect]);
+
+  return { mode };
 }

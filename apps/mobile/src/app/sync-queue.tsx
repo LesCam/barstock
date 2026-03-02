@@ -21,6 +21,7 @@ const MUTATION_LABELS: Record<string, string> = {
   "sessions.addLine": "Add Count",
   "sessions.updateLine": "Update Count",
   "sessions.deleteLine": "Delete Count",
+  "sessions.join": "Join Session",
   "receiving.receive": "Receive Stock",
   "transfers.create": "Transfer",
 };

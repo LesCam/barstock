@@ -6,7 +6,7 @@ const STORAGE_KEY = "@barstock/offlineQueue";
 
 export interface QueueEntry {
   id: string;
-  mutation: "sessions.addLine" | "sessions.updateLine" | "sessions.deleteLine" | "receiving.receive" | "transfers.create";
+  mutation: "sessions.addLine" | "sessions.updateLine" | "sessions.deleteLine" | "sessions.join" | "receiving.receive" | "transfers.create";
   input: Record<string, unknown>;
   tempId?: string;
   createdAt: string;
@@ -102,6 +102,9 @@ async function executeMutation(
     case "sessions.deleteLine":
       await client.sessions.deleteLine.mutate(input);
       break;
+    case "sessions.join":
+      await client.sessions.join.mutate(input);
+      break;
     case "receiving.receive":
       await client.receiving.receive.mutate(input);
       break;
@@ -127,7 +130,8 @@ function isNetworkError(err: unknown): boolean {
 
 function isSessionClosedError(err: unknown): boolean {
   if (err instanceof Error) {
-    return err.message.toLowerCase().includes("session already closed");
+    const msg = err.message.toLowerCase();
+    return msg.includes("session already closed") || msg.includes("cannot join a closed session");
   }
   return false;
 }

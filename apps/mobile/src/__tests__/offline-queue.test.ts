@@ -7,6 +7,7 @@ function createMockClient() {
       addLine: { mutate: jest.fn().mockResolvedValue(undefined) },
       updateLine: { mutate: jest.fn().mockResolvedValue(undefined) },
       deleteLine: { mutate: jest.fn().mockResolvedValue(undefined) },
+      join: { mutate: jest.fn().mockResolvedValue(undefined) },
     },
     receiving: {
       receive: { mutate: jest.fn().mockResolvedValue(undefined) },
@@ -607,5 +608,37 @@ describe("clearFailed", () => {
     expect(queue).toHaveLength(1);
     expect(queue[0].mutation).toBe("receiving.receive");
     expect(queue[0].status).toBe("pending");
+  });
+});
+
+// ─── sessions.join support ───────────────────────────────────────────────────
+
+describe("processQueue — sessions.join", () => {
+  it("calls sessions.join.mutate with correct input", async () => {
+    const client = createMockClient();
+
+    await offlineQueue.enqueue("sessions.join", { sessionId: "s1" });
+    const result = await offlineQueue.processQueue(client);
+
+    expect(result).toEqual({ synced: 1, failed: 0, sessionClosed: false });
+    expect(client.sessions.join.mutate).toHaveBeenCalledWith({ sessionId: "s1" });
+    const queue = await offlineQueue.getQueue();
+    expect(queue).toHaveLength(0);
+  });
+
+  it("handles 'cannot join a closed session' as session-closed error", async () => {
+    const client = createMockClient();
+    client.sessions.join.mutate.mockRejectedValue(
+      new Error("cannot join a closed session"),
+    );
+
+    await offlineQueue.enqueue("sessions.join", { sessionId: "s1" });
+    await offlineQueue.enqueue("sessions.addLine", { sessionId: "s1" });
+
+    const result = await offlineQueue.processQueue(client);
+
+    expect(result.sessionClosed).toBe(true);
+    const queue = await offlineQueue.getQueue();
+    expect(queue).toHaveLength(0);
   });
 });
