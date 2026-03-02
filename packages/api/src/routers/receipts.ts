@@ -7,6 +7,7 @@ import {
   receiptListSkippedSchema,
   createFromSkippedSchema,
   requestItemCreationSchema,
+  receiptSearchSchema,
 } from "@barstock/validators";
 import { Prisma } from "@prisma/client";
 import { ReceiptService } from "../services/receipt.service";
@@ -61,6 +62,7 @@ export const receiptsRouter = router({
           quantity: l.quantity,
           unitPrice: l.unitPrice ?? null,
           skipped: l.skipped,
+          matchSource: l.matchSource ?? null,
         })),
         userId: ctx.user.userId,
         businessId: ctx.user.businessId,
@@ -98,11 +100,34 @@ export const receiptsRouter = router({
       return svc.listSkipped(input.locationId);
     }),
 
+  search: protectedProcedure
+    .use(requireLocationAccess())
+    .input(receiptSearchSchema)
+    .query(({ ctx, input }) => {
+      const svc = new ReceiptService(ctx.prisma);
+      return svc.search({
+        locationId: input.locationId,
+        vendorId: input.vendorId,
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        status: input.status,
+        search: input.search,
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+    }),
+
   getById: protectedProcedure
     .input(receiptGetByIdSchema)
     .query(({ ctx, input }) => {
       const svc = new ReceiptService(ctx.prisma);
       return svc.getById(input.id);
+    }),
+
+  learningStats: protectedProcedure
+    .query(({ ctx }) => {
+      const svc = new ReceiptService(ctx.prisma);
+      return svc.getLearningStats(ctx.user.businessId);
     }),
 
   createFromSkipped: protectedProcedure

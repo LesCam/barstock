@@ -576,6 +576,85 @@ export class AlertService {
     );
   }
 
+  async checkPriceAnomaly(
+    businessId: string,
+    inventoryItemId: string,
+    newUnitCost: number,
+    locationName: string,
+  ): Promise<void> {
+    const settingsSvc = new SettingsService(this.prisma);
+    const settings = await settingsSvc.getSettings(businessId);
+    const rule = (settings.alertRules as any).priceAnomaly;
+    if (!rule?.enabled) return;
+
+    // Fetch the item name
+    const item = await this.prisma.inventoryItem.findUnique({
+      where: { id: inventoryItemId },
+      select: { name: true },
+    });
+    if (!item) return;
+
+    // Fetch last 5 prices (skip the newest one just created)
+    const recentPrices = await this.prisma.priceHistory.findMany({
+      where: { inventoryItemId },
+      orderBy: { effectiveFromTs: "desc" },
+      skip: 1,
+      take: 5,
+      select: { unitCost: true },
+    });
+
+    if (recentPrices.length < 3) return;
+
+    const prices = recentPrices.map((p) => Number(p.unitCost));
+    const allIdentical = prices.every((p) => p === prices[0]);
+
+    if (allIdentical) {
+      // Consistent history — alert if new price differs by >= 1%
+      const diff = Math.abs(newUnitCost - prices[0]);
+      if (prices[0] === 0 || diff / prices[0] < 0.01) return;
+
+      await this.notifyAdmins(
+        businessId,
+        `Price Anomaly: ${item.name}`,
+        `${item.name} price changed from consistent $${prices[0].toFixed(2)} to $${newUnitCost.toFixed(2)} at ${locationName}`,
+        `/inventory/${inventoryItemId}`,
+        {
+          rule: "priceAnomaly",
+          itemId: inventoryItemId,
+          itemName: item.name,
+          avgPrice: prices[0],
+          newPrice: newUnitCost,
+        },
+      );
+      return;
+    }
+
+    // Variable history — use z-score
+    const mean = prices.reduce((s, p) => s + p, 0) / prices.length;
+    const variance = prices.reduce((s, p) => s + (p - mean) ** 2, 0) / prices.length;
+    const stdDev = Math.sqrt(variance);
+
+    if (stdDev === 0) return;
+
+    const zScore = Math.abs(newUnitCost - mean) / stdDev;
+    if (zScore < rule.threshold) return;
+
+    await this.notifyAdmins(
+      businessId,
+      `Price Anomaly: ${item.name}`,
+      `${item.name} price $${newUnitCost.toFixed(2)} is ${zScore.toFixed(1)} std devs from avg $${mean.toFixed(2)} at ${locationName}`,
+      `/inventory/${inventoryItemId}`,
+      {
+        rule: "priceAnomaly",
+        itemId: inventoryItemId,
+        itemName: item.name,
+        avgPrice: mean,
+        newPrice: newUnitCost,
+        zScore,
+      },
+    );
+  }
+
   private async checkVarianceForecastRisk(locationId: string, locationName: string, thresholdPercent: number): Promise<AlertResult[]> {
     const svc = new AnalyticsService(this.prisma);
     try {

@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { bestMatch } from "../utils/fuzzy-match";
 import { createStorageAdapter } from "./storage";
 import { NotificationService } from "./notification.service";
+import { SettingsService } from "./settings.service";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -140,31 +141,56 @@ export class ReceiptService {
         },
       });
 
-      // 6. Match lines to inventory
-      const matchedLines = await this.matchLines(
-        businessId,
-        null,
-        extraction.lineItems,
-        locationId
-      );
-
-      // 7. Try to auto-match vendor
+      // 6. Try to auto-match vendor (before matchLines so vendorId is available for SKU lookup)
       let vendorId: string | null = null;
       if (extraction.vendorName) {
-        const vendorMatch = bestMatch(
-          extraction.vendorName,
-          vendors,
-          (v) => v.name,
-          0.6
-        );
-        if (vendorMatch) {
-          vendorId = vendorMatch.item.id;
+        // Priority 1: Check VendorAlias for exact match
+        const normalizedVendorName = extraction.vendorName.toLowerCase().trim();
+        const vendorAlias = await this.prisma.vendorAlias.findUnique({
+          where: {
+            businessId_aliasText: {
+              businessId,
+              aliasText: normalizedVendorName,
+            },
+          },
+          select: { vendorId: true, id: true },
+        });
+
+        if (vendorAlias) {
+          vendorId = vendorAlias.vendorId;
+          // Fire-and-forget: increment useCount
+          this.prisma.vendorAlias.update({
+            where: { id: vendorAlias.id },
+            data: { useCount: { increment: 1 } },
+          }).catch(() => {});
+        } else {
+          // Priority 2: Fuzzy match against vendor names
+          const vendorMatch = bestMatch(
+            extraction.vendorName,
+            vendors,
+            (v) => v.name,
+            0.6
+          );
+          if (vendorMatch) {
+            vendorId = vendorMatch.item.id;
+          }
+        }
+
+        if (vendorId) {
           await this.prisma.receiptCapture.update({
             where: { id: capture.id },
             data: { vendorId },
           });
         }
       }
+
+      // 7. Match lines to inventory (with vendorId for SKU lookup)
+      const matchedLines = await this.matchLines(
+        businessId,
+        vendorId,
+        extraction.lineItems,
+        locationId
+      );
 
       // 8. Check for duplicate receipts (all checks run, first match wins)
       let possibleDuplicate: DuplicateInfo | null = null;
@@ -350,8 +376,8 @@ Rules:
     lineItems: ExtractionLineItem[],
     locationId: string
   ): Promise<MatchedLine[]> {
-    // Fetch aliases and inventory items for matching
-    const [aliases, items] = await Promise.all([
+    // Fetch aliases, inventory items, and settings for matching
+    const [aliases, items, vendorItems, settings] = await Promise.all([
       this.prisma.supplierItemAlias.findMany({
         where: { businessId },
         select: {
@@ -362,8 +388,16 @@ Rules:
       }),
       this.prisma.inventoryItem.findMany({
         where: { locationId, active: true },
-        select: { id: true, name: true },
+        select: { id: true, name: true, barcode: true },
       }),
+      // Fetch vendor SKU mappings when vendorId is known
+      vendorId
+        ? this.prisma.itemVendor.findMany({
+            where: { vendorId },
+            select: { inventoryItemId: true, vendorSku: true },
+          })
+        : Promise.resolve([]),
+      new SettingsService(this.prisma).getSettings(businessId),
     ]);
 
     const aliasMap = new Map(
@@ -372,6 +406,24 @@ Rules:
         { inventoryItemId: a.inventoryItemId, confidence: Number(a.confidence) },
       ])
     );
+
+    // Build barcode → item map
+    const barcodeMap = new Map<string, { id: string; name: string }>();
+    for (const item of items) {
+      if (item.barcode) {
+        barcodeMap.set(item.barcode, { id: item.id, name: item.name });
+      }
+    }
+
+    // Build vendorSku → item map
+    const vendorSkuMap = new Map<string, string>();
+    for (const vi of vendorItems) {
+      if (vi.vendorSku) {
+        vendorSkuMap.set(vi.vendorSku, vi.inventoryItemId);
+      }
+    }
+
+    const fuzzyThreshold = settings.receiptMatching?.fuzzyThreshold ?? 0.3;
 
     return lineItems.map((line, index) => {
       const desc = line.description;
@@ -396,8 +448,48 @@ Rules:
         };
       }
 
+      // Priority 1.5: Barcode / Vendor SKU match via productCode
+      if (line.productCode) {
+        // Check against item barcodes
+        const barcodeItem = barcodeMap.get(line.productCode);
+        if (barcodeItem) {
+          return {
+            lineIndex: index,
+            descriptionRaw: desc,
+            quantityRaw: line.quantity,
+            unitPriceRaw: line.unitPrice,
+            totalPriceRaw: line.totalPrice,
+            unitSizeRaw: line.unitSize,
+            productCodeRaw: line.productCode,
+            inventoryItemId: barcodeItem.id,
+            inventoryItemName: barcodeItem.name,
+            matchConfidence: 0.98,
+            matchSource: "barcode",
+          };
+        }
+
+        // Check against vendor SKUs
+        const skuItemId = vendorSkuMap.get(line.productCode);
+        if (skuItemId) {
+          const matchedItem = items.find((i) => i.id === skuItemId);
+          return {
+            lineIndex: index,
+            descriptionRaw: desc,
+            quantityRaw: line.quantity,
+            unitPriceRaw: line.unitPrice,
+            totalPriceRaw: line.totalPrice,
+            unitSizeRaw: line.unitSize,
+            productCodeRaw: line.productCode,
+            inventoryItemId: skuItemId,
+            inventoryItemName: matchedItem?.name ?? null,
+            matchConfidence: 0.95,
+            matchSource: "vendor_sku",
+          };
+        }
+      }
+
       // Priority 2: Fuzzy match against inventory items
-      const fuzzy = bestMatch(desc, items, (i) => i.name, 0.3);
+      const fuzzy = bestMatch(desc, items, (i) => i.name, fuzzyThreshold);
       if (fuzzy) {
         return {
           lineIndex: index,
@@ -444,6 +536,7 @@ Rules:
       quantity: number;
       unitPrice: number | null;
       skipped: boolean;
+      matchSource?: string | null;
     }>;
     userId: string;
     businessId: string;
@@ -481,6 +574,7 @@ Rules:
               ? new Prisma.Decimal(line.unitPrice)
               : null,
             skipped: line.skipped,
+            matchSource: line.matchSource ?? undefined,
           },
         });
 
@@ -576,6 +670,7 @@ Rules:
       for (const line of lines) {
         if (line.skipped || !line.inventoryItemId || line.unitPrice == null) continue;
         alertSvc.checkPriceChange(businessId, line.inventoryItemId, line.unitPrice, location?.name ?? "").catch(() => {});
+        alertSvc.checkPriceAnomaly(businessId, line.inventoryItemId, line.unitPrice, location?.name ?? "").catch(() => {});
       }
     } catch {
       // Don't fail if alert check fails
@@ -587,6 +682,12 @@ Rules:
     } catch {
       // Don't fail if learning fails
     }
+
+    // Learn vendor alias (fire-and-forget)
+    this.learnVendorAlias(receiptCaptureId, businessId, vendorId).catch(() => {});
+
+    // Adjust fuzzy threshold based on confirmation accuracy (fire-and-forget)
+    this.adjustFuzzyThreshold(receiptCaptureId, businessId).catch(() => {});
 
     // Notify admins (fire-and-forget)
     try {
@@ -666,6 +767,76 @@ Rules:
     }
   }
 
+  // ── Vendor Alias Learning ─────────────────────────────────
+
+  private async learnVendorAlias(
+    receiptCaptureId: string,
+    businessId: string,
+    vendorId: string | null
+  ): Promise<void> {
+    if (!vendorId) return;
+
+    const capture = await this.prisma.receiptCapture.findUnique({
+      where: { id: receiptCaptureId },
+      select: { vendorNameRaw: true },
+    });
+    if (!capture?.vendorNameRaw) return;
+
+    const aliasText = capture.vendorNameRaw.toLowerCase().trim();
+    if (!aliasText) return;
+
+    await this.prisma.vendorAlias.upsert({
+      where: {
+        businessId_aliasText: { businessId, aliasText },
+      },
+      create: { businessId, aliasText, vendorId, useCount: 1 },
+      update: { vendorId, useCount: { increment: 1 } },
+    });
+  }
+
+  // ── Adaptive Fuzzy Threshold ────────────────────────────
+
+  private async adjustFuzzyThreshold(
+    receiptCaptureId: string,
+    businessId: string
+  ): Promise<void> {
+    // Fetch lines that were originally fuzzy-matched
+    const fuzzyLines = await this.prisma.receiptLine.findMany({
+      where: {
+        receiptCaptureId,
+        matchSource: "fuzzy",
+      },
+      select: {
+        inventoryItemId: true,
+        skipped: true,
+      },
+    });
+
+    if (fuzzyLines.length < 3) return;
+
+    // Calculate confirmation rate: lines kept with an item / total fuzzy
+    const confirmed = fuzzyLines.filter((l) => l.inventoryItemId && !l.skipped).length;
+    const confirmRate = confirmed / fuzzyLines.length;
+
+    // Feedback threshold: high confirm rate → lower threshold (more aggressive), low → higher (stricter)
+    const feedbackThreshold = 0.6 - confirmRate * 0.4; // [0.2, 0.6]
+
+    const settingsSvc = new SettingsService(this.prisma);
+    const settings = await settingsSvc.getSettings(businessId);
+    const currentThreshold = settings.receiptMatching?.fuzzyThreshold ?? 0.3;
+
+    // EWMA: 90% current + 10% feedback
+    let newThreshold = 0.9 * currentThreshold + 0.1 * feedbackThreshold;
+    newThreshold = Math.max(0.2, Math.min(0.6, newThreshold));
+    newThreshold = Math.round(newThreshold * 1000) / 1000;
+
+    if (newThreshold !== currentThreshold) {
+      await settingsSvc.updateSettings(businessId, {
+        receiptMatching: { fuzzyThreshold: newThreshold },
+      });
+    }
+  }
+
   // ── Queries ────────────────────────────────────────────────
 
   async list(locationId: string, cursor?: string, limit = 20) {
@@ -741,6 +912,78 @@ Rules:
     }));
   }
 
+  async search(input: {
+    locationId: string;
+    vendorId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    status?: string;
+    search?: string;
+    cursor?: string;
+    limit: number;
+  }) {
+    const where: Prisma.ReceiptCaptureWhereInput = { locationId: input.locationId };
+
+    if (input.vendorId) {
+      where.vendorId = input.vendorId;
+    }
+
+    if (input.status) {
+      where.status = input.status as any;
+    }
+
+    if (input.dateFrom || input.dateTo) {
+      where.invoiceDate = {};
+      if (input.dateFrom) where.invoiceDate.gte = new Date(input.dateFrom);
+      if (input.dateTo) where.invoiceDate.lte = new Date(input.dateTo);
+    }
+
+    if (input.search) {
+      where.OR = [
+        { vendorNameRaw: { contains: input.search, mode: "insensitive" } },
+        { invoiceNumber: { contains: input.search, mode: "insensitive" } },
+        { vendor: { name: { contains: input.search, mode: "insensitive" } } },
+      ];
+    }
+
+    if (input.cursor) {
+      const cursorRecord = await this.prisma.receiptCapture.findUnique({
+        where: { id: input.cursor },
+        select: { createdAt: true },
+      });
+      if (cursorRecord) {
+        where.createdAt = { lt: cursorRecord.createdAt };
+      }
+    }
+
+    const items = await this.prisma.receiptCapture.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: input.limit + 1,
+      include: {
+        vendor: { select: { id: true, name: true } },
+        _count: { select: { lines: true } },
+      },
+    });
+
+    const hasMore = items.length > input.limit;
+    if (hasMore) items.pop();
+
+    return {
+      items: items.map((item) => ({
+        id: item.id,
+        status: item.status,
+        vendorName: item.vendor?.name ?? item.vendorNameRaw ?? null,
+        vendorId: item.vendorId,
+        invoiceNumber: item.invoiceNumber,
+        invoiceDate: item.invoiceDate,
+        lineCount: item._count.lines,
+        createdAt: item.createdAt,
+      })),
+      nextCursor: hasMore ? items[items.length - 1]?.id : null,
+    };
+  }
+
   async getById(id: string) {
     const capture = await this.prisma.receiptCapture.findUnique({
       where: { id },
@@ -756,5 +999,43 @@ Rules:
     });
     if (!capture) throw new Error("Receipt capture not found");
     return capture;
+  }
+
+  async getLearningStats(businessId: string) {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [vendorAliasCount, supplierAliasCount, recentLines, settings] =
+      await Promise.all([
+        this.prisma.vendorAlias.count({ where: { businessId } }),
+        this.prisma.supplierItemAlias.count({ where: { businessId } }),
+        this.prisma.receiptLine.findMany({
+          where: {
+            receiptCapture: {
+              businessId,
+              status: "processed",
+              processedAt: { gte: thirtyDaysAgo },
+            },
+            skipped: false,
+            inventoryItemId: { not: null },
+          },
+          select: { matchSource: true },
+        }),
+        new SettingsService(this.prisma).getSettings(businessId),
+      ]);
+
+    const totalRecent = recentLines.length;
+    const autoMatched = recentLines.filter(
+      (l) => l.matchSource && l.matchSource !== "manual"
+    ).length;
+    const recentAutoMatchRate =
+      totalRecent > 0 ? Math.round((autoMatched / totalRecent) * 100) : null;
+
+    return {
+      vendorAliasCount,
+      supplierAliasCount,
+      recentAutoMatchRate,
+      fuzzyThreshold: settings.receiptMatching?.fuzzyThreshold ?? 0.3,
+    };
   }
 }

@@ -1,15 +1,36 @@
 "use client";
 
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 import { HelpLink } from "@/components/help-link";
 
+const STATUS_OPTIONS = [
+  { value: "", label: "All statuses" },
+  { value: "pending", label: "Pending" },
+  { value: "extracted", label: "Extracted" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "processed", label: "Processed" },
+  { value: "failed", label: "Failed" },
+] as const;
+
 export default function ReceiptsPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const { selectedLocationId: locationId } = useLocation();
+
+  const [searchText, setSearchText] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const { data: vendors } = trpc.vendors.list.useQuery(
+    { businessId: user?.businessId },
+    { enabled: !!user?.businessId }
+  );
 
   const { data: skippedReceipts, isLoading: skippedLoading } =
     trpc.receipts.listSkipped.useQuery(
@@ -17,9 +38,19 @@ export default function ReceiptsPage() {
       { enabled: !!locationId }
     );
 
+  const hasFilters = searchText || vendorFilter || statusFilter || dateFrom || dateTo;
+
   const { data: recentReceipts, isLoading: recentLoading } =
-    trpc.receipts.list.useQuery(
-      { locationId: locationId!, limit: 20 },
+    trpc.receipts.search.useQuery(
+      {
+        locationId: locationId!,
+        limit: 20,
+        ...(searchText ? { search: searchText } : {}),
+        ...(vendorFilter ? { vendorId: vendorFilter } : {}),
+        ...(statusFilter ? { status: statusFilter as any } : {}),
+        ...(dateFrom ? { dateFrom } : {}),
+        ...(dateTo ? { dateTo } : {}),
+      },
       { enabled: !!locationId }
     );
 
@@ -36,12 +67,15 @@ export default function ReceiptsPage() {
       <div className="mb-6">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-[#EAF0FF]">Receipts</h1>
-          <HelpLink section="transfers" tooltip="Learn about receiving" />
+          <HelpLink section="receipt-capture" tooltip="Learn about receiving" />
         </div>
         <p className="mt-1 text-sm text-[#EAF0FF]/60">
           Receipt scans and skipped items needing attention
         </p>
       </div>
+
+      {/* Learning Stats Banner */}
+      <LearningStatsBanner />
 
       {/* Section A — Skipped Items Needing Attention */}
       <section className="mb-8">
@@ -92,11 +126,91 @@ export default function ReceiptsPage() {
         )}
       </section>
 
-      {/* Section B — Recent Receipts */}
+      {/* Section B — Receipt Archive */}
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[#EAF0FF]/50">
-          Recent Receipts
+          Receipt Archive
         </h2>
+
+        {/* Filter Bar */}
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[180px]">
+            <label className="mb-1 block text-xs text-[#EAF0FF]/40">Search</label>
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Vendor, invoice #..."
+              className="w-full rounded-lg border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF] placeholder-[#EAF0FF]/30 focus:border-[#E9B44C]/50 focus:outline-none"
+            />
+          </div>
+
+          <div className="min-w-[150px]">
+            <label className="mb-1 block text-xs text-[#EAF0FF]/40">Vendor</label>
+            <select
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C]/50 focus:outline-none"
+            >
+              <option value="">All vendors</option>
+              {vendors?.map((v: any) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-w-[130px]">
+            <label className="mb-1 block text-xs text-[#EAF0FF]/40">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C]/50 focus:outline-none"
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-w-[140px]">
+            <label className="mb-1 block text-xs text-[#EAF0FF]/40">From</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C]/50 focus:outline-none"
+            />
+          </div>
+
+          <div className="min-w-[140px]">
+            <label className="mb-1 block text-xs text-[#EAF0FF]/40">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-[#16283F] px-3 py-2 text-sm text-[#EAF0FF] focus:border-[#E9B44C]/50 focus:outline-none"
+            />
+          </div>
+
+          {hasFilters && (
+            <button
+              onClick={() => {
+                setSearchText("");
+                setVendorFilter("");
+                setStatusFilter("");
+                setDateFrom("");
+                setDateTo("");
+              }}
+              className="rounded-lg border border-white/10 px-3 py-2 text-sm text-[#EAF0FF]/60 hover:bg-white/5"
+            >
+              Clear
+            </button>
+          )}
+        </div>
 
         {recentLoading ? (
           <div className="flex items-center gap-2 py-4">
@@ -104,7 +218,9 @@ export default function ReceiptsPage() {
             <span className="text-sm text-[#EAF0FF]/40">Loading...</span>
           </div>
         ) : !recentReceipts?.items?.length ? (
-          <p className="py-4 text-sm text-[#EAF0FF]/40">No receipts yet.</p>
+          <p className="py-4 text-sm text-[#EAF0FF]/40">
+            {hasFilters ? "No receipts match your filters." : "No receipts yet."}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -159,6 +275,31 @@ export default function ReceiptsPage() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function LearningStatsBanner() {
+  const { data: stats, isLoading } = trpc.receipts.learningStats.useQuery();
+
+  if (isLoading || !stats) return null;
+
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-3">
+      <span className="rounded-full bg-[#16283F] border border-white/10 px-3 py-1 text-xs text-[#EAF0FF]/80">
+        {stats.vendorAliasCount} vendor alias{stats.vendorAliasCount !== 1 ? "es" : ""}
+      </span>
+      <span className="rounded-full bg-[#16283F] border border-white/10 px-3 py-1 text-xs text-[#EAF0FF]/80">
+        {stats.supplierAliasCount} item alias{stats.supplierAliasCount !== 1 ? "es" : ""}
+      </span>
+      {stats.recentAutoMatchRate != null && (
+        <span className="rounded-full bg-[#16283F] border border-white/10 px-3 py-1 text-xs text-[#EAF0FF]/80">
+          {stats.recentAutoMatchRate}% auto-match rate (30d)
+        </span>
+      )}
+      <span className="text-xs text-[#EAF0FF]/40">
+        Fuzzy threshold: {stats.fuzzyThreshold}
+      </span>
     </div>
   );
 }

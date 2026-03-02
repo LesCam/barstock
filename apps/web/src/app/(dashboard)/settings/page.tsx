@@ -70,6 +70,7 @@ export default function SettingsPage() {
       <AlertRulesSection businessId={businessId} canEdit={canEdit} />
       <VerificationSettingsSection businessId={businessId} canEdit={canEdit} />
       <AdaptiveDepletionSection businessId={businessId} canEdit={canEdit} />
+      <ReceiptMatchingSection businessId={businessId} canEdit={canEdit} />
       <BenchmarkingSection businessId={businessId} canEdit={canEdit} />
       <ProductDataSharingSection businessId={businessId} canEdit={canEdit} />
       {locationId && <ScaleProfilesSection locationId={locationId} canEdit={canEdit} />}
@@ -1038,6 +1039,31 @@ const ALERT_RULE_LABELS: Record<string, { label: string; unit: string; descripti
     unit: "days",
     description: "Alert when items are below min level or will stockout within this many days. Sent to assigned orderers (or all users with ordering permission if none assigned).",
   },
+  priceAnomaly: {
+    label: "Price Anomaly",
+    unit: "std devs",
+    description: "Alert when a receipt price deviates from recent history by this many standard deviations",
+  },
+  usageSpike: {
+    label: "Usage Spike",
+    unit: "std devs",
+    description: "Alert when daily usage exceeds the rolling average by this many standard deviations",
+  },
+  depletionMismatch: {
+    label: "Depletion Mismatch",
+    unit: "ratio",
+    description: "Alert when POS-to-actual depletion ratio exceeds this threshold",
+  },
+  priceChange: {
+    label: "Price Change",
+    unit: "%",
+    description: "Alert when a vendor price changes by more than this percentage",
+  },
+  varianceForecastRisk: {
+    label: "Variance Forecast",
+    unit: "%",
+    description: "Alert when forecasted variance exceeds this percentage",
+  },
 };
 
 function formatTimeAgo(dateStr: string | undefined): string {
@@ -1226,6 +1252,79 @@ function VerificationSettingsSection({ businessId, canEdit }: { businessId: stri
           />
           <span className="text-xs text-[#EAF0FF]/40">%</span>
         </div>
+      </div>
+
+      {updateMutation.error && (
+        <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
+      )}
+    </div>
+  );
+}
+
+function ReceiptMatchingSection({ businessId, canEdit }: { businessId: string; canEdit: boolean }) {
+  const { data: settings } = trpc.settings.get.useQuery({ businessId });
+  const utils = trpc.useUtils();
+
+  const updateMutation = trpc.settings.update.useMutation({
+    onSuccess: () => {
+      utils.settings.get.invalidate({ businessId });
+      setDirty(false);
+    },
+  });
+
+  const currentThreshold = (settings as any)?.receiptMatching?.fuzzyThreshold ?? 0.3;
+  const [localThreshold, setLocalThreshold] = useState<number>(currentThreshold);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setLocalThreshold((settings as any)?.receiptMatching?.fuzzyThreshold ?? 0.3);
+      setDirty(false);
+    }
+  }, [settings]);
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <h2 className="mb-4 text-lg font-semibold">Receipt Matching</h2>
+      <p className="mb-4 text-sm text-[#EAF0FF]/60">
+        Receipt items are matched using a 4-tier cascade: learned supplier aliases, barcode lookup,
+        vendor SKU, then fuzzy name matching. The fuzzy threshold adjusts automatically based on
+        confirmation accuracy (EWMA).
+      </p>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-[#EAF0FF]/60">Fuzzy match threshold</label>
+          <input
+            type="number"
+            min={0.2}
+            max={0.6}
+            step={0.05}
+            value={localThreshold}
+            disabled={!canEdit}
+            onChange={(e) => {
+              setLocalThreshold(Number(e.target.value));
+              setDirty(true);
+            }}
+            className="w-20 rounded-md border border-white/10 bg-[#0B1623] px-2 py-1 text-right text-sm text-[#EAF0FF] disabled:cursor-not-allowed disabled:opacity-40"
+          />
+          <span className="text-xs text-[#EAF0FF]/40">Lower = more aggressive matching</span>
+        </div>
+
+        {canEdit && dirty && (
+          <button
+            onClick={() =>
+              updateMutation.mutate({
+                businessId,
+                receiptMatching: { fuzzyThreshold: localThreshold },
+              })
+            }
+            disabled={updateMutation.isPending}
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-white hover:bg-[#D4A43C] disabled:opacity-50"
+          >
+            {updateMutation.isPending ? "Saving..." : "Save"}
+          </button>
+        )}
       </div>
 
       {updateMutation.error && (

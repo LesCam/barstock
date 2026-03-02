@@ -45,6 +45,7 @@ export const alertRulesSchema = z.object({
   usageSpike: alertRuleSchema.default({ enabled: true, threshold: 2.5 }),
   depletionMismatch: alertRuleSchema.default({ enabled: true, threshold: 1.5 }),
   priceChange: alertRuleSchema.default({ enabled: true, threshold: 5 }),
+  priceAnomaly: alertRuleSchema.default({ enabled: true, threshold: 2 }),
   varianceForecastRisk: alertRuleSchema.default({ enabled: true, threshold: 10 }),
 });
 
@@ -78,6 +79,11 @@ export const verificationSettingsSchema = z.object({
 
 export type VerificationSettings = z.infer<typeof verificationSettingsSchema>;
 
+export const receiptMatchingSettingsSchema = z.object({
+  fuzzyThreshold: z.number().min(0.2).max(0.6).default(0.3),
+});
+export type ReceiptMatchingSettings = z.infer<typeof receiptMatchingSettingsSchema>;
+
 export const adaptiveDepletionSettingsSchema = z.object({
   enabled: z.boolean().default(false),
   minSnapshots: z.number().int().min(1).max(20).default(3),
@@ -98,6 +104,7 @@ export const settingsUpdateSchema = z.object({
   subscriptionOverrides: subscriptionOverridesSchema.optional(),
   verification: verificationSettingsSchema.partial().optional(),
   adaptiveDepletion: adaptiveDepletionSettingsSchema.partial().optional(),
+  receiptMatching: receiptMatchingSettingsSchema.partial().optional(),
 });
 
 export const settingsGetSchema = z.object({

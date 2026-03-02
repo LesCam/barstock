@@ -1,5 +1,5 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
-import type { CapabilityToggles, AutoLockPolicy, AlertRules, SubscriptionOverrides, VerificationSettings, AdaptiveDepletionSettings } from "@barstock/validators";
+import type { CapabilityToggles, AutoLockPolicy, AlertRules, SubscriptionOverrides, VerificationSettings, AdaptiveDepletionSettings, ReceiptMatchingSettings } from "@barstock/validators";
 
 export interface BenchmarkingSettings {
   optedIn: boolean;
@@ -27,6 +27,7 @@ export interface BusinessSettingsData {
   subscriptionOverrides?: SubscriptionOverrides;
   verification: VerificationSettings;
   adaptiveDepletion: AdaptiveDepletionSettings;
+  receiptMatching: ReceiptMatchingSettings;
   tareTrust: TareTrustSettings;
 }
 
@@ -64,6 +65,7 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     usageSpike: { enabled: true, threshold: 2.5 },
     depletionMismatch: { enabled: true, threshold: 1.5 },
     priceChange: { enabled: true, threshold: 5 },
+    priceAnomaly: { enabled: true, threshold: 2 },
     varianceForecastRisk: { enabled: true, threshold: 10 },
   },
   lastAlertEvaluation: undefined,
@@ -85,6 +87,9 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     minSnapshots: 3,
     ratioFloor: 0.5,
     ratioCeiling: 2.0,
+  },
+  receiptMatching: {
+    fuzzyThreshold: 0.3,
   },
   tareTrust: {
     trustScore: 50,
@@ -135,6 +140,10 @@ export class SettingsService {
         ...DEFAULT_SETTINGS.adaptiveDepletion,
         ...stored.adaptiveDepletion,
       },
+      receiptMatching: {
+        ...DEFAULT_SETTINGS.receiptMatching,
+        ...stored.receiptMatching,
+      },
       tareTrust: {
         ...DEFAULT_SETTINGS.tareTrust,
         ...stored.tareTrust,
@@ -155,6 +164,7 @@ export class SettingsService {
       subscriptionOverrides?: SubscriptionOverrides;
       verification?: Partial<VerificationSettings>;
       adaptiveDepletion?: Partial<AdaptiveDepletionSettings>;
+      receiptMatching?: Partial<ReceiptMatchingSettings>;
       tareTrust?: Partial<TareTrustSettings>;
     }
   ): Promise<BusinessSettingsData> {
@@ -190,6 +200,10 @@ export class SettingsService {
       adaptiveDepletion: {
         ...current.adaptiveDepletion,
         ...patch.adaptiveDepletion,
+      },
+      receiptMatching: {
+        ...current.receiptMatching,
+        ...patch.receiptMatching,
       },
       tareTrust: {
         ...current.tareTrust,

@@ -241,6 +241,7 @@ model Business {
   tareObservations           TareObservation[]
   receiptCaptures            ReceiptCapture[]
   supplierItemAliases        SupplierItemAlias[]
+  vendorAliases              VendorAlias[]
 
   @@map("businesses")
 }
@@ -933,6 +934,7 @@ model Vendor {
   vendorOrderers      VendorOrderer[]
   receiptCaptures     ReceiptCapture[]
   supplierItemAliases SupplierItemAlias[]
+  vendorAliases       VendorAlias[]
 
   @@index([businessId], map: "ix_vendors_business")
   @@map("vendors")
@@ -1415,4 +1417,20 @@ model SupplierItemAlias {
   @@unique([businessId, aliasText], map: "ux_supplier_alias_biz_text")
   @@index([businessId, aliasText], map: "ix_supplier_aliases_biz_text")
   @@map("supplier_item_aliases")
+}
+
+model VendorAlias {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  aliasText  String   @map("alias_text")
+  vendorId   String   @map("vendor_id") @db.Uuid
+  useCount   Int      @default(1) @map("use_count")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  business Business @relation(fields: [businessId], references: [id])
+  vendor   Vendor   @relation(fields: [vendorId], references: [id])
+
+  @@unique([businessId, aliasText], map: "ux_vendor_alias_biz_text")
+  @@map("vendor_aliases")
 }

@@ -16,6 +16,7 @@ export const receiptConfirmLineSchema = z.object({
   quantity: z.number().positive(),
   unitPrice: z.number().nullable().optional(),
   skipped: z.boolean().default(false),
+  matchSource: z.string().nullable().optional(),
 });
 
 export const receiptConfirmSchema = z.object({
@@ -59,3 +60,15 @@ export type ReceiptGetByIdInput = z.infer<typeof receiptGetByIdSchema>;
 export type CreateFromSkippedInput = z.infer<typeof createFromSkippedSchema>;
 export type RequestItemCreationInput = z.infer<typeof requestItemCreationSchema>;
 export type ReceiptListSkippedInput = z.infer<typeof receiptListSkippedSchema>;
+
+export const receiptSearchSchema = z.object({
+  locationId: z.string().uuid(),
+  vendorId: z.string().uuid().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  status: z.enum(["pending", "extracted", "confirmed", "processed", "failed"]).optional(),
+  search: z.string().optional(),
+  cursor: z.string().uuid().optional(),
+  limit: z.number().int().min(1).max(50).default(20),
+});
+export type ReceiptSearchInput = z.infer<typeof receiptSearchSchema>;
