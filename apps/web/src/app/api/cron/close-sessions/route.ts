@@ -4,6 +4,10 @@ import { AlertService } from "@barstock/api/src/services/alert.service";
 import { SessionService } from "@barstock/api/src/services/session.service";
 import { SettingsService } from "@barstock/api/src/services/settings.service";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE = { headers: { "Cache-Control": "no-store" } };
+
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
@@ -52,7 +56,7 @@ export async function GET(req: Request) {
   }
 
   if (matchingLocationIds.length === 0) {
-    return NextResponse.json({ closed: 0, locations: [] });
+    return NextResponse.json({ closed: 0, locations: [] }, NO_STORE);
   }
 
   // Find open sessions at matching locations
@@ -68,7 +72,7 @@ export async function GET(req: Request) {
   });
 
   if (openSessions.length === 0) {
-    return NextResponse.json({ closed: 0, locations: matchingLocationNames });
+    return NextResponse.json({ closed: 0, locations: matchingLocationNames }, NO_STORE);
   }
 
   // Close each session with the full variance flow
@@ -115,12 +119,15 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({
-    closed: closedCount,
-    adjustments: totalAdjustments,
-    locations: matchingLocationNames,
-    errors: errors.length > 0 ? errors : undefined,
-  });
+  return NextResponse.json(
+    {
+      closed: closedCount,
+      adjustments: totalAdjustments,
+      locations: matchingLocationNames,
+      errors: errors.length > 0 ? errors : undefined,
+    },
+    NO_STORE,
+  );
 }
 
 function getTimeInTimezone(date: Date, timezone: string): string {

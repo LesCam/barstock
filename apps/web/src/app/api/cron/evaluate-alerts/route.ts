@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@barstock/database";
 import { AlertService } from "@barstock/api/src/services/alert.service";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE = { headers: { "Cache-Control": "no-store" } };
+
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
@@ -47,9 +51,5 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({
-    evaluated,
-    sent: totalSent,
-    errors,
-  });
+  return NextResponse.json({ evaluated, sent: totalSent, errors }, NO_STORE);
 }

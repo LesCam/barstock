@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@barstock/database";
 import { BenchmarkService } from "@barstock/api/src/services/benchmark.service";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE = { headers: { "Cache-Control": "no-store" } };
+
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
@@ -20,10 +24,10 @@ export async function GET(req: Request) {
     const benchmarkSvc = new BenchmarkService(prisma);
     const result = await benchmarkSvc.captureAllSnapshots();
 
-    return NextResponse.json({
-      businessCount: result.businessCount,
-      locationCount: result.locationCount,
-    });
+    return NextResponse.json(
+      { businessCount: result.businessCount, locationCount: result.locationCount },
+      NO_STORE,
+    );
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

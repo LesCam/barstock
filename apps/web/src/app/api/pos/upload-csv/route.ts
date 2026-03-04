@@ -4,6 +4,9 @@ import { CSVImportService } from "@barstock/api/src/services/csv-import.service"
 import { prisma } from "@barstock/database";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE = { headers: { "Cache-Control": "no-store" } };
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 const csvUploadSchema = z.object({
@@ -87,14 +90,17 @@ export async function POST(req: NextRequest) {
       businessDate
     );
 
-    return NextResponse.json({
-      headers: result.headers,
-      totalRows: result.totalRows,
-      parsedCount: result.rows.length,
-      errorCount: result.errors.length,
-      errors: result.errors.slice(0, 50),
-      rows: result.rows,
-    });
+    return NextResponse.json(
+      {
+        headers: result.headers,
+        totalRows: result.totalRows,
+        parsedCount: result.rows.length,
+        errorCount: result.errors.length,
+        errors: result.errors.slice(0, 50),
+        rows: result.rows,
+      },
+      NO_STORE,
+    );
   } catch (err: any) {
     console.error("CSV upload error:", err?.message ?? "unknown");
     return NextResponse.json(

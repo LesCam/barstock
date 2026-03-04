@@ -33,6 +33,9 @@ const handler = async (req: Request) => {
     req,
     router: appRouter,
     createContext: () => createContext({ headers: req.headers, user }),
+    responseMeta() {
+      return { headers: { "cache-control": "no-store" } };
+    },
     onError({ error, path, input, ctx }) {
       logError({
         requestId: ctx?.requestId ?? "unknown",
