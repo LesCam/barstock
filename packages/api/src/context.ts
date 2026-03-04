@@ -10,6 +10,8 @@ export interface UserPayload {
   businessId: string;
   businessName?: string;
   highestRole: Role;
+  tokenVersion: number;
+  authAt: number;
 }
 
 export interface Context {

@@ -86,7 +86,7 @@ export function createAccessToken(payload: UserPayload): string {
 
 export function createRefreshToken(payload: UserPayload): string {
   return jwt.sign(
-    { userId: payload.userId, type: "refresh" },
+    { userId: payload.userId, authAt: payload.authAt, type: "refresh" },
     SECRET_KEY,
     {
       algorithm: ALGORITHM,
@@ -178,5 +178,26 @@ export async function buildUserPayload(
     businessId: user.businessId,
     businessName: user.business.name,
     highestRole,
+    tokenVersion: user.tokenVersion,
+    authAt: Date.now(),
   };
+}
+
+export function createMfaChallengeToken(userId: string): string {
+  return jwt.sign({ userId, type: "mfa_challenge" }, SECRET_KEY, {
+    algorithm: ALGORITHM,
+    expiresIn: "5m",
+  });
+}
+
+export async function invalidateUserSessions(
+  prisma: ExtendedPrismaClient,
+  userId: string
+): Promise<number> {
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { tokenVersion: { increment: 1 } },
+    select: { tokenVersion: true },
+  });
+  return updated.tokenVersion;
 }

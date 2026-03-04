@@ -22,6 +22,8 @@ const handler = async (req: Request) => {
       businessId: u.businessId,
       businessName: u.businessName,
       highestRole: u.highestRole,
+      tokenVersion: u.tokenVersion ?? 0,
+      authAt: u.authAt ?? 0,
     };
   }
 

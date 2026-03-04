@@ -27,6 +27,15 @@ const isAuthed = middleware(async ({ ctx, next }) => {
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
+
+  const dbUser = await ctx.prisma.user.findUnique({
+    where: { id: ctx.user.userId },
+    select: { tokenVersion: true, isActive: true },
+  });
+  if (!dbUser || !dbUser.isActive || dbUser.tokenVersion !== ctx.user.tokenVersion) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Session invalidated" });
+  }
+
   return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
@@ -191,6 +200,20 @@ export function forceBusinessId() {
       }
     }
 
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  });
+}
+
+/** Require recent authentication (for sensitive actions) */
+export function requireRecentAuth(maxAgeMs = 15 * 60 * 1000) {
+  return middleware(async ({ ctx, next }) => {
+    if (!ctx.user) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+    const authAt = ctx.user.authAt;
+    if (!authAt || Date.now() - authAt > maxAgeMs) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "RE_AUTH_REQUIRED" });
+    }
     return next({ ctx: { ...ctx, user: ctx.user } });
   });
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { trpcVanilla } from "@/lib/trpc";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,6 +13,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+
+  // MFA state
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -25,18 +30,51 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      // Step 1: Call tRPC login to check for MFA
+      const result = await trpcVanilla.auth.login.mutate({ email, password });
 
-    setLoading(false);
+      if (result.requiresMfa && result.mfaToken) {
+        // MFA required — show code input
+        setMfaToken(result.mfaToken);
+        setLoading(false);
+        return;
+      }
 
-    if (res?.error) {
-      setError("Invalid email or password");
-    } else {
-      router.push("/");
+      // No MFA — sign in via NextAuth to set session cookie
+      const res = await signIn("credentials", { email, password, redirect: false });
+      setLoading(false);
+      if (res?.error) {
+        setError("Invalid email or password");
+      } else {
+        router.push("/");
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setError(err.message === "Invalid credentials" ? "Invalid email or password" : err.message || "Login failed");
+    }
+  }
+
+  async function handleMfaSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const result = await trpcVanilla.auth.mfaLogin.mutate({ mfaToken: mfaToken!, code: mfaCode });
+
+      // MFA verified — sign in via NextAuth using preAuthedUserId
+      const res = await signIn("credentials", { preAuthedUserId: result.userId, redirect: false });
+      setLoading(false);
+      if (res?.error) {
+        setError("Session creation failed");
+      } else {
+        router.push("/");
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setMfaCode("");
+      setError(err.message || "Invalid verification code");
     }
   }
 
@@ -87,22 +125,23 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Email */}
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-              <svg className="h-4 w-4" style={{ color: "var(--text-muted)" }} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-              </svg>
-            </div>
+        {mfaToken ? (
+          /* MFA Code Input */
+          <form onSubmit={handleMfaSubmit} className="space-y-3">
+            <p className="text-sm text-center" style={{ color: "var(--text-muted)" }}>
+              Enter the 6-digit code from your authenticator app.
+            </p>
             <input
-              type="email"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email Address"
-              autoComplete="email"
-              className="block w-full border bg-white/5 py-2.5 pl-10 pr-3 text-sm placeholder-gray-500 focus:outline-none focus:ring-1"
+              autoFocus
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="000000"
+              className="block w-full border bg-white/5 py-2.5 text-center text-lg tracking-[0.3em] font-mono placeholder-gray-500 focus:outline-none focus:ring-1"
               style={{
                 borderRadius: "var(--radius-input)",
                 borderColor: "var(--border-subtle)",
@@ -110,54 +149,103 @@ export default function LoginPage() {
                 "--tw-ring-color": "var(--gold)",
               } as React.CSSProperties}
             />
-          </div>
-
-          {/* Password */}
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-              <svg className="h-4 w-4" style={{ color: "var(--text-muted)" }} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-              </svg>
-            </div>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              className="block w-full border bg-white/5 py-2.5 pl-10 pr-28 text-sm placeholder-gray-500 focus:outline-none focus:ring-1"
+            <button
+              type="submit"
+              disabled={loading || mfaCode.length !== 6}
+              className="w-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50 transition-colors"
               style={{
-                borderRadius: "var(--radius-input)",
-                borderColor: "var(--border-subtle)",
-                color: "var(--text-primary)",
-                "--tw-ring-color": "var(--gold)",
-              } as React.CSSProperties}
-            />
-            <Link
-              href="/forgot-password"
-              className="absolute inset-y-0 right-0 flex items-center pr-3 text-xs transition-opacity hover:opacity-80"
-              style={{ color: "var(--gold)" }}
+                borderRadius: "var(--radius-button)",
+                backgroundColor: "var(--gold)",
+                color: "var(--navy-bg)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--gold-dark)")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "var(--gold)")}
             >
-              Forgot password?
-            </Link>
-          </div>
+              {loading ? "Verifying..." : "Verify"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMfaToken(null); setMfaCode(""); setError(""); }}
+              className="w-full text-xs transition-opacity hover:opacity-80"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Back to login
+            </button>
+          </form>
+        ) : (
+          /* Normal Login Form */
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {/* Email */}
+            <div className="relative">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                <svg className="h-4 w-4" style={{ color: "var(--text-muted)" }} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                </svg>
+              </div>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email Address"
+                autoComplete="email"
+                className="block w-full border bg-white/5 py-2.5 pl-10 pr-3 text-sm placeholder-gray-500 focus:outline-none focus:ring-1"
+                style={{
+                  borderRadius: "var(--radius-input)",
+                  borderColor: "var(--border-subtle)",
+                  color: "var(--text-primary)",
+                  "--tw-ring-color": "var(--gold)",
+                } as React.CSSProperties}
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50 transition-colors"
-            style={{
-              borderRadius: "var(--radius-button)",
-              backgroundColor: "var(--gold)",
-              color: "var(--navy-bg)",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--gold-dark)")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "var(--gold)")}
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
+            {/* Password */}
+            <div className="relative">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                <svg className="h-4 w-4" style={{ color: "var(--text-muted)" }} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+              </div>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                className="block w-full border bg-white/5 py-2.5 pl-10 pr-28 text-sm placeholder-gray-500 focus:outline-none focus:ring-1"
+                style={{
+                  borderRadius: "var(--radius-input)",
+                  borderColor: "var(--border-subtle)",
+                  color: "var(--text-primary)",
+                  "--tw-ring-color": "var(--gold)",
+                } as React.CSSProperties}
+              />
+              <Link
+                href="/forgot-password"
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-xs transition-opacity hover:opacity-80"
+                style={{ color: "var(--gold)" }}
+              >
+                Forgot password?
+              </Link>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50 transition-colors"
+              style={{
+                borderRadius: "var(--radius-button)",
+                backgroundColor: "var(--gold)",
+                color: "var(--navy-bg)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--gold-dark)")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "var(--gold)")}
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+        )}
 
         {/* Badges */}
         <div className="mt-5 flex items-center justify-center gap-3">

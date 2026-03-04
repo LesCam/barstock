@@ -229,40 +229,66 @@ function EmailLogin({
   const [error, setError] = useState<string | null>(null);
   const { signIn } = useAuth();
 
+  // MFA state
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaLoading, setMfaLoading] = useState(false);
+
+  async function storeBusinessConfig() {
+    const userStr = await AsyncStorage.getItem("authUser");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      let logoUrl: string | null = null;
+      let slug: string | null = null;
+      try {
+        const biz = await trpcVanilla.businesses.getById.query({ businessId: user.businessId });
+        logoUrl = biz.logoUrl ?? null;
+        slug = biz.slug ?? null;
+      } catch {}
+      AsyncStorage.setItem(
+        BUSINESS_CONFIG_KEY,
+        JSON.stringify({
+          id: user.businessId,
+          name: user.businessName || "Your Business",
+          slug,
+          logoUrl,
+        })
+      );
+    }
+  }
+
   const emailLoginMutation = trpc.auth.login.useMutation({
     async onSuccess(data) {
+      if (data.requiresMfa && data.mfaToken) {
+        setMfaToken(data.mfaToken);
+        return;
+      }
+
       try {
-        // signIn sets the auth token and fetches user profile
-        await signIn(data.accessToken, data.refreshToken);
-        // Store business config for future PIN logins BEFORE navigation
-        const userStr = await AsyncStorage.getItem("authUser");
-        if (userStr) {
-          const user = JSON.parse(userStr);
-          // Fetch business details (logo, slug) for PIN screen
-          let logoUrl: string | null = null;
-          let slug: string | null = null;
-          try {
-            const biz = await trpcVanilla.businesses.getById.query({ businessId: user.businessId });
-            logoUrl = biz.logoUrl ?? null;
-            slug = biz.slug ?? null;
-          } catch {}
-          // Fire and forget — don't block navigation
-          AsyncStorage.setItem(
-            BUSINESS_CONFIG_KEY,
-            JSON.stringify({
-              id: user.businessId,
-              name: user.businessName || "Your Business",
-              slug,
-              logoUrl,
-            })
-          );
-        }
+        await signIn(data.accessToken!, data.refreshToken!);
+        await storeBusinessConfig();
       } catch (e: any) {
         setError(e.message ?? "Could not fetch user profile");
       }
     },
     onError(err) {
       setError(err.message);
+    },
+  });
+
+  const mfaLoginMutation = trpc.auth.mfaLogin.useMutation({
+    async onSuccess(data) {
+      try {
+        await signIn(data.accessToken!, data.refreshToken!);
+        await storeBusinessConfig();
+      } catch (e: any) {
+        setError(e.message ?? "Could not fetch user profile");
+        setMfaCode("");
+      }
+    },
+    onError(err) {
+      setError(err.message || "Invalid verification code");
+      setMfaCode("");
     },
   });
 
@@ -282,49 +308,94 @@ function EmailLogin({
             keyboardShouldPersistTaps="handled"
           >
             <Text style={styles.emailTitle}>Barstock</Text>
-            <Text style={styles.subtitle}>Sign in with your email</Text>
 
-            <TextInput
-              style={styles.emailInput}
-              placeholder="Email"
-              placeholderTextColor="rgba(234,240,255,0.4)"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-
-            <TextInput
-              style={styles.emailInput}
-              placeholder="Password"
-              placeholderTextColor="rgba(234,240,255,0.4)"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-
-            {error && <Text style={styles.errorText}>{error}</Text>}
-
-            <TouchableOpacity
-              style={[
-                styles.signInBtn,
-                (!email || !password || emailLoginMutation.isPending) &&
-                  styles.signInBtnDisabled,
-              ]}
-              onPress={() => emailLoginMutation.mutate({ email, password })}
-              disabled={!email || !password || emailLoginMutation.isPending}
-            >
-              <Text style={styles.signInText}>
-                {emailLoginMutation.isPending ? "Signing in..." : "Sign In"}
-              </Text>
-            </TouchableOpacity>
-
-            {hasBusiness && (
-              <TouchableOpacity onPress={onSwitchToPin} style={styles.switchLink}>
-                <Text style={styles.switchText}>
-                  Staff? <Text style={styles.switchHighlight}>Use PIN</Text>
+            {mfaToken ? (
+              <>
+                <Text style={styles.subtitle}>Enter verification code</Text>
+                <Text style={styles.mfaHint}>
+                  Enter the 6-digit code from your authenticator app.
                 </Text>
-              </TouchableOpacity>
+
+                <TextInput
+                  style={[styles.emailInput, styles.mfaInput]}
+                  placeholder="000000"
+                  placeholderTextColor="rgba(234,240,255,0.4)"
+                  value={mfaCode}
+                  onChangeText={(t) => setMfaCode(t.replace(/\D/g, ""))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                />
+
+                {error && <Text style={styles.errorText}>{error}</Text>}
+
+                <TouchableOpacity
+                  style={[
+                    styles.signInBtn,
+                    (mfaCode.length !== 6 || mfaLoginMutation.isPending) && styles.signInBtnDisabled,
+                  ]}
+                  onPress={() => mfaLoginMutation.mutate({ mfaToken, code: mfaCode })}
+                  disabled={mfaCode.length !== 6 || mfaLoginMutation.isPending}
+                >
+                  <Text style={styles.signInText}>
+                    {mfaLoginMutation.isPending ? "Verifying..." : "Verify"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => { setMfaToken(null); setMfaCode(""); setError(null); }}
+                  style={styles.switchLink}
+                >
+                  <Text style={styles.switchText}>Back to login</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.subtitle}>Sign in with your email</Text>
+
+                <TextInput
+                  style={styles.emailInput}
+                  placeholder="Email"
+                  placeholderTextColor="rgba(234,240,255,0.4)"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+
+                <TextInput
+                  style={styles.emailInput}
+                  placeholder="Password"
+                  placeholderTextColor="rgba(234,240,255,0.4)"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+
+                {error && <Text style={styles.errorText}>{error}</Text>}
+
+                <TouchableOpacity
+                  style={[
+                    styles.signInBtn,
+                    (!email || !password || emailLoginMutation.isPending) &&
+                      styles.signInBtnDisabled,
+                  ]}
+                  onPress={() => emailLoginMutation.mutate({ email, password })}
+                  disabled={!email || !password || emailLoginMutation.isPending}
+                >
+                  <Text style={styles.signInText}>
+                    {emailLoginMutation.isPending ? "Signing in..." : "Sign In"}
+                  </Text>
+                </TouchableOpacity>
+
+                {hasBusiness && (
+                  <TouchableOpacity onPress={onSwitchToPin} style={styles.switchLink}>
+                    <Text style={styles.switchText}>
+                      Staff? <Text style={styles.switchHighlight}>Use PIN</Text>
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
 
             <Text style={[styles.poweredBy, { marginTop: 32 }]}>
@@ -570,6 +641,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#EAF0FF",
     marginBottom: 12,
+  },
+  mfaHint: {
+    fontSize: 13,
+    color: "rgba(234, 240, 255, 0.5)",
+    textAlign: "center",
+    marginBottom: 16,
+    maxWidth: 280,
+  },
+  mfaInput: {
+    textAlign: "center",
+    fontSize: 24,
+    letterSpacing: 8,
+    fontVariant: ["tabular-nums"],
   },
   signInBtn: {
     width: "100%",

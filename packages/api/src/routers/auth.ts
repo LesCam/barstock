@@ -1,5 +1,4 @@
-import { router, publicProcedure, protectedProcedure } from "../trpc";
-import { requireRole } from "../trpc";
+import { router, publicProcedure, protectedProcedure, requireRole, requireRecentAuth } from "../trpc";
 import { loginSchema, refreshTokenSchema, userCreateSchema, userUpdateSchema, userLocationCreateSchema, forgotPasswordSchema, resetPasswordSchema, staffInviteCreateSchema, acceptInviteSchema } from "@barstock/validators";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -13,15 +12,19 @@ import {
   findUserByPin,
   createAccessToken,
   createRefreshToken,
+  createMfaChallengeToken,
   decodeToken,
   buildUserPayload,
   deriveDefaultPermissions,
+  invalidateUserSessions,
 } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { AlertService } from "../services/alert.service";
 import { EmailService } from "../services/email.service";
 import { SettingsService } from "../services/settings.service";
 import { SubscriptionService } from "../services/subscription.service";
+import { generateSecret, generateURI, verifySync as otpVerifySync } from "otplib";
+import { encrypt, decrypt } from "../lib/crypto";
 
 export const authRouter = router({
   login: publicProcedure.input(loginSchema).mutation(async ({ ctx, input }) => {
@@ -77,6 +80,27 @@ export const authRouter = router({
       throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
     }
 
+    // Check if MFA is required
+    if (user.mfaEnabled) {
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: user.businessId,
+        actorUserId: user.id,
+        actionType: "auth.mfa_challenge",
+        objectType: "user",
+        objectId: user.id,
+      });
+
+      return {
+        requiresMfa: true as const,
+        mfaToken: createMfaChallengeToken(user.id),
+        accessToken: null,
+        refreshToken: null,
+        tokenType: "bearer",
+        expiresIn: 0,
+      };
+    }
+
     const payload = await buildUserPayload(ctx.prisma, user.id);
     const accessToken = createAccessToken(payload);
     const refreshToken = createRefreshToken(payload);
@@ -92,6 +116,8 @@ export const authRouter = router({
     });
 
     return {
+      requiresMfa: false as const,
+      mfaToken: null,
       accessToken,
       refreshToken,
       tokenType: "bearer",
@@ -179,6 +205,10 @@ export const authRouter = router({
       }
 
       const payload = await buildUserPayload(ctx.prisma, decoded.userId as string);
+      // Preserve authAt from the refresh token so it reflects original login time
+      if (decoded.authAt) {
+        payload.authAt = decoded.authAt as number;
+      }
       const accessToken = createAccessToken(payload);
 
       return { accessToken, tokenType: "bearer", expiresIn: 1800 };
@@ -203,6 +233,7 @@ export const authRouter = router({
 
   createUser: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(userCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const subService = new SubscriptionService(ctx.prisma);
@@ -294,6 +325,7 @@ export const authRouter = router({
 
   updateUser: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ userId: z.string().uuid() }).merge(userUpdateSchema))
     .mutation(async ({ ctx, input }) => {
       const { userId, ...data } = input;
@@ -336,6 +368,20 @@ export const authRouter = router({
         objectId: userId,
         metadata: metaFields,
       });
+
+      // Invalidate sessions on sensitive changes
+      if (data.password || data.pin !== undefined || data.role || data.isActive === false) {
+        await invalidateUserSessions(ctx.prisma, userId);
+        const reason = data.password ? "password_change" : data.pin !== undefined ? "pin_change" : data.role ? "role_change" : "deactivation";
+        await audit.log({
+          businessId: ctx.user.businessId,
+          actorUserId: ctx.user.userId,
+          actionType: "auth.sessions_invalidated",
+          objectType: "user",
+          objectId: userId,
+          metadata: { reason },
+        });
+      }
 
       // Alert admins when a staff member is deactivated
       if (data.isActive === false && currentUser.isActive === true) {
@@ -381,6 +427,7 @@ export const authRouter = router({
 
   grantLocationAccess: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(userLocationCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.prisma.userLocation.create({ data: input });
@@ -413,6 +460,7 @@ export const authRouter = router({
 
   revokeLocationAccess: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ userId: z.string().uuid(), locationId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.prisma.userLocation.delete({
@@ -558,6 +606,8 @@ export const authRouter = router({
         }),
       ]);
 
+      await invalidateUserSessions(ctx.prisma, resetToken.userId);
+
       const audit = new AuditService(ctx.prisma);
       await audit.log({
         businessId: resetUser.businessId,
@@ -567,12 +617,21 @@ export const authRouter = router({
         objectId: resetToken.userId,
         metadata: { email: resetUser.email },
       });
+      await audit.log({
+        businessId: resetUser.businessId,
+        actorUserId: resetToken.userId,
+        actionType: "auth.sessions_invalidated",
+        objectType: "user",
+        objectId: resetToken.userId,
+        metadata: { reason: "password_reset" },
+      });
 
       return { success: true };
     }),
 
   setUserPermission: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({
       userId: z.string().uuid(),
       locationId: z.string().uuid(),
@@ -671,6 +730,7 @@ export const authRouter = router({
 
   sendInvite: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(staffInviteCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const subService = new SubscriptionService(ctx.prisma);
@@ -993,5 +1053,185 @@ export const authRouter = router({
         tokenType: "bearer",
         expiresIn: 1800,
       };
+    }),
+
+  // ── MFA ──────────────────────────────────────────────────────
+
+  mfaLogin: publicProcedure
+    .input(z.object({ mfaToken: z.string(), code: z.string().length(6) }))
+    .mutation(async ({ ctx, input }) => {
+      let decoded: Record<string, unknown>;
+      try {
+        decoded = decodeToken(input.mfaToken);
+      } catch {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid or expired MFA token" });
+      }
+
+      if (decoded.type !== "mfa_challenge") {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid token type" });
+      }
+
+      const userId = decoded.userId as string;
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, mfaSecret: true, mfaEnabled: true, businessId: true, isActive: true },
+      });
+
+      if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
+      }
+
+      const secret = decrypt(user.mfaSecret);
+      const valid = otpVerifySync({ token: input.code, secret }).valid;
+
+      if (!valid) {
+        const audit = new AuditService(ctx.prisma);
+        await audit.log({
+          businessId: user.businessId,
+          actorUserId: user.id,
+          actionType: "auth.mfa_failed",
+          objectType: "user",
+          objectId: user.id,
+        });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid verification code" });
+      }
+
+      const payload = await buildUserPayload(ctx.prisma, user.id);
+      const accessToken = createAccessToken(payload);
+      const refreshToken = createRefreshToken(payload);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: user.businessId,
+        actorUserId: user.id,
+        actionType: "auth.login",
+        objectType: "user",
+        objectId: user.id,
+        metadata: { method: "password+mfa" },
+      });
+
+      return {
+        requiresMfa: false as const,
+        mfaToken: null,
+        accessToken,
+        refreshToken,
+        tokenType: "bearer",
+        expiresIn: 1800,
+        userId: user.id,
+      };
+    }),
+
+  mfaSetup: protectedProcedure
+    .use(requireRole("business_admin"))
+    .mutation(async ({ ctx }) => {
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: ctx.user.userId },
+        select: { mfaEnabled: true, email: true },
+      });
+
+      if (user.mfaEnabled) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "MFA is already enabled" });
+      }
+
+      const secret = generateSecret();
+      const otpauthUri = generateURI({ secret, issuer: "Barstock", label: user.email });
+
+      await ctx.prisma.user.update({
+        where: { id: ctx.user.userId },
+        data: { mfaSecret: encrypt(secret) },
+      });
+
+      return { otpauthUri, secret };
+    }),
+
+  mfaVerify: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ code: z.string().length(6) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: ctx.user.userId },
+        select: { mfaSecret: true, mfaEnabled: true, businessId: true },
+      });
+
+      if (user.mfaEnabled) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "MFA is already enabled" });
+      }
+      if (!user.mfaSecret) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Run MFA setup first" });
+      }
+
+      const secret = decrypt(user.mfaSecret);
+      const valid = otpVerifySync({ token: input.code, secret }).valid;
+
+      if (!valid) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid verification code" });
+      }
+
+      await ctx.prisma.user.update({
+        where: { id: ctx.user.userId },
+        data: { mfaEnabled: true },
+      });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "auth.mfa_enabled",
+        objectType: "user",
+        objectId: ctx.user.userId,
+      });
+
+      return { success: true };
+    }),
+
+  mfaDisable: protectedProcedure
+    .use(requireRole("business_admin"))
+    .input(z.object({ password: z.string(), code: z.string().length(6) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: ctx.user.userId },
+        select: { passwordHash: true, mfaSecret: true, mfaEnabled: true, businessId: true },
+      });
+
+      if (!user.mfaEnabled || !user.mfaSecret) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "MFA is not enabled" });
+      }
+
+      const passwordValid = await verifyPassword(input.password, user.passwordHash);
+      if (!passwordValid) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid password" });
+      }
+
+      const secret = decrypt(user.mfaSecret);
+      const codeValid = otpVerifySync({ token: input.code, secret }).valid;
+      if (!codeValid) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid verification code" });
+      }
+
+      await ctx.prisma.user.update({
+        where: { id: ctx.user.userId },
+        data: { mfaEnabled: false, mfaSecret: null },
+      });
+
+      await invalidateUserSessions(ctx.prisma, ctx.user.userId);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "auth.mfa_disabled",
+        objectType: "user",
+        objectId: ctx.user.userId,
+      });
+      await audit.log({
+        businessId: user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "auth.sessions_invalidated",
+        objectType: "user",
+        objectId: ctx.user.userId,
+        metadata: { reason: "mfa_disabled" },
+      });
+
+      return { success: true };
     }),
 });

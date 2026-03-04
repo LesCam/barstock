@@ -1,5 +1,5 @@
 import { createTRPCReact } from "@trpc/react-query";
-import { httpBatchLink } from "@trpc/client";
+import { createTRPCClient as createVanillaClient, httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 import type { AppRouter } from "@barstock/api";
 
@@ -22,3 +22,13 @@ export function createTRPCClient(headers?: () => Record<string, string>) {
     ],
   });
 }
+
+/** Vanilla (non-React) tRPC client for use outside React component tree (e.g. login page) */
+export const trpcVanilla = createVanillaClient<AppRouter>({
+  links: [
+    httpBatchLink({
+      url: `${getBaseUrl()}/api/trpc`,
+      transformer: superjson,
+    }),
+  ],
+});

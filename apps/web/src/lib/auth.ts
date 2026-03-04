@@ -18,8 +18,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        preAuthedUserId: { label: "Pre-authenticated User ID", type: "text" },
       },
       async authorize(credentials) {
+        // Post-MFA flow: user already authenticated via tRPC mfaLogin
+        if (credentials?.preAuthedUserId) {
+          const userId = credentials.preAuthedUserId as string;
+          const user = await prisma.user.findUnique({ where: { id: userId } });
+          if (!user || !user.isActive) return null;
+          const payload = await buildUserPayload(prisma, userId);
+          return {
+            id: user.id,
+            email: user.email,
+            roles: payload.roles,
+            permissions: payload.permissions,
+            locationIds: payload.locationIds,
+            businessId: payload.businessId,
+            businessName: payload.businessName,
+            highestRole: payload.highestRole,
+            tokenVersion: payload.tokenVersion,
+          } as any;
+        }
+
         if (!credentials?.email || !credentials?.password) return null;
 
         const user = await prisma.user.findUnique({
@@ -45,11 +65,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           businessId: payload.businessId,
           businessName: payload.businessName,
           highestRole: payload.highestRole,
+          tokenVersion: payload.tokenVersion,
         } as any;
       },
     }),
   ],
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
   cookies: {
     sessionToken: {
       name: isProd ? "__Host-authjs.session-token" : "authjs.session-token",
@@ -89,6 +110,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.businessId = (user as any).businessId;
         token.businessName = (user as any).businessName;
         token.highestRole = (user as any).highestRole;
+        token.tokenVersion = (user as any).tokenVersion ?? 0;
+        token.authAt = Date.now();
       }
       return token;
     },
@@ -102,6 +125,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         businessId: token.businessId,
         businessName: token.businessName,
         highestRole: token.highestRole,
+        tokenVersion: token.tokenVersion,
+        authAt: token.authAt,
       };
       return session;
     },

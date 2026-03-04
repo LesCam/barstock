@@ -1,4 +1,4 @@
-import { router, protectedProcedure, checkLocationRole } from "../trpc";
+import { router, protectedProcedure, checkLocationRole, requireRecentAuth } from "../trpc";
 import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema, sessionJoinSchema, sessionHeartbeatSchema, claimSubAreaSchema, releaseSubAreaSchema, sessionPlanSchema, respondAssignmentSchema, listAssignmentsSchema, flagForVerificationSchema, submitVerificationSchema, resolveVerificationSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
 import { SettingsService } from "../services/settings.service";
@@ -408,6 +408,7 @@ export const sessionsRouter = router({
     ),
 
   close: protectedProcedure
+    .use(requireRecentAuth())
     .input(z.object({ sessionId: z.string().uuid() }).merge(sessionCloseSchema))
     .mutation(async ({ ctx, input }) => {
       const svc = new SessionService(ctx.prisma);
