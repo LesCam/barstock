@@ -1,4 +1,5 @@
-import { router, protectedProcedure, requireRole, forceBusinessId } from "../trpc";
+import { router, protectedProcedure, requireRole, forceBusinessId, requireBusinessAccess, requireLocationAccess, isPlatformAdmin } from "../trpc";
+import { TRPCError } from "@trpc/server";
 import { inventoryItemCreateSchema, inventoryItemUpdateSchema, inventoryItemBulkCreateSchema, priceHistoryCreateSchema, onHandQuerySchema, setItemVendorsSchema } from "@barstock/validators";
 import { InventoryService } from "../services/inventory.service";
 import { AuditService } from "../services/audit.service";
@@ -132,8 +133,8 @@ export const inventoryRouter = router({
 
   getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .query(({ ctx, input }) =>
-      ctx.prisma.inventoryItem.findUniqueOrThrow({
+    .query(async ({ ctx, input }) => {
+      const item = await ctx.prisma.inventoryItem.findUniqueOrThrow({
         where: { id: input.id },
         include: {
           category: { select: { id: true, name: true, countingMethod: true, defaultDensity: true } },
@@ -142,8 +143,12 @@ export const inventoryRouter = router({
           priceHistory: { orderBy: { effectiveFromTs: "desc" }, take: 5 },
           bottleTemplates: { where: { enabled: true }, take: 1 },
         },
-      })
-    ),
+      });
+      if (!isPlatformAdmin(ctx.user) && !ctx.user.locationIds.includes(item.locationId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
+      return item;
+    }),
 
   update: protectedProcedure
     .input(z.object({ id: z.string().uuid() }).merge(inventoryItemUpdateSchema))
@@ -206,6 +211,7 @@ export const inventoryRouter = router({
 
   kegSizesForItem: protectedProcedure
     .use(forceBusinessId())
+    .use(requireBusinessAccess())
     .input(z.object({ inventoryItemId: z.string().uuid(), businessId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       // Get keg sizes used by this item's keg instances
@@ -230,6 +236,7 @@ export const inventoryRouter = router({
     }),
 
   getByBarcode: protectedProcedure
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid(), barcode: z.string() }))
     .query(({ ctx, input }) =>
       ctx.prisma.inventoryItem.findFirst({

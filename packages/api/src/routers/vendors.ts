@@ -1,4 +1,5 @@
-import { router, protectedProcedure, requireBusinessAccess, requireRole, forceBusinessId } from "../trpc";
+import { router, protectedProcedure, requireBusinessAccess, requireRole, forceBusinessId, isPlatformAdmin } from "../trpc";
+import { TRPCError } from "@trpc/server";
 import { vendorCreateSchema, vendorListSchema, vendorGetByIdSchema, vendorUpdateSchema, vendorOrdererSchema } from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
 import { z } from "zod";
@@ -43,15 +44,19 @@ export const vendorsRouter = router({
 
   getById: protectedProcedure
     .input(vendorGetByIdSchema)
-    .query(({ ctx, input }) =>
-      ctx.prisma.vendor.findUniqueOrThrow({
+    .query(async ({ ctx, input }) => {
+      const vendor = await ctx.prisma.vendor.findUniqueOrThrow({
         where: { id: input.id },
         include: {
           _count: { select: { itemVendors: true } },
           vendorOrderers: { select: { userId: true } },
         },
-      })
-    ),
+      });
+      if (!isPlatformAdmin(ctx.user) && vendor.businessId !== ctx.user.businessId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
+      return vendor;
+    }),
 
   update: protectedProcedure
     .use(requireRole("manager"))

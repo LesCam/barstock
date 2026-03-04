@@ -1,0 +1,124 @@
+/**
+ * Sliding-window rate limiter with a pluggable store interface.
+ *
+ * Default: in-memory Map (single-process, dev/MVP).
+ * To swap to Redis/Upstash, implement RateLimitStore and pass it to createRateLimiter().
+ */
+
+// ─── Store Interface ─────────────────────────────────────────────────────────
+
+export interface RateLimitStore {
+  /** Increment the counter for `key`, return the current count within the window. */
+  increment(key: string, windowMs: number): Promise<{ count: number; resetMs: number }>;
+}
+
+// ─── In-Memory Store (default) ───────────────────────────────────────────────
+
+interface MemEntry { timestamps: number[] }
+
+class InMemoryStore implements RateLimitStore {
+  private data = new Map<string, MemEntry>();
+
+  constructor() {
+    // Periodic cleanup every 60s to prevent unbounded growth
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of this.data) {
+        entry.timestamps = entry.timestamps.filter((t) => now - t < 300_000);
+        if (entry.timestamps.length === 0) this.data.delete(key);
+      }
+    }, 60_000).unref?.();
+  }
+
+  async increment(key: string, windowMs: number): Promise<{ count: number; resetMs: number }> {
+    const now = Date.now();
+    let entry = this.data.get(key);
+    if (!entry) {
+      entry = { timestamps: [] };
+      this.data.set(key, entry);
+    }
+    entry.timestamps = entry.timestamps.filter((t) => now - t < windowMs);
+    entry.timestamps.push(now);
+    const resetMs = entry.timestamps.length > 0
+      ? windowMs - (now - entry.timestamps[0])
+      : windowMs;
+    return { count: entry.timestamps.length, resetMs };
+  }
+}
+
+// ─── Limiter Factory ─────────────────────────────────────────────────────────
+
+interface RateLimiterOptions {
+  /** Max requests allowed in the window */
+  limit: number;
+  /** Window size in milliseconds */
+  windowMs: number;
+  /** Optional custom store (defaults to in-memory) */
+  store?: RateLimitStore;
+}
+
+const defaultStore = new InMemoryStore();
+
+export function createRateLimiter(options: RateLimiterOptions) {
+  const store = options.store ?? defaultStore;
+
+  return {
+    /**
+     * Check + increment. Returns { limited: false } or { limited: true, retryAfterMs }.
+     * Key should be a compound string, e.g. `ip:${ip}` or `ip:${ip}:user:${userId}`.
+     */
+    async check(key: string): Promise<{ limited: boolean; retryAfterMs?: number }> {
+      const { count, resetMs } = await store.increment(key, options.windowMs);
+      if (count > options.limit) {
+        return { limited: true, retryAfterMs: resetMs };
+      }
+      return { limited: false };
+    },
+  };
+}
+
+// ─── Pre-configured Limiters ─────────────────────────────────────────────────
+
+/** Login, magic link, callbacks: 10 per 15 min per key */
+export const authLimiter = createRateLimiter({
+  limit: 10,
+  windowMs: 15 * 60 * 1000,
+});
+
+/** PIN/passcode verification: 5 per 15 min per key */
+export const pinLimiter = createRateLimiter({
+  limit: 5,
+  windowMs: 15 * 60 * 1000,
+});
+
+/** Search, exports, reporting: 30 per minute per key */
+export const expensiveLimiter = createRateLimiter({
+  limit: 30,
+  windowMs: 60 * 1000,
+});
+
+// ─── Key Helpers ─────────────────────────────────────────────────────────────
+
+/** Extract client IP from request headers */
+export function getClientIp(request: Request): string {
+  return request.headers.get("x-forwarded-for")?.split(",")[0].trim()
+    ?? request.headers.get("x-real-ip")
+    ?? "unknown";
+}
+
+/** Build a compound rate-limit key: always includes IP, optionally includes userId */
+export function rateLimitKey(ip: string, userId?: string): string {
+  return userId ? `ip:${ip}:user:${userId}` : `ip:${ip}`;
+}
+
+/** Return a 429 Response with Retry-After header */
+export function rateLimitResponse(retryAfterMs: number): Response {
+  const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+  return new Response(JSON.stringify({ error: "Too Many Requests" }), {
+    status: 429,
+    headers: {
+      "Content-Type": "application/json",
+      "Retry-After": String(retryAfterSec),
+    },
+  });
+}

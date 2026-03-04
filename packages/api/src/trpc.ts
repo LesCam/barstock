@@ -72,8 +72,8 @@ export function requireBusinessAccess() {
 
     if (businessId && businessId !== ctx.user.businessId) {
       throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "No access to this business",
+        code: "NOT_FOUND",
+        message: "Resource not found",
       });
     }
 
@@ -98,8 +98,8 @@ export function requireLocationAccess() {
 
     if (locationId && !ctx.user.locationIds.includes(locationId)) {
       throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "No access to this location",
+        code: "NOT_FOUND",
+        message: "Resource not found",
       });
     }
 

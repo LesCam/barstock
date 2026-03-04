@@ -7,6 +7,10 @@ import crypto from "crypto";
 import {
   verifyPassword,
   hashPassword,
+  hashPin,
+  verifyPinHash,
+  isPinTaken,
+  findUserByPin,
   createAccessToken,
   createRefreshToken,
   decodeToken,
@@ -98,9 +102,10 @@ export const authRouter = router({
   loginWithPin: publicProcedure
     .input(z.object({ pin: z.string().length(4), businessId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const user = await ctx.prisma.user.findFirst({
-        where: { pin: input.pin, businessId: input.businessId, isActive: true },
-      });
+      const userId = await findUserByPin(ctx.prisma, input.businessId, input.pin);
+      const user = userId
+        ? await ctx.prisma.user.findUnique({ where: { id: userId } })
+        : null;
 
       if (!user) {
         const audit = new AuditService(ctx.prisma);
@@ -189,7 +194,7 @@ export const authRouter = router({
         select: { pin: true },
       });
 
-      if (!user?.pin || user.pin !== input.pin) {
+      if (!user?.pin || !(await verifyPinHash(input.pin, user.pin))) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Incorrect PIN" });
       }
 
@@ -204,14 +209,12 @@ export const authRouter = router({
       await subService.enforceUserLimit(input.businessId);
 
       if (input.pin) {
-        const existing = await ctx.prisma.user.findFirst({
-          where: { pin: input.pin, businessId: input.businessId, isActive: true },
-        });
-        if (existing) {
+        if (await isPinTaken(ctx.prisma, input.businessId, input.pin)) {
           throw new TRPCError({ code: "CONFLICT", message: "PIN already in use by another staff member" });
         }
       }
       const passwordHash = await hashPassword(input.password);
+      const pinHash = input.pin ? await hashPin(input.pin) : undefined;
       const user = await ctx.prisma.user.create({
         data: {
           email: input.email,
@@ -222,7 +225,7 @@ export const authRouter = router({
           firstName: input.firstName,
           lastName: input.lastName,
           phone: input.phone,
-          pin: input.pin,
+          pin: pinHash,
         },
       });
 
@@ -312,20 +315,19 @@ export const authRouter = router({
       if (data.phone !== undefined) updateData.phone = data.phone;
       if (data.pin !== undefined) {
         if (data.pin) {
-          const existing = await ctx.prisma.user.findFirst({
-            where: { pin: data.pin, businessId: ctx.user.businessId, isActive: true, id: { not: userId } },
-          });
-          if (existing) {
+          if (await isPinTaken(ctx.prisma, ctx.user.businessId, data.pin, userId)) {
             throw new TRPCError({ code: "CONFLICT", message: "PIN already in use by another staff member" });
           }
+          updateData.pin = await hashPin(data.pin);
+        } else {
+          updateData.pin = null;
         }
-        updateData.pin = data.pin;
       }
       const user = await ctx.prisma.user.update({ where: { id: userId }, data: updateData });
 
       const audit = new AuditService(ctx.prisma);
-      // Exclude password from metadata
-      const { password: _, ...metaFields } = data;
+      // Exclude password and pin from metadata
+      const { password: _, pin: _pin, ...metaFields } = data;
       await audit.log({
         businessId: ctx.user.businessId,
         actorUserId: ctx.user.userId,
@@ -520,7 +522,7 @@ export const authRouter = router({
 
       const resetUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${token}`;
       // Log that a reset was requested, but never log the token or URL
-      console.log(`[PASSWORD RESET] Reset requested for ${input.email}`);
+      console.log("[PASSWORD RESET] Reset token created");
 
       return { success: true };
     }),
@@ -910,10 +912,7 @@ export const authRouter = router({
       }
 
       // Check PIN unique within business
-      const pinUser = await ctx.prisma.user.findFirst({
-        where: { pin: input.pin, businessId: invite.businessId, isActive: true },
-      });
-      if (pinUser) {
+      if (input.pin && await isPinTaken(ctx.prisma, invite.businessId, input.pin)) {
         throw new TRPCError({ code: "CONFLICT", message: "This PIN is already in use. Please choose a different one." });
       }
 
@@ -935,7 +934,7 @@ export const authRouter = router({
             firstName: input.firstName ?? invite.firstName,
             lastName: input.lastName ?? invite.lastName,
             phone: invite.phone,
-            pin: input.pin,
+            pin: input.pin ? await hashPin(input.pin) : null,
           },
         });
 

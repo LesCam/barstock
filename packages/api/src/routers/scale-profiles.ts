@@ -74,7 +74,7 @@ export const scaleProfilesRouter = router({
       });
 
       if (profile.location.businessId !== ctx.user.businessId) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Not your business" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
       }
 
       return ctx.prisma.scaleProfile.update({
@@ -93,7 +93,7 @@ export const scaleProfilesRouter = router({
       });
 
       if (profile.location.businessId !== ctx.user.businessId) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Not your business" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
       }
 
       return ctx.prisma.scaleProfile.delete({

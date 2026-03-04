@@ -1,4 +1,5 @@
 import type { ExtendedPrismaClient } from "@barstock/database";
+import type { Context } from "../context";
 
 interface LogEntry {
   businessId: string;
@@ -7,6 +8,8 @@ interface LogEntry {
   objectType: string;
   objectId?: string;
   metadata?: Record<string, unknown>;
+  ip?: string;
+  userAgent?: string;
 }
 
 interface ListParams {
@@ -33,6 +36,8 @@ export class AuditService {
         objectType: entry.objectType,
         objectId: entry.objectId,
         metadataJson: entry.metadata ?? undefined,
+        ip: entry.ip,
+        userAgent: entry.userAgent,
       },
     });
   }
@@ -179,4 +184,29 @@ export class AuditService {
       topAction: r.top_action,
     }));
   }
+}
+
+// ─── Fail-Open Audit Helper ─────────────────────────────────────────────────
+
+interface WriteAuditEntry {
+  businessId: string;
+  actorUserId?: string;
+  actionType: string;
+  objectType: string;
+  objectId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Write an audit log entry with fail-open semantics.
+ * Auto-injects ip and userAgent from tRPC context.
+ * Never throws — logs errors server-side instead.
+ */
+export function writeAudit(ctx: Context, entry: WriteAuditEntry): void {
+  const audit = new AuditService(ctx.prisma);
+  audit
+    .log({ ...entry, ip: ctx.ip, userAgent: ctx.userAgent })
+    .catch((err) => {
+      console.error("[AUDIT] Failed to write audit log:", err?.message ?? "unknown");
+    });
 }

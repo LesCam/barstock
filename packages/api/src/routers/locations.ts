@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId } from "../trpc";
+import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId, requireLocationAccess } from "../trpc";
 import { locationCreateSchema, locationUpdateSchema } from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
 import { SubscriptionService } from "../services/subscription.service";
@@ -29,6 +29,7 @@ export const locationsRouter = router({
     ),
 
   getById: protectedProcedure
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       ctx.prisma.location.findUniqueOrThrow({

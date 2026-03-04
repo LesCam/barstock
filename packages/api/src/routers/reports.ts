@@ -36,6 +36,7 @@ export const reportsRouter = router({
 
   businessRollup: protectedProcedure
     .use(forceBusinessId())
+    .use(requireBusinessAccess())
     .input(businessRollupQuerySchema)
     .query(({ ctx, input }) => {
       const svc = new ReportService(ctx.prisma);

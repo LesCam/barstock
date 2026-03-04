@@ -1,5 +1,7 @@
 import { auth } from "@/lib/auth";
 import { decodeToken } from "@barstock/api/src/services/auth.service";
+import { ROLE_HIERARCHY } from "@barstock/types";
+import type { Role } from "@barstock/types";
 
 export interface AuthedUser {
   userId: string;
@@ -43,4 +45,30 @@ export async function requireAuth(request: Request): Promise<AuthResult> {
 /** Type guard: true if requireAuth returned a failure Response */
 export function isAuthFailure(result: AuthResult): result is Response {
   return result instanceof Response;
+}
+
+/**
+ * Check that the user has at least one of the required roles (across any location).
+ * Returns 403 Response on failure, or the user on success.
+ */
+export function requireRole(user: AuthedUser, allowedRoles: Role[]): Response | null {
+  const minLevel = Math.min(...allowedRoles.map((r) => ROLE_HIERARCHY[r]));
+  const hasRole = Object.values(user.roles).some(
+    (r) => ROLE_HIERARCHY[r as Role] >= minLevel
+  );
+  if (!hasRole) {
+    return new Response("Forbidden", { status: 403 });
+  }
+  return null;
+}
+
+/**
+ * Verify a resource's businessId matches the user's session businessId.
+ * Returns 404 Response on mismatch (avoids leaking existence), or null on success.
+ */
+export function requireTenantScope(user: AuthedUser, resourceBusinessId: string): Response | null {
+  if (user.businessId !== resourceBusinessId) {
+    return new Response("Not Found", { status: 404 });
+  }
+  return null;
 }

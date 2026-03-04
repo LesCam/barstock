@@ -18,6 +18,10 @@ const securityHeaders = [
       "frame-ancestors 'none'",
     ].join("; "),
   },
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+  },
 ];
 
 const nextConfig = {

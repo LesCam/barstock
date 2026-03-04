@@ -25,6 +25,58 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
 
+export async function hashPin(pin: string): Promise<string> {
+  return bcrypt.hash(pin, 10);
+}
+
+export async function verifyPinHash(pin: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(pin, hash);
+}
+
+/**
+ * Check if a plaintext PIN is already in use by another active user in the business.
+ * Must iterate all users and bcrypt.compare since PINs are hashed.
+ */
+export async function isPinTaken(
+  prisma: ExtendedPrismaClient,
+  businessId: string,
+  pin: string,
+  excludeUserId?: string
+): Promise<boolean> {
+  const users = await prisma.user.findMany({
+    where: {
+      businessId,
+      isActive: true,
+      pin: { not: null },
+      ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+    },
+    select: { pin: true },
+  });
+  for (const u of users) {
+    if (u.pin && await bcrypt.compare(pin, u.pin)) return true;
+  }
+  return false;
+}
+
+/**
+ * Find a user by plaintext PIN within a business (for loginWithPin).
+ * Iterates active users and bcrypt.compares each.
+ */
+export async function findUserByPin(
+  prisma: ExtendedPrismaClient,
+  businessId: string,
+  pin: string
+): Promise<string | null> {
+  const users = await prisma.user.findMany({
+    where: { businessId, isActive: true, pin: { not: null } },
+    select: { id: true, pin: true },
+  });
+  for (const u of users) {
+    if (u.pin && await bcrypt.compare(pin, u.pin)) return u.id;
+  }
+  return null;
+}
+
 export function createAccessToken(payload: UserPayload): string {
   return jwt.sign({ ...payload, type: "access" }, SECRET_KEY, {
     algorithm: ALGORITHM,

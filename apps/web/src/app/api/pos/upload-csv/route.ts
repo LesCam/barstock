@@ -2,8 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, isAuthFailure } from "@/lib/require-auth";
 import { CSVImportService } from "@barstock/api/src/services/csv-import.service";
 import { prisma } from "@barstock/database";
+import { z } from "zod";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+const csvUploadSchema = z.object({
+  sourceSystem: z.string().min(1),
+  locationId: z.string().uuid(),
+  templateId: z.string().uuid().optional(),
+  sourceLocationId: z.string().optional(),
+  customMapping: z.string().optional(),
+  businessDate: z.string().optional(),
+}).strict();
 
 export async function POST(req: NextRequest) {
   const authResult = await requireAuth(req);
@@ -20,19 +30,9 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const sourceSystem = formData.get("sourceSystem") as string | null;
-    const templateId = formData.get("templateId") as string | null;
-    const locationId = formData.get("locationId") as string | null;
-    const customMappingStr = formData.get("customMapping") as string | null;
-    const sourceLocationId =
-      (formData.get("sourceLocationId") as string) || locationId || "";
-    const businessDateStr = formData.get("businessDate") as string | null;
 
-    if (!file || !sourceSystem || !locationId) {
-      return NextResponse.json(
-        { error: "Missing required fields: file, sourceSystem, locationId" },
-        { status: 400 }
-      );
+    if (!file) {
+      return NextResponse.json({ error: "Missing required field: file" }, { status: 400 });
     }
 
     if (file.size > MAX_FILE_SIZE) {
@@ -42,6 +42,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate text fields with Zod
+    const parsed = csvUploadSchema.safeParse({
+      sourceSystem: formData.get("sourceSystem") ?? undefined,
+      locationId: formData.get("locationId") ?? undefined,
+      templateId: formData.get("templateId") || undefined,
+      sourceLocationId: formData.get("sourceLocationId") || undefined,
+      customMapping: formData.get("customMapping") || undefined,
+      businessDate: formData.get("businessDate") || undefined,
+    });
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { sourceSystem, locationId, templateId, sourceLocationId, customMapping: customMappingStr, businessDate: businessDateStr } = parsed.data;
     const csvText = await file.text();
 
     let customMapping: Record<string, string> | undefined;
@@ -62,9 +80,9 @@ export async function POST(req: NextRequest) {
     const result = service.parseCSV(
       csvText,
       sourceSystem,
-      sourceLocationId,
+      sourceLocationId || locationId,
       locationId,
-      templateId || undefined,
+      templateId,
       customMapping,
       businessDate
     );
@@ -74,13 +92,13 @@ export async function POST(req: NextRequest) {
       totalRows: result.totalRows,
       parsedCount: result.rows.length,
       errorCount: result.errors.length,
-      errors: result.errors.slice(0, 50), // Cap error list
-      rows: result.rows, // Full parsed rows for import step
+      errors: result.errors.slice(0, 50),
+      rows: result.rows,
     });
   } catch (err: any) {
-    console.error("CSV upload error:", err);
+    console.error("CSV upload error:", err?.message ?? "unknown");
     return NextResponse.json(
-      { error: err.message || "Failed to parse CSV" },
+      { error: "Failed to parse CSV" },
       { status: 500 }
     );
   }

@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, forceBusinessId } from "../trpc";
+import { router, protectedProcedure, requireRole, forceBusinessId, requireBusinessAccess } from "../trpc";
 import {
   itemCategoryCreateSchema,
   itemCategoryUpdateSchema,
@@ -11,6 +11,7 @@ import { AuditService } from "../services/audit.service";
 export const itemCategoriesRouter = router({
   list: protectedProcedure
     .use(forceBusinessId())
+    .use(requireBusinessAccess())
     .input(itemCategoryListSchema)
     .query(({ ctx, input }) =>
       ctx.prisma.inventoryItemCategory.findMany({

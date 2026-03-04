@@ -1107,6 +1107,8 @@ model AuditLog {
   objectType   String   @map("object_type")
   objectId     String?  @map("object_id")
   metadataJson Json?    @map("metadata_json")
+  ip           String?
+  userAgent    String?  @map("user_agent")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   business  Business @relation(fields: [businessId], references: [id])

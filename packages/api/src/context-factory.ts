@@ -10,9 +10,15 @@ export async function createContext(opts: {
   headers: Headers;
   user?: UserPayload | null;
 }): Promise<Context> {
+  const ip =
+    opts.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    opts.headers.get("x-real-ip") ??
+    undefined;
+  const userAgent = opts.headers.get("user-agent") ?? undefined;
+
   // If user already resolved (e.g. from NextAuth session), use directly
   if (opts.user) {
-    return { prisma, user: opts.user };
+    return { prisma, user: opts.user, ip, userAgent };
   }
 
   const authHeader = opts.headers.get("authorization");
@@ -30,5 +36,5 @@ export async function createContext(opts: {
     }
   }
 
-  return { prisma, user };
+  return { prisma, user, ip, userAgent };
 }

@@ -220,7 +220,7 @@ export const scaleRouter = router({
         where: { id: input.templateId },
       });
       if (template.businessId && template.businessId !== ctx.user.businessId) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Template belongs to another business" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
       }
       const { templateId, ...data } = input;
       const result = await ctx.prisma.bottleTemplate.update({
@@ -268,7 +268,7 @@ export const scaleRouter = router({
         where: { id: input.templateId },
       });
       if (template.businessId && template.businessId !== ctx.user.businessId) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Template belongs to another business" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
       }
 
       // Check for references if not forcing
