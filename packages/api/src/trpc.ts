@@ -78,7 +78,7 @@ export function requireRole(minRole: Role) {
 
 /** Require that the businessId in input matches the user's businessId. Platform admins bypass. */
 export function requireBusinessAccess() {
-  return middleware(async ({ ctx, next }) => {
+  return middleware(async ({ ctx, next, getRawInput }) => {
     if (!ctx.user) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
@@ -87,8 +87,8 @@ export function requireBusinessAccess() {
       return next({ ctx: { ...ctx, user: ctx.user } });
     }
 
-    const rawInput = (ctx as any).rawInput;
-    const businessId = rawInput?.businessId ?? rawInput?.input?.businessId;
+    const rawInput = await getRawInput() as Record<string, unknown> | undefined;
+    const businessId = rawInput?.businessId as string | undefined;
 
     if (businessId && businessId !== ctx.user.businessId) {
       throw new TRPCError({
@@ -103,7 +103,7 @@ export function requireBusinessAccess() {
 
 /** Require access to a specific location */
 export function requireLocationAccess() {
-  return middleware(async ({ ctx, next }) => {
+  return middleware(async ({ ctx, next, getRawInput }) => {
     if (!ctx.user) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
@@ -112,9 +112,8 @@ export function requireLocationAccess() {
       return next({ ctx: { ...ctx, user: ctx.user } });
     }
 
-    const locationId =
-      (ctx as any).rawInput?.locationId ??
-      (ctx as any).rawInput?.input?.locationId;
+    const rawInput = await getRawInput() as Record<string, unknown> | undefined;
+    const locationId = rawInput?.locationId as string | undefined;
 
     if (locationId && !ctx.user.locationIds.includes(locationId)) {
       throw new TRPCError({
@@ -197,21 +196,19 @@ export function resolveBusinessId(user: UserPayload, inputBusinessId?: string): 
   return user.businessId;
 }
 
-/** Force businessId in input to session value for non-platform-admins (defense-in-depth) */
+/** Force businessId in input to session value for non-platform-admins (defense-in-depth).
+ *  Sets ctx.resolvedBusinessId for handlers to use instead of input.businessId. */
 export function forceBusinessId() {
-  return middleware(async ({ ctx, next }) => {
+  return middleware(async ({ ctx, next, getRawInput }) => {
     if (!ctx.user) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
 
-    if (!isPlatformAdmin(ctx.user)) {
-      const rawInput = (ctx as any).rawInput;
-      if (rawInput && typeof rawInput === "object" && "businessId" in rawInput) {
-        rawInput.businessId = ctx.user.businessId;
-      }
-    }
+    const rawInput = await getRawInput() as Record<string, unknown> | undefined;
+    const inputBusinessId = rawInput?.businessId as string | undefined;
+    const resolvedBusinessId = resolveBusinessId(ctx.user, inputBusinessId);
 
-    return next({ ctx: { ...ctx, user: ctx.user } });
+    return next({ ctx: { ...ctx, user: ctx.user, resolvedBusinessId } });
   });
 }
 
