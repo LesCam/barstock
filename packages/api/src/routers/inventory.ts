@@ -9,6 +9,7 @@ import { z } from "zod";
 export const inventoryRouter = router({
   create: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireLocationAccess())
     .input(inventoryItemCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const item = await ctx.prisma.inventoryItem.create({ data: input });
@@ -26,6 +27,7 @@ export const inventoryRouter = router({
 
   bulkCreate: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireLocationAccess())
     .input(inventoryItemBulkCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const { locationId, items } = input;
@@ -119,6 +121,7 @@ export const inventoryRouter = router({
     }),
 
   list: protectedProcedure
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       ctx.prisma.inventoryItem.findMany({
@@ -263,6 +266,7 @@ export const inventoryRouter = router({
     ),
 
   onHand: protectedProcedure
+    .use(requireLocationAccess())
     .input(onHandQuerySchema)
     .query(({ ctx, input }) => {
       const svc = new InventoryService(ctx.prisma);
@@ -272,6 +276,14 @@ export const inventoryRouter = router({
   lastLocation: protectedProcedure
     .input(z.object({ inventoryItemId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      // Verify tenant ownership
+      const item = await ctx.prisma.inventoryItem.findUniqueOrThrow({
+        where: { id: input.inventoryItemId },
+        select: { locationId: true },
+      });
+      if (!isPlatformAdmin(ctx.user) && !ctx.user.locationIds.includes(item.locationId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
       const line = await ctx.prisma.inventorySessionLine.findFirst({
         where: { inventoryItemId: input.inventoryItemId, subAreaId: { not: null } },
         orderBy: { createdAt: "desc" },
@@ -288,6 +300,15 @@ export const inventoryRouter = router({
     .input(setItemVendorsSchema)
     .mutation(async ({ ctx, input }) => {
       const { inventoryItemId, vendors } = input;
+
+      // Verify tenant ownership
+      const existing = await ctx.prisma.inventoryItem.findUniqueOrThrow({
+        where: { id: inventoryItemId },
+        select: { locationId: true },
+      });
+      if (!isPlatformAdmin(ctx.user) && !ctx.user.locationIds.includes(existing.locationId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
 
       return ctx.prisma.$transaction(async (tx) => {
         // Delete existing item_vendors for this item
@@ -320,6 +341,7 @@ export const inventoryRouter = router({
     }),
 
   listWithStock: protectedProcedure
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const [items, stockRows] = await Promise.all([

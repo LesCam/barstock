@@ -4,6 +4,22 @@ import { vendorCreateSchema, vendorListSchema, vendorGetByIdSchema, vendorUpdate
 import { AuditService } from "../services/audit.service";
 import { z } from "zod";
 
+/** Verify the caller's business owns this vendor */
+async function verifyVendorAccess(
+  prisma: any,
+  vendorId: string,
+  user: { businessId: string },
+  platformAdmin: boolean,
+) {
+  const vendor = await prisma.vendor.findUniqueOrThrow({
+    where: { id: vendorId },
+    select: { businessId: true },
+  });
+  if (!platformAdmin && vendor.businessId !== user.businessId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+  }
+}
+
 export const vendorsRouter = router({
   create: protectedProcedure
     .use(forceBusinessId())
@@ -118,6 +134,7 @@ export const vendorsRouter = router({
     .use(requireRecentAuth())
     .input(vendorOrdererSchema)
     .mutation(async ({ ctx, input }) => {
+      await verifyVendorAccess(ctx.prisma, input.vendorId, ctx.user, isPlatformAdmin(ctx.user));
       const result = await ctx.prisma.vendorOrderer.upsert({
         where: {
           vendorId_userId: {
@@ -150,6 +167,7 @@ export const vendorsRouter = router({
     .use(requireRecentAuth())
     .input(vendorOrdererSchema)
     .mutation(async ({ ctx, input }) => {
+      await verifyVendorAccess(ctx.prisma, input.vendorId, ctx.user, isPlatformAdmin(ctx.user));
       await ctx.prisma.vendorOrderer.delete({
         where: {
           vendorId_userId: {
@@ -175,8 +193,9 @@ export const vendorsRouter = router({
   listOrderers: protectedProcedure
     .use(requireRole("business_admin"))
     .input(z.object({ vendorId: z.string().uuid() }))
-    .query(({ ctx, input }) =>
-      ctx.prisma.vendorOrderer.findMany({
+    .query(async ({ ctx, input }) => {
+      await verifyVendorAccess(ctx.prisma, input.vendorId, ctx.user, isPlatformAdmin(ctx.user));
+      return ctx.prisma.vendorOrderer.findMany({
         where: { vendorId: input.vendorId },
         include: {
           user: {
@@ -189,6 +208,6 @@ export const vendorsRouter = router({
             },
           },
         },
-      })
-    ),
+      });
+    }),
 });

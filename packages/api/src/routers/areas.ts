@@ -52,6 +52,7 @@ export const areasRouter = router({
     ),
 
   listBarAreas: protectedProcedure
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       ctx.prisma.barArea.findMany({
@@ -101,12 +102,13 @@ export const areasRouter = router({
 
   listSubAreas: protectedProcedure
     .input(z.object({ barAreaId: z.string().uuid() }))
-    .query(({ ctx, input }) =>
-      ctx.prisma.subArea.findMany({
+    .query(async ({ ctx, input }) => {
+      await verifyBarAreaAccess(ctx.prisma, input.barAreaId, ctx.user, isPlatformAdmin(ctx.user));
+      return ctx.prisma.subArea.findMany({
         where: { barAreaId: input.barAreaId },
         orderBy: { sortOrder: "asc" },
-      })
-    ),
+      });
+    }),
 
   updateSubArea: protectedProcedure
     .use(requireRole("manager"))

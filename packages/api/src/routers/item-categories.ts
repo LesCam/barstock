@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, forceBusinessId, requireBusinessAccess, requireRecentAuth } from "../trpc";
+import { router, protectedProcedure, requireRole, forceBusinessId, requireBusinessAccess, requireRecentAuth, isPlatformAdmin } from "../trpc";
 import {
   itemCategoryCreateSchema,
   itemCategoryUpdateSchema,
@@ -48,6 +48,14 @@ export const itemCategoriesRouter = router({
     .input(z.object({ id: z.string().uuid() }).merge(itemCategoryUpdateSchema))
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      // Verify tenant ownership
+      const existing = await ctx.prisma.inventoryItemCategory.findUniqueOrThrow({
+        where: { id },
+        select: { businessId: true },
+      });
+      if (!isPlatformAdmin(ctx.user) && existing.businessId !== ctx.user.businessId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
       const category = await ctx.prisma.inventoryItemCategory.update({ where: { id }, data });
 
       const audit = new AuditService(ctx.prisma);
@@ -68,6 +76,14 @@ export const itemCategoriesRouter = router({
     .use(requireRecentAuth())
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      // Verify tenant ownership
+      const existing = await ctx.prisma.inventoryItemCategory.findUniqueOrThrow({
+        where: { id: input.id },
+        select: { businessId: true },
+      });
+      if (!isPlatformAdmin(ctx.user) && existing.businessId !== ctx.user.businessId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
       const count = await ctx.prisma.inventoryItem.count({
         where: { categoryId: input.id },
       });
