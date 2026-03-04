@@ -181,6 +181,28 @@ export const authRouter = router({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid PIN" });
       }
 
+      // If MFA is enabled, require MFA verification before issuing tokens
+      if (user.mfaEnabled) {
+        const audit = new AuditService(ctx.prisma);
+        await audit.log({
+          businessId: user.businessId,
+          actorUserId: user.id,
+          actionType: "auth.mfa_challenge",
+          objectType: "user",
+          objectId: user.id,
+          metadata: { method: "pin" },
+        });
+
+        return {
+          requiresMfa: true as const,
+          mfaToken: createMfaChallengeToken(user.id),
+          accessToken: null,
+          refreshToken: null,
+          tokenType: "bearer",
+          expiresIn: 0,
+        };
+      }
+
       const payload = await buildUserPayload(ctx.prisma, user.id);
       const accessToken = createAccessToken(payload);
       const refreshToken = createRefreshToken(payload);
@@ -196,6 +218,8 @@ export const authRouter = router({
       });
 
       return {
+        requiresMfa: false as const,
+        mfaToken: null,
         accessToken,
         refreshToken,
         tokenType: "bearer",
