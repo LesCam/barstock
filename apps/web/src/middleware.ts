@@ -19,15 +19,25 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Derive expected origin from request headers
-  const proto = request.headers.get("x-forwarded-proto") ?? "http";
-  const host = request.headers.get("host");
+  // Derive expected origin from forwarded headers (Vercel, Cloudflare, nginx, etc.)
+  // x-forwarded-proto can be comma-separated ("https, http") — first value is client-facing
+  const proto = (request.headers.get("x-forwarded-proto") ?? "http").split(",")[0].trim();
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
   if (!host) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 
+  // Compare just the origin (scheme + host), ignoring any path/query on Origin header
   const expectedOrigin = `${proto}://${host}`;
-  if (origin !== expectedOrigin) {
+  let originHost: string;
+  try {
+    const parsed = new URL(origin);
+    originHost = `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return new NextResponse("Forbidden – malformed origin", { status: 403 });
+  }
+
+  if (originHost !== expectedOrigin) {
     return new NextResponse("Forbidden – origin mismatch", { status: 403 });
   }
 
