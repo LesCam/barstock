@@ -25,6 +25,13 @@ import { SettingsService } from "../services/settings.service";
 import { SubscriptionService } from "../services/subscription.service";
 import { generateSecret, generateURI, verifySync as otpVerifySync } from "otplib";
 import { encrypt, decrypt } from "../lib/crypto";
+import bcrypt from "bcryptjs";
+
+function generateBackupCodes(count = 10): string[] {
+  return Array.from({ length: count }, () =>
+    crypto.randomBytes(4).toString("hex")
+  );
+}
 
 export const authRouter = router({
   login: publicProcedure.input(loginSchema).mutation(async ({ ctx, input }) => {
@@ -1114,7 +1121,7 @@ export const authRouter = router({
   // ── MFA ──────────────────────────────────────────────────────
 
   mfaLogin: publicProcedure
-    .input(z.object({ mfaToken: z.string(), code: z.string().length(6) }))
+    .input(z.object({ mfaToken: z.string(), code: z.string().min(6).max(8) }))
     .mutation(async ({ ctx, input }) => {
       let decoded: Record<string, unknown>;
       try {
@@ -1130,7 +1137,7 @@ export const authRouter = router({
       const userId = decoded.userId as string;
       const user = await ctx.prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, mfaSecret: true, mfaEnabled: true, businessId: true, isActive: true },
+        select: { id: true, mfaSecret: true, mfaEnabled: true, mfaBackupCodes: true, businessId: true, isActive: true },
       });
 
       if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret) {
@@ -1138,7 +1145,27 @@ export const authRouter = router({
       }
 
       const secret = decrypt(user.mfaSecret);
-      const valid = otpVerifySync({ token: input.code, secret }).valid;
+      let valid = otpVerifySync({ token: input.code, secret }).valid;
+      let usedBackupCode = false;
+
+      // If TOTP failed, try backup codes
+      if (!valid && user.mfaBackupCodes) {
+        const hashes: string[] = JSON.parse(user.mfaBackupCodes);
+        for (let i = 0; i < hashes.length; i++) {
+          const match = await bcrypt.compare(input.code, hashes[i]);
+          if (match) {
+            // Consume the backup code
+            hashes.splice(i, 1);
+            await ctx.prisma.user.update({
+              where: { id: user.id },
+              data: { mfaBackupCodes: JSON.stringify(hashes) },
+            });
+            valid = true;
+            usedBackupCode = true;
+            break;
+          }
+        }
+      }
 
       if (!valid) {
         const audit = new AuditService(ctx.prisma);
@@ -1163,7 +1190,7 @@ export const authRouter = router({
         actionType: "auth.login",
         objectType: "user",
         objectId: user.id,
-        metadata: { method: "password+mfa" },
+        metadata: { method: usedBackupCode ? "password+backup_code" : "password+mfa" },
       });
 
       return {
@@ -1225,9 +1252,12 @@ export const authRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid verification code" });
       }
 
+      const codes = generateBackupCodes();
+      const hashes = await Promise.all(codes.map(c => bcrypt.hash(c, 10)));
+
       await ctx.prisma.user.update({
         where: { id: ctx.user.userId },
-        data: { mfaEnabled: true },
+        data: { mfaEnabled: true, mfaBackupCodes: JSON.stringify(hashes) },
       });
 
       const audit = new AuditService(ctx.prisma);
@@ -1239,7 +1269,7 @@ export const authRouter = router({
         objectId: ctx.user.userId,
       });
 
-      return { success: true };
+      return { success: true, backupCodes: codes };
     }),
 
   mfaDisable: protectedProcedure
@@ -1268,7 +1298,7 @@ export const authRouter = router({
 
       await ctx.prisma.user.update({
         where: { id: ctx.user.userId },
-        data: { mfaEnabled: false, mfaSecret: null },
+        data: { mfaEnabled: false, mfaSecret: null, mfaBackupCodes: null },
       });
 
       await invalidateUserSessions(ctx.prisma, ctx.user.userId);
@@ -1291,5 +1321,77 @@ export const authRouter = router({
       });
 
       return { success: true };
+    }),
+
+  forceDisableMfa: protectedProcedure
+    .use(requireRole("platform_admin"))
+    .use(requireRecentAuth())
+    .input(z.object({ userId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const target = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: input.userId },
+        select: { mfaEnabled: true, businessId: true, email: true },
+      });
+
+      if (!target.mfaEnabled) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "MFA is not enabled for this user" });
+      }
+
+      await ctx.prisma.user.update({
+        where: { id: input.userId },
+        data: { mfaEnabled: false, mfaSecret: null, mfaBackupCodes: null },
+      });
+
+      await invalidateUserSessions(ctx.prisma, input.userId);
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: target.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "auth.mfa_force_disabled",
+        objectType: "user",
+        objectId: input.userId,
+        metadata: { targetEmail: target.email, performedBy: ctx.user.userId },
+      });
+
+      return { success: true };
+    }),
+
+  regenerateBackupCodes: protectedProcedure
+    .use(requireRecentAuth())
+    .input(z.object({ password: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: ctx.user.userId },
+        select: { passwordHash: true, mfaEnabled: true, businessId: true },
+      });
+
+      if (!user.mfaEnabled) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "MFA is not enabled" });
+      }
+
+      const valid = await verifyPassword(input.password, user.passwordHash);
+      if (!valid) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid password" });
+      }
+
+      const codes = generateBackupCodes();
+      const hashes = await Promise.all(codes.map(c => bcrypt.hash(c, 10)));
+
+      await ctx.prisma.user.update({
+        where: { id: ctx.user.userId },
+        data: { mfaBackupCodes: JSON.stringify(hashes) },
+      });
+
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "auth.backup_codes_regenerated",
+        objectType: "user",
+        objectId: ctx.user.userId,
+      });
+
+      return { backupCodes: codes };
     }),
 });

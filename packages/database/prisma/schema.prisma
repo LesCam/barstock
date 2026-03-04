@@ -305,8 +305,9 @@ model User {
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
   tokenVersion Int      @default(0)    @map("token_version")
-  mfaSecret    String?                 @map("mfa_secret")
-  mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
+  mfaSecret      String?                 @map("mfa_secret")
+  mfaEnabled     Boolean  @default(false) @map("mfa_enabled")
+  mfaBackupCodes String?                 @map("mfa_backup_codes")
 
   location              Location              @relation(fields: [locationId], references: [id])
   business              Business              @relation(fields: [businessId], references: [id])

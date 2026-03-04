@@ -16,6 +16,8 @@ const SENSITIVE_PATHS = new Set([
   "auth.mfaVerify",
   "auth.verifyPin",
   "auth.reAuthenticate",
+  "auth.forceDisableMfa",
+  "auth.regenerateBackupCodes",
 ]);
 
 // Messages safe to forward to clients (intentionally thrown by our code)
