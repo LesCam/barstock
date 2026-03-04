@@ -6,6 +6,7 @@ import { SettingsService } from "./settings.service";
 import { ParLevelService } from "./par-level.service";
 import { AnalyticsService } from "./analytics.service";
 import { ReportService } from "./report.service";
+import { BenchmarkService } from "./benchmark.service";
 import { deriveDefaultPermissions } from "./auth.service";
 import { Prisma } from "@prisma/client";
 import type { Role } from "@barstock/types";
@@ -64,6 +65,11 @@ export class AlertService {
     if ((rules as any).dataExport?.enabled) {
       const exportAlerts = await this.checkDataExport(businessId, (rules as any).dataExport.threshold);
       alerts.push(...exportAlerts);
+    }
+
+    if ((rules as any).benchmarkPercentile?.enabled) {
+      const benchAlerts = await this.checkBenchmarkPercentile(businessId, (rules as any).benchmarkPercentile.threshold);
+      alerts.push(...benchAlerts);
     }
 
     for (const loc of locations) {
@@ -596,6 +602,54 @@ export class AlertService {
       linkUrl: "/audit",
       metadata: { rule: "dataExport", eventCount: count },
     }];
+  }
+
+  private async checkBenchmarkPercentile(businessId: string, thresholdPercentile: number): Promise<AlertResult[]> {
+    try {
+      // Check if opted in
+      const settingsSvc = new SettingsService(this.prisma);
+      const settings = await settingsSvc.getSettings(businessId);
+      if (!settings.benchmarking?.optedIn) return [];
+
+      const benchSvc = new BenchmarkService(this.prisma);
+      const benchmarks = await benchSvc.getIndustryPercentiles(businessId);
+
+      // Need at least 3 opted-in businesses for meaningful comparison
+      if (benchmarks.optedInCount < 3) return [];
+
+      // Get caller's business averages to compute rank
+      const history = await benchSvc.getPercentileHistory(businessId, 2);
+      if (history.length === 0) return [];
+
+      const latest = history[history.length - 1]!;
+      const LOWER_IS_BETTER = new Set(["varianceImpact", "shrinkageSuspects", "pourCostPct", "countFrequencyDays"]);
+
+      const keyMetrics = ["pourCostPct", "varianceImpact", "countFrequencyDays", "mappingCoveragePct"] as const;
+      const belowThreshold: string[] = [];
+
+      for (const metric of keyMetrics) {
+        const rank = latest.ranks[metric];
+        if (rank == null) continue;
+        if (rank < thresholdPercentile) {
+          const label = metric === "pourCostPct" ? "Pour Cost %"
+            : metric === "varianceImpact" ? "Variance Impact"
+            : metric === "countFrequencyDays" ? "Count Frequency"
+            : "Mapping Coverage";
+          belowThreshold.push(`${label} (p${rank})`);
+        }
+      }
+
+      if (belowThreshold.length === 0) return [];
+
+      return [{
+        title: "Below benchmark threshold",
+        body: `Your business is below the ${thresholdPercentile}th percentile on: ${belowThreshold.join(", ")}. Comparing against ${benchmarks.optedInCount} businesses.`,
+        linkUrl: "/benchmarking",
+        metadata: { rule: "benchmarkPercentile", metricsBelow: belowThreshold.length, optedInCount: benchmarks.optedInCount },
+      }];
+    } catch {
+      return [];
+    }
   }
 
   private async checkUsageSpikes(locationId: string, locationName: string, threshold: number): Promise<AlertResult[]> {

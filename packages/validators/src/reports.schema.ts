@@ -196,12 +196,23 @@ export const captureBusinessSnapshotSchema = z.object({
   businessId: z.string().uuid(),
 });
 
+export const peerFilterSchema = z.object({
+  locationCountTier: z.enum(["1", "2-5", "6+"]).optional(),
+  activeItemCountTier: z.enum(["1-100", "101-500", "500+"]).optional(),
+}).optional();
+
 export const industryBenchmarksSchema = z.object({
   businessId: z.string().uuid(),
   snapshotDate: z.coerce.date().optional(),
+  peerFilter: peerFilterSchema,
 });
 
 export const benchmarkTrendSchema = z.object({
+  businessId: z.string().uuid(),
+  weeks: z.number().int().min(2).max(52).default(12),
+});
+
+export const percentileHistorySchema = z.object({
   businessId: z.string().uuid(),
   weeks: z.number().int().min(2).max(52).default(12),
 });

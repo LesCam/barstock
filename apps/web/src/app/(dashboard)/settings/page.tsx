@@ -1067,6 +1067,11 @@ const ALERT_RULE_LABELS: Record<string, { label: string; unit: string; descripti
     unit: "%",
     description: "Alert when forecasted variance exceeds this percentage",
   },
+  benchmarkPercentile: {
+    label: "Benchmark Percentile",
+    unit: "percentile",
+    description: "Alert when below this percentile on key metrics (requires benchmarking opt-in)",
+  },
 };
 
 function formatTimeAgo(dateStr: string | undefined): string {

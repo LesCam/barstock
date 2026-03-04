@@ -10,6 +10,16 @@ import { VarianceService } from "./variance.service";
 import { ParLevelService } from "./par-level.service";
 import { SettingsService } from "./settings.service";
 
+export interface CategoryBenchmarkMetrics {
+  categoryName: string;
+  countingMethod: string;
+  onHandValue: number;
+  cogs7d: number;
+  varianceImpact: number;
+  activeItemCount: number;
+  pourCostPct: number | null;
+}
+
 export interface BenchmarkMetrics {
   onHandValue: number;
   cogs7d: number;
@@ -22,6 +32,7 @@ export interface BenchmarkMetrics {
   itemsPerSession: number | null;
   countFrequencyDays: number | null;
   activeItemCount: number;
+  byCategory?: CategoryBenchmarkMetrics[];
 }
 
 export interface PercentileSet {
@@ -30,16 +41,42 @@ export interface PercentileSet {
   p75: number | null;
 }
 
+export interface CategoryPercentiles {
+  groupKey: string; // normalized category name or counting method
+  groupType: "category" | "countingMethod";
+  businessCount: number;
+  callerValue: CategoryBenchmarkMetrics | null;
+  metrics: {
+    onHandValue: PercentileSet;
+    cogs7d: PercentileSet;
+    varianceImpact: PercentileSet;
+    activeItemCount: PercentileSet;
+    pourCostPct: PercentileSet;
+  };
+}
+
+export interface PeerFilter {
+  locationCountTier?: "1" | "2-5" | "6+";
+  activeItemCountTier?: "1-100" | "101-500" | "500+";
+}
+
 export interface IndustryBenchmarks {
   snapshotDate: string;
   optedInCount: number;
-  metrics: Record<keyof BenchmarkMetrics, PercentileSet>;
+  metrics: Record<CoreMetricKeys, PercentileSet>;
+  categoryBenchmarks?: CategoryPercentiles[];
+  peerGroup?: {
+    filter: PeerFilter;
+    filteredCount: number;
+  };
 }
+
+type CoreMetricKeys = Exclude<keyof BenchmarkMetrics, "byCategory">;
 
 export interface BenchmarkTrendPoint {
   snapshotDate: string;
-  business: Record<keyof BenchmarkMetrics, number | null>;
-  industryMedian: Record<keyof BenchmarkMetrics, number | null>;
+  business: Record<CoreMetricKeys, number | null>;
+  industryMedian: Record<CoreMetricKeys, number | null>;
 }
 
 export class BenchmarkService {
@@ -128,6 +165,82 @@ export class BenchmarkService {
     const reorderCount = parItems.filter((i) => i.needsReorder).length;
     const stats = sessionStats[0];
 
+    // Build byCategory: look up category info for items, then group
+    const itemCatRows = await this.prisma.$queryRaw<Array<{
+      item_id: string;
+      category_name: string;
+      counting_method: string;
+    }>>`
+      SELECT
+        i.id AS item_id,
+        COALESCE(c.name, 'Uncategorized') AS category_name,
+        COALESCE(c.counting_method::text, 'weighable') AS counting_method
+      FROM inventory_items i
+      LEFT JOIN inventory_item_categories c ON c.id = i.category_id
+      WHERE i.location_id = ${locationId}::uuid AND i.active = true
+    `;
+    const itemCatMap = new Map(itemCatRows.map((r) => [r.item_id, r]));
+
+    const categoryMap = new Map<string, {
+      categoryName: string;
+      countingMethod: string;
+      onHandValue: number;
+      cogs7d: number;
+      varianceImpact: number;
+      activeItemCount: number;
+    }>();
+
+    for (const item of onHand.items) {
+      const catInfo = itemCatMap.get(item.inventoryItemId);
+      const catName = catInfo?.category_name ?? "Uncategorized";
+      const cm = catInfo?.counting_method ?? "weighable";
+      const existing = categoryMap.get(catName);
+      if (existing) {
+        existing.onHandValue += item.totalValue ?? 0;
+        existing.activeItemCount++;
+      } else {
+        categoryMap.set(catName, { categoryName: catName, countingMethod: cm, onHandValue: item.totalValue ?? 0, cogs7d: 0, varianceImpact: 0, activeItemCount: 1 });
+      }
+    }
+
+    for (const item of variance.items) {
+      const catName = item.categoryName ?? "Uncategorized";
+      const existing = categoryMap.get(catName);
+      if (existing) {
+        existing.varianceImpact += item.valueImpact ?? 0;
+      }
+    }
+
+    // COGS grouped by category
+    const cogsByCat = await this.prisma.$queryRaw<Array<{ category_name: string; cogs: number }>>`
+      SELECT
+        COALESCE(c.name, 'Uncategorized') AS category_name,
+        COALESCE(SUM(ABS(ce.quantity_delta) * ce.unit_cost), 0)::float AS cogs
+      FROM consumption_events ce
+      JOIN inventory_items i ON i.id = ce.inventory_item_id
+      LEFT JOIN inventory_item_categories c ON c.id = i.category_id
+      WHERE ce.location_id = ${locationId}::uuid
+        AND ce.event_type = 'pos_sale'
+        AND ce.event_ts >= ${sevenDaysAgo}
+        AND ce.event_ts <= ${now}
+        AND ce.reversal_of_event_id IS NULL
+      GROUP BY c.name
+    `;
+    for (const row of cogsByCat) {
+      const existing = categoryMap.get(row.category_name);
+      if (existing) existing.cogs7d = row.cogs;
+    }
+
+    const byCategory: CategoryBenchmarkMetrics[] = Array.from(categoryMap.values()).map((cat) => ({
+      categoryName: cat.categoryName,
+      countingMethod: cat.countingMethod,
+      onHandValue: cat.onHandValue,
+      cogs7d: cat.cogs7d,
+      varianceImpact: cat.varianceImpact,
+      activeItemCount: cat.activeItemCount,
+      pourCostPct: cat.onHandValue > 0 ? Math.round((cat.cogs7d / cat.onHandValue) * 1000) / 10 : null,
+    }));
+
     return {
       onHandValue: onHand.totalValue,
       cogs7d: cogs.cogs,
@@ -140,6 +253,7 @@ export class BenchmarkService {
       itemsPerSession: stats?.avg_items ?? null,
       countFrequencyDays: stats?.avg_frequency_days ?? null,
       activeItemCount,
+      byCategory,
     };
   }
 
@@ -216,7 +330,7 @@ export class BenchmarkService {
   /**
    * Get industry percentiles for the latest (or specified) snapshot date
    */
-  async getIndustryPercentiles(callerBusinessId: string, snapshotDate?: Date): Promise<IndustryBenchmarks> {
+  async getIndustryPercentiles(callerBusinessId: string, snapshotDate?: Date, peerFilter?: PeerFilter): Promise<IndustryBenchmarks> {
     // Find the latest snapshot date if not specified
     const dateToUse = snapshotDate ?? await this.getLatestSnapshotDate();
     if (!dateToUse) {
@@ -274,7 +388,43 @@ export class BenchmarkService {
       };
     }
 
-    const metricKeys: (keyof BenchmarkMetrics)[] = [
+    // Apply peer filtering if specified
+    let filteredRows = rows;
+    if (peerFilter) {
+      if (peerFilter.locationCountTier) {
+        // Count locations per business from snapshot data
+        const locationCounts = await this.prisma.$queryRaw<Array<{
+          business_id: string;
+          loc_count: number;
+        }>>`
+          SELECT business_id, COUNT(DISTINCT location_id)::int as loc_count
+          FROM benchmark_snapshots
+          WHERE snapshot_date = ${dateToUse}::date
+          GROUP BY business_id
+        `;
+        const locCountMap = new Map(locationCounts.map((r) => [r.business_id, r.loc_count]));
+        filteredRows = filteredRows.filter((r) => {
+          const count = locCountMap.get(r.business_id) ?? 0;
+          return this.matchesLocationTier(count, peerFilter.locationCountTier!);
+        });
+      }
+      if (peerFilter.activeItemCountTier) {
+        filteredRows = filteredRows.filter((r) => {
+          return this.matchesItemTier(r.active_item_count, peerFilter.activeItemCountTier!);
+        });
+      }
+    }
+
+    if (filteredRows.length === 0) {
+      return {
+        snapshotDate: dateStr,
+        optedInCount: 0,
+        metrics: this.emptyPercentiles(),
+        peerGroup: peerFilter ? { filter: peerFilter, filteredCount: 0 } : undefined,
+      };
+    }
+
+    const metricKeys: CoreMetricKeys[] = [
       "onHandValue", "cogs7d", "varianceImpact", "shrinkageSuspects",
       "pourCostPct", "mappingCoveragePct", "reorderCount",
       "avgSessionDurationMin", "itemsPerSession", "countFrequencyDays",
@@ -295,11 +445,11 @@ export class BenchmarkService {
       activeItemCount: "active_item_count",
     };
 
-    const metrics = {} as Record<keyof BenchmarkMetrics, PercentileSet>;
+    const metrics = {} as Record<CoreMetricKeys, PercentileSet>;
 
     for (const key of metricKeys) {
       const col = columnMap[key]!;
-      const values = rows
+      const values = filteredRows
         .map((r) => (r as any)[col] as number | null)
         .filter((v): v is number => v != null)
         .sort((a, b) => a - b);
@@ -315,10 +465,15 @@ export class BenchmarkService {
       }
     }
 
+    // Category-level benchmarks from byCategory in metrics_json
+    const categoryBenchmarks = await this.computeCategoryPercentiles(dateToUse, callerBusinessId, filteredRows.map((r) => r.business_id));
+
     return {
       snapshotDate: dateStr,
-      optedInCount: rows.length,
+      optedInCount: filteredRows.length,
       metrics,
+      categoryBenchmarks: categoryBenchmarks.length > 0 ? categoryBenchmarks : undefined,
+      peerGroup: peerFilter ? { filter: peerFilter, filteredCount: filteredRows.length } : undefined,
     };
   }
 
@@ -637,7 +792,252 @@ export class BenchmarkService {
     }));
   }
 
+  /**
+   * Get percentile rank history for a business over N weeks
+   */
+  async getPercentileHistory(businessId: string, weeks: number = 12) {
+    const since = new Date(Date.now() - weeks * 7 * 24 * 60 * 60 * 1000);
+
+    // Get all snapshot dates in range
+    const snapshotDates = await this.prisma.$queryRaw<Array<{ snapshot_date: Date }>>`
+      SELECT DISTINCT snapshot_date
+      FROM benchmark_snapshots
+      WHERE snapshot_date >= ${since}::date
+      ORDER BY snapshot_date
+    `;
+
+    const result: Array<{
+      snapshotDate: string;
+      ranks: Record<string, number | null>;
+      optedInCount: number;
+    }> = [];
+
+    for (const { snapshot_date } of snapshotDates) {
+      // Get all opted-in businesses' aggregated values for this date
+      const rows = await this.prisma.$queryRaw<Array<{
+        business_id: string;
+        on_hand_value: number;
+        cogs_7d: number;
+        variance_impact: number;
+        shrinkage_suspects: number;
+        pour_cost_pct: number | null;
+        mapping_coverage_pct: number;
+        count_frequency_days: number | null;
+        active_item_count: number;
+      }>>`
+        SELECT
+          bs.business_id,
+          AVG((bs.metrics_json->>'onHandValue')::float)::float as on_hand_value,
+          AVG((bs.metrics_json->>'cogs7d')::float)::float as cogs_7d,
+          AVG((bs.metrics_json->>'varianceImpact')::float)::float as variance_impact,
+          SUM((bs.metrics_json->>'shrinkageSuspects')::int)::int as shrinkage_suspects,
+          AVG((bs.metrics_json->>'pourCostPct')::float)::float as pour_cost_pct,
+          AVG((bs.metrics_json->>'mappingCoveragePct')::float)::float as mapping_coverage_pct,
+          AVG((bs.metrics_json->>'countFrequencyDays')::float)::float as count_frequency_days,
+          SUM((bs.metrics_json->>'activeItemCount')::int)::int as active_item_count
+        FROM benchmark_snapshots bs
+        JOIN business_settings bset ON bset.business_id = bs.business_id
+        WHERE bs.snapshot_date = ${snapshot_date}::date
+          AND (bset.settings_json->'benchmarking'->>'optedIn')::boolean = true
+        GROUP BY bs.business_id
+      `;
+
+      if (rows.length < 2) continue; // Need at least 2 businesses for meaningful ranking
+
+      const callerRow = rows.find((r) => r.business_id === businessId);
+      if (!callerRow) continue;
+
+      const rankMetrics: Record<string, { col: string; lowerIsBetter: boolean }> = {
+        onHandValue: { col: "on_hand_value", lowerIsBetter: false },
+        cogs7d: { col: "cogs_7d", lowerIsBetter: false },
+        varianceImpact: { col: "variance_impact", lowerIsBetter: true },
+        shrinkageSuspects: { col: "shrinkage_suspects", lowerIsBetter: true },
+        pourCostPct: { col: "pour_cost_pct", lowerIsBetter: true },
+        mappingCoveragePct: { col: "mapping_coverage_pct", lowerIsBetter: false },
+        countFrequencyDays: { col: "count_frequency_days", lowerIsBetter: true },
+      };
+
+      const ranks: Record<string, number | null> = {};
+
+      for (const [metricKey, { col, lowerIsBetter }] of Object.entries(rankMetrics)) {
+        const callerValue = (callerRow as any)[col] as number | null;
+        if (callerValue == null) {
+          ranks[metricKey] = null;
+          continue;
+        }
+
+        const allValues = rows
+          .map((r) => (r as any)[col] as number | null)
+          .filter((v): v is number => v != null)
+          .sort((a, b) => a - b);
+
+        ranks[metricKey] = this.computeRank(callerValue, allValues, lowerIsBetter);
+      }
+
+      result.push({
+        snapshotDate: snapshot_date.toISOString().split("T")[0]!,
+        ranks,
+        optedInCount: rows.length,
+      });
+    }
+
+    return result;
+  }
+
   // ─── Helpers ──────────────────────────────────────────────
+
+  private computeRank(value: number, sortedAsc: number[], lowerIsBetter: boolean): number {
+    if (sortedAsc.length === 0) return 50;
+    if (sortedAsc.length === 1) return 50;
+
+    // Count how many values the caller beats
+    let beatCount = 0;
+    for (const v of sortedAsc) {
+      if (lowerIsBetter) {
+        if (value < v) beatCount++;
+      } else {
+        if (value > v) beatCount++;
+      }
+    }
+
+    // Percentile rank (0-100)
+    return Math.round((beatCount / (sortedAsc.length - 1)) * 100);
+  }
+
+  private matchesLocationTier(count: number, tier: "1" | "2-5" | "6+"): boolean {
+    switch (tier) {
+      case "1": return count === 1;
+      case "2-5": return count >= 2 && count <= 5;
+      case "6+": return count >= 6;
+    }
+  }
+
+  private matchesItemTier(count: number, tier: "1-100" | "101-500" | "500+"): boolean {
+    switch (tier) {
+      case "1-100": return count >= 1 && count <= 100;
+      case "101-500": return count >= 101 && count <= 500;
+      case "500+": return count > 500;
+    }
+  }
+
+  private async computeCategoryPercentiles(
+    snapshotDate: Date,
+    callerBusinessId: string,
+    businessIds: string[]
+  ): Promise<CategoryPercentiles[]> {
+    if (businessIds.length < 2) return [];
+
+    // Extract byCategory arrays from all snapshots
+    const snapshots = await this.prisma.$queryRaw<Array<{
+      business_id: string;
+      by_category: any;
+    }>>`
+      SELECT
+        bs.business_id,
+        bs.metrics_json->'byCategory' as by_category
+      FROM benchmark_snapshots bs
+      WHERE bs.snapshot_date = ${snapshotDate}::date
+        AND bs.business_id = ANY(${businessIds}::uuid[])
+        AND bs.metrics_json->'byCategory' IS NOT NULL
+    `;
+
+    // Group category data by countingMethod (always) and by normalized categoryName
+    const byCountingMethod = new Map<string, Array<{ businessId: string; metrics: CategoryBenchmarkMetrics }>>();
+    const byCategoryName = new Map<string, Array<{ businessId: string; metrics: CategoryBenchmarkMetrics }>>();
+
+    for (const snap of snapshots) {
+      const cats = snap.by_category as CategoryBenchmarkMetrics[] | null;
+      if (!Array.isArray(cats)) continue;
+
+      // Aggregate per-location categories into per-business
+      const bizCats = new Map<string, CategoryBenchmarkMetrics>();
+      for (const cat of cats) {
+        const key = cat.categoryName?.toLowerCase() ?? "uncategorized";
+        const existing = bizCats.get(key);
+        if (existing) {
+          existing.onHandValue += cat.onHandValue;
+          existing.cogs7d += cat.cogs7d;
+          existing.varianceImpact += cat.varianceImpact;
+          existing.activeItemCount += cat.activeItemCount;
+        } else {
+          bizCats.set(key, { ...cat, categoryName: cat.categoryName });
+        }
+      }
+
+      for (const [normName, cat] of bizCats) {
+        // Recalculate pourCostPct after aggregation
+        cat.pourCostPct = cat.onHandValue > 0 ? Math.round((cat.cogs7d / cat.onHandValue) * 1000) / 10 : null;
+
+        // Group by counting method
+        const cmKey = cat.countingMethod;
+        if (!byCountingMethod.has(cmKey)) byCountingMethod.set(cmKey, []);
+        byCountingMethod.get(cmKey)!.push({ businessId: snap.business_id, metrics: cat });
+
+        // Group by category name
+        if (!byCategoryName.has(normName)) byCategoryName.set(normName, []);
+        byCategoryName.get(normName)!.push({ businessId: snap.business_id, metrics: cat });
+      }
+    }
+
+    const results: CategoryPercentiles[] = [];
+    const catMetricKeys = ["onHandValue", "cogs7d", "varianceImpact", "activeItemCount", "pourCostPct"] as const;
+
+    // By counting method (always include)
+    for (const [method, entries] of byCountingMethod) {
+      if (entries.length < 2) continue;
+
+      const callerEntry = entries.find((e) => e.businessId === callerBusinessId);
+      const percMetrics = {} as CategoryPercentiles["metrics"];
+
+      for (const mk of catMetricKeys) {
+        const values = entries
+          .map((e) => e.metrics[mk])
+          .filter((v): v is number => v != null)
+          .sort((a, b) => a - b);
+
+        percMetrics[mk] = values.length > 0
+          ? { p25: this.percentile(values, 0.25), p50: this.percentile(values, 0.5), p75: this.percentile(values, 0.75) }
+          : { p25: null, p50: null, p75: null };
+      }
+
+      results.push({
+        groupKey: method,
+        groupType: "countingMethod",
+        businessCount: entries.length,
+        callerValue: callerEntry?.metrics ?? null,
+        metrics: percMetrics,
+      });
+    }
+
+    // By category name (only when 3+ businesses share it)
+    for (const [catName, entries] of byCategoryName) {
+      if (entries.length < 3) continue;
+
+      const callerEntry = entries.find((e) => e.businessId === callerBusinessId);
+      const percMetrics = {} as CategoryPercentiles["metrics"];
+
+      for (const mk of catMetricKeys) {
+        const values = entries
+          .map((e) => e.metrics[mk])
+          .filter((v): v is number => v != null)
+          .sort((a, b) => a - b);
+
+        percMetrics[mk] = values.length > 0
+          ? { p25: this.percentile(values, 0.25), p50: this.percentile(values, 0.5), p75: this.percentile(values, 0.75) }
+          : { p25: null, p50: null, p75: null };
+      }
+
+      results.push({
+        groupKey: entries[0]!.metrics.categoryName,
+        groupType: "category",
+        businessCount: entries.length,
+        callerValue: callerEntry?.metrics ?? null,
+        metrics: percMetrics,
+      });
+    }
+
+    return results;
+  }
 
   private async getLatestSnapshotDate(): Promise<Date | null> {
     const result = await this.prisma.$queryRaw<Array<{ max_date: Date | null }>>`
@@ -656,7 +1056,7 @@ export class BenchmarkService {
     return sorted[lower]! + (sorted[upper]! - sorted[lower]!) * (index - lower);
   }
 
-  private emptyPercentiles(): Record<keyof BenchmarkMetrics, PercentileSet> {
+  private emptyPercentiles(): Record<CoreMetricKeys, PercentileSet> {
     const empty: PercentileSet = { p25: null, p50: null, p75: null };
     return {
       onHandValue: { ...empty },

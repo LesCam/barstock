@@ -1,5 +1,5 @@
 import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin, forceBusinessId } from "../trpc";
-import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, portfolioTrendQuerySchema, portfolioStaffComparisonQuerySchema, portfolioVarianceItemsQuerySchema, portfolioForecastQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema, varianceByCategoryQuerySchema, varianceItemTrendQuerySchema, portfolioAnomalySummaryQuerySchema, portfolioHealthScorecardQuerySchema, portfolioRadarComparisonQuerySchema, platformAnalyticsSummarySchema, platformTrendQuerySchema, scaleWeightAnomaliesQuerySchema, depletionCorrelationQuerySchema, anomalyClustersQuerySchema } from "@barstock/validators";
+import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, portfolioTrendQuerySchema, portfolioStaffComparisonQuerySchema, portfolioVarianceItemsQuerySchema, portfolioForecastQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, percentileHistorySchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema, varianceByCategoryQuerySchema, varianceItemTrendQuerySchema, portfolioAnomalySummaryQuerySchema, portfolioHealthScorecardQuerySchema, portfolioRadarComparisonQuerySchema, platformAnalyticsSummarySchema, platformTrendQuerySchema, scaleWeightAnomaliesQuerySchema, depletionCorrelationQuerySchema, anomalyClustersQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
 import { BenchmarkService } from "../services/benchmark.service";
@@ -310,7 +310,7 @@ export const reportsRouter = router({
     .input(industryBenchmarksSchema)
     .query(({ ctx, input }) => {
       const svc = new BenchmarkService(ctx.prisma);
-      return svc.getIndustryPercentiles(input.businessId, input.snapshotDate);
+      return svc.getIndustryPercentiles(input.businessId, input.snapshotDate, input.peerFilter ?? undefined);
     }),
 
   benchmarkTrend: protectedProcedure
@@ -321,6 +321,16 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => {
       const svc = new BenchmarkService(ctx.prisma);
       return svc.getBenchmarkTrend(input.businessId, input.weeks);
+    }),
+
+  percentileHistory: protectedProcedure
+    .use(requireRole("business_admin"))
+    .use(forceBusinessId())
+    .use(requireBusinessAccess())
+    .input(percentileHistorySchema)
+    .query(({ ctx, input }) => {
+      const svc = new BenchmarkService(ctx.prisma);
+      return svc.getPercentileHistory(input.businessId, input.weeks);
     }),
 
   platformBenchmarks: protectedProcedure
