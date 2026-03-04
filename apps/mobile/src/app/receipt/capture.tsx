@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import * as ImagePicker from "expo-image-picker";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
@@ -53,6 +53,11 @@ export default function ReceiptCaptureScreen() {
       ]);
     },
   });
+
+  // Auto-launch camera on mount
+  useEffect(() => {
+    handleLaunchCamera();
+  }, []);
 
   async function handleLaunchCamera() {
     if (launchingRef.current) return;
