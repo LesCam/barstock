@@ -519,7 +519,8 @@ export const authRouter = router({
       });
 
       const resetUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${token}`;
-      console.log(`\n[PASSWORD RESET] Reset link for ${input.email}:\n${resetUrl}\n`);
+      // Log that a reset was requested, but never log the token or URL
+      console.log(`[PASSWORD RESET] Reset requested for ${input.email}`);
 
       return { success: true };
     }),

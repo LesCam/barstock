@@ -3,6 +3,13 @@ import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@barstock/database";
 import { verifyPassword, buildUserPayload } from "@barstock/api/src/services/auth.service";
 
+const isProd = process.env.NODE_ENV === "production";
+const nextAuthUrl = process.env.NEXTAUTH_URL;
+
+if (isProd && (!nextAuthUrl || !nextAuthUrl.startsWith("https://"))) {
+  throw new Error("NEXTAUTH_URL must be an https:// URL in production");
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "change-me-in-production",
   providers: [
@@ -43,6 +50,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   session: { strategy: "jwt" },
+  cookies: {
+    sessionToken: {
+      name: isProd ? "__Host-authjs.session-token" : "authjs.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+      },
+    },
+    csrfToken: {
+      name: isProd ? "__Host-authjs.csrf-token" : "authjs.csrf-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+      },
+    },
+    callbackUrl: {
+      name: isProd ? "__Host-authjs.callback-url" : "authjs.callback-url",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+      },
+    },
+  },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {

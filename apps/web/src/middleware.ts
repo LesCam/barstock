@@ -30,7 +30,9 @@ export function middleware(request: NextRequest) {
 
   // Derive expected origin from forwarded headers (Vercel, Cloudflare, nginx, etc.)
   // x-forwarded-proto can be comma-separated ("https, http") — first value is client-facing
-  const proto = (request.headers.get("x-forwarded-proto") ?? "http").split(",")[0].trim();
+  // Default to 'https' in production (behind TLS proxy), 'http' in dev
+  const defaultProto = process.env.NODE_ENV === "production" ? "https" : "http";
+  const proto = (request.headers.get("x-forwarded-proto") ?? defaultProto).split(",")[0].trim();
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
   if (!host) {
     return new NextResponse("Forbidden", { status: 403 });
