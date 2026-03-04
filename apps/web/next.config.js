@@ -44,6 +44,15 @@ const nextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
+      // Prevent caching of authenticated / tenant-specific pages.
+      // Public pages (/menu/*, /artwork/*, /login) and /api/* (handled by middleware) are excluded.
+      {
+        source: "/((?!api|menu|artwork|login|_next).*)",
+        headers: [
+          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate" },
+          { key: "Pragma", value: "no-cache" },
+        ],
+      },
     ];
   },
 };
