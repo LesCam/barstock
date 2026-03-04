@@ -40,10 +40,25 @@ export class AlertService {
 
     const alerts: AlertResult[] = [];
 
-    // Login failures are business-scoped, check before location loop
+    // Business-scoped audit checks (before location loop)
     if ((rules as any).loginFailures?.enabled) {
       const loginAlerts = await this.checkLoginFailures(businessId, (rules as any).loginFailures.threshold);
       alerts.push(...loginAlerts);
+    }
+
+    if ((rules as any).privilegeEscalation?.enabled) {
+      const privAlerts = await this.checkPrivilegeEscalation(businessId, (rules as any).privilegeEscalation.threshold);
+      alerts.push(...privAlerts);
+    }
+
+    if ((rules as any).mfaStateChange?.enabled) {
+      const mfaAlerts = await this.checkMfaStateChange(businessId, (rules as any).mfaStateChange.threshold);
+      alerts.push(...mfaAlerts);
+    }
+
+    if ((rules as any).bulkDataAccess?.enabled) {
+      const bulkAlerts = await this.checkBulkDataAccess(businessId, (rules as any).bulkDataAccess.threshold);
+      alerts.push(...bulkAlerts);
     }
 
     for (const loc of locations) {
@@ -480,6 +495,81 @@ export class AlertService {
       body: `${failCount} failed login attempt(s) in the last hour.`,
       linkUrl: "/audit",
       metadata: { rule: "loginFailures", failCount },
+    }];
+  }
+
+  private async checkPrivilegeEscalation(businessId: string, threshold: number): Promise<AlertResult[]> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const events = await this.prisma.auditLog.findMany({
+      where: {
+        actionType: { in: ["user.updated", "user.permission.updated", "user.location_access.granted"] },
+        businessId,
+        createdAt: { gte: oneHourAgo },
+      },
+      select: { actionType: true, actorUserId: true, metadataJson: true },
+    });
+
+    // For user.updated, only count if metadata indicates a role change
+    const roleChanges = events.filter((e) => {
+      if (e.actionType !== "user.updated") return true;
+      const meta = e.metadataJson as Record<string, unknown> | null;
+      return meta?.role !== undefined || meta?.changes?.toString().includes("role");
+    });
+
+    if (roleChanges.length < threshold) return [];
+
+    return [{
+      title: "Privilege escalation detected",
+      body: `${roleChanges.length} role/permission change(s) in the last hour.`,
+      linkUrl: "/audit",
+      metadata: { rule: "privilegeEscalation", eventCount: roleChanges.length },
+    }];
+  }
+
+  private async checkMfaStateChange(businessId: string, threshold: number): Promise<AlertResult[]> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const count = await this.prisma.auditLog.count({
+      where: {
+        actionType: { in: ["auth.mfa_disabled", "auth.mfa_force_disabled"] },
+        businessId,
+        createdAt: { gte: oneHourAgo },
+      },
+    });
+
+    if (count < threshold) return [];
+
+    return [{
+      title: "MFA disabled",
+      body: `${count} MFA disable event(s) in the last hour.`,
+      linkUrl: "/audit",
+      metadata: { rule: "mfaStateChange", eventCount: count },
+    }];
+  }
+
+  private async checkBulkDataAccess(businessId: string, threshold: number): Promise<AlertResult[]> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const count = await this.prisma.auditLog.count({
+      where: {
+        actionType: {
+          in: [
+            "inventory_item.bulk_created",
+            "recipe.bulk_imported",
+            "mapping.bulk_created",
+            "par_level.bulk_upserted",
+          ],
+        },
+        businessId,
+        createdAt: { gte: oneHourAgo },
+      },
+    });
+
+    if (count < threshold) return [];
+
+    return [{
+      title: "Unusual bulk operations",
+      body: `${count} bulk operation(s) in the last hour.`,
+      linkUrl: "/audit",
+      metadata: { rule: "bulkDataAccess", eventCount: count },
     }];
   }
 
