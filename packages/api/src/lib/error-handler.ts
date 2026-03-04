@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { redactFields } from "./log-redact";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -77,7 +78,12 @@ export function logError(opts: {
   userId?: string;
 }) {
   const { requestId, path, error, input, userId } = opts;
-  const logInput = path && SENSITIVE_PATHS.has(path) ? "[REDACTED]" : input;
+  // Fully redact auth inputs; field-level redact everything else
+  const logInput = path && SENSITIVE_PATHS.has(path)
+    ? "[REDACTED]"
+    : input && typeof input === "object" && !Array.isArray(input)
+      ? redactFields(input as Record<string, unknown>)
+      : input;
 
   console.error(
     JSON.stringify({
