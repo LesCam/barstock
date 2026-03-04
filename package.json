@@ -24,5 +24,11 @@
     "react": "18.3.1",
     "react-native": "0.76.9"
   },
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "pnpm": {
+    "overrides": {
+      "tar": ">=7.5.7",
+      "minimatch": ">=3.1.4 <10.0.0 || >=10.2.3"
+    }
+  }
 }
