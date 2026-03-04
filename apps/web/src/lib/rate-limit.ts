@@ -103,6 +103,12 @@ export const cronLimiter = createRateLimiter({
   windowMs: 5 * 60 * 1000,
 });
 
+/** Public endpoints (guide, uploads): 60 per minute per key */
+export const publicLimiter = createRateLimiter({
+  limit: 60,
+  windowMs: 60 * 1000,
+});
+
 // ─── Key Helpers ─────────────────────────────────────────────────────────────
 
 /** Extract client IP from request headers */

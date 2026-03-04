@@ -4,6 +4,7 @@ import {
   authLimiter,
   expensiveLimiter,
   cronLimiter,
+  publicLimiter,
   getClientIp,
   rateLimitKey,
   rateLimitResponse,
@@ -39,9 +40,15 @@ export async function middleware(req: NextRequest) {
     if (result.limited) return rateLimitResponse(result.retryAfterMs!);
   }
 
+  // Public endpoints (uploads, guide): 60 requests / min per IP
+  if (path.startsWith("/api/uploads/") || path.startsWith("/api/guide/")) {
+    const result = await publicLimiter.check(`public:${ip}`);
+    if (result.limited) return rateLimitResponse(result.retryAfterMs!);
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/api/auth/:path*", "/api/trpc/:path*", "/api/cron/:path*"],
+  matcher: ["/api/auth/:path*", "/api/trpc/:path*", "/api/cron/:path*", "/api/uploads/:path*", "/api/guide/:path*"],
 };
