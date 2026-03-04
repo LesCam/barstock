@@ -393,7 +393,7 @@ export default function StaffScorecardsPage() {
             <div>
               <h4 className="mb-3 text-sm font-semibold text-[#EAF0FF]/80">Problem Items (Top 10)</h4>
               <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
-                {expandedItemsData && expandedItemsData.items.length > 0 ? (
+                {expandedItemsDataData && expandedItemsDataData.items.length > 0 ? (
                   <table className="w-full text-left text-sm">
                     <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
                       <tr>
@@ -405,7 +405,7 @@ export default function StaffScorecardsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {expandedItemsData.items.map((item) => (
+                      {expandedItemsDataData.items.map((item: any) => (
                         <tr key={item.inventoryItemId} className="hover:bg-[#0B1623]/60">
                           <td className="px-3 py-2 font-medium">{item.itemName}</td>
                           <td className="px-3 py-2 text-[#EAF0FF]/60">{item.categoryName ?? "—"}</td>
