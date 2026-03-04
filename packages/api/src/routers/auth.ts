@@ -1298,6 +1298,7 @@ export const authRouter = router({
 
   mfaDisable: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ password: z.string(), code: z.string().length(6) }))
     .mutation(async ({ ctx, input }) => {
       const user = await ctx.prisma.user.findUniqueOrThrow({
