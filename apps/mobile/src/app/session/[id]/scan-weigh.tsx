@@ -543,7 +543,12 @@ export default function ScanWeighScreen() {
     }
 
     try {
-      await addLineMutation.mutateAsync(mutationInput);
+      await Promise.race([
+        addLineMutation.mutateAsync(mutationInput),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("network timeout")), 5000)
+        ),
+      ]);
 
       await recordMeasurementMutation.mutateAsync({
         locationId: selectedLocationId!,
@@ -587,8 +592,8 @@ export default function ScanWeighScreen() {
 
       showSuccessFlash(matchedItem.name);
     } catch (error: any) {
-      // If network error, offer to queue
-      if (error.message?.includes("fetch") || error.message?.includes("network")) {
+      // If network error or timeout, offer to queue
+      if (error.message?.includes("fetch") || error.message?.includes("network") || error.message?.includes("timeout")) {
         Alert.alert(
           "Connection Lost",
           "Save this item to sync later?",
@@ -728,12 +733,17 @@ export default function ScanWeighScreen() {
     }
 
     try {
-      await addLineMutation.mutateAsync(mutationInput);
+      await Promise.race([
+        addLineMutation.mutateAsync(mutationInput),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("network timeout")), 5000)
+        ),
+      ]);
 
       utils.sessions.getById.invalidate({ id: sessionId! });
       showSuccessFlash(matchedItem.name);
     } catch (error: any) {
-      if (error.message?.includes("fetch") || error.message?.includes("network")) {
+      if (error.message?.includes("fetch") || error.message?.includes("network") || error.message?.includes("timeout")) {
         const tempId = Crypto.randomUUID();
         await enqueue("sessions.addLine", mutationInput, tempId);
         addOptimisticLine(tempId, matchedItem!, {

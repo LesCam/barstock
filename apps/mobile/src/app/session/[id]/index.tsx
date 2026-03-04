@@ -859,10 +859,16 @@ export default function SessionDetailScreen() {
     try {
       const allExpected: UncountedItem[] = [];
       for (const areaId of workedAreaIds) {
-        const expected = await utils.sessions.expectedItemsForArea.fetch({
-          locationId: selectedLocationId!,
-          barAreaId: areaId,
-        });
+        // Race against a 5s timeout to handle flaky/offline connectivity
+        const expected = await Promise.race([
+          utils.sessions.expectedItemsForArea.fetch({
+            locationId: selectedLocationId!,
+            barAreaId: areaId,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 5000)
+          ),
+        ]);
         const countedItemIds = new Set(
           session!.lines
             .filter((l: any) => l.subArea?.barArea?.id === areaId)
@@ -889,8 +895,17 @@ export default function SessionDetailScreen() {
         setUncountedItems(allExpected);
         setShowVerification(true);
       }
-    } catch (error: any) {
-      Alert.alert("Error", error.message ?? "Failed to verify items");
+    } catch {
+      // Network failed or timed out — fall back to queued offline close
+      enqueue("sessions.close", { sessionId: id!, varianceReasons });
+      AsyncStorage.setItem(`@barstock/pendingClose/${id}`, "1");
+      setPendingClose(true);
+      utils.sessions.getById.setData({ id: id! }, (old: any) => {
+        if (!old) return old;
+        return { ...old, _pendingClose: true };
+      });
+      Alert.alert("Queued", "Could not verify items — session close has been queued for when you're back online.");
+      router.back();
     }
   }
 

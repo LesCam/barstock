@@ -29,8 +29,12 @@ export async function hashPin(pin: string): Promise<string> {
   return bcrypt.hash(pin, 10);
 }
 
-export async function verifyPinHash(pin: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(pin, hash);
+export async function verifyPinHash(pin: string, stored: string): Promise<boolean> {
+  // Support both bcrypt hashes and plaintext PINs (Char(4) column)
+  if (stored.startsWith("$2")) {
+    return bcrypt.compare(pin, stored);
+  }
+  return pin === stored.trim();
 }
 
 /**
@@ -53,14 +57,14 @@ export async function isPinTaken(
     select: { pin: true },
   });
   for (const u of users) {
-    if (u.pin && await bcrypt.compare(pin, u.pin)) return true;
+    if (u.pin && await verifyPinHash(pin, u.pin)) return true;
   }
   return false;
 }
 
 /**
  * Find a user by plaintext PIN within a business (for loginWithPin).
- * Iterates active users and bcrypt.compares each.
+ * Iterates active users and compares each.
  */
 export async function findUserByPin(
   prisma: ExtendedPrismaClient,
@@ -72,7 +76,7 @@ export async function findUserByPin(
     select: { id: true, pin: true },
   });
   for (const u of users) {
-    if (u.pin && await bcrypt.compare(pin, u.pin)) return u.id;
+    if (u.pin && await verifyPinHash(pin, u.pin)) return u.id;
   }
   return null;
 }
