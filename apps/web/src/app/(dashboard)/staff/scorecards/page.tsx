@@ -43,60 +43,13 @@ export default function StaffScorecardsPage() {
     { enabled: !!selectedLocationId && !!expandedUserId }
   );
 
-  if (!selectedLocationId) {
-    return (
-      <div className="flex h-64 items-center justify-center text-[#EAF0FF]/40">
-        Select a location to view staff scorecards.
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold">Staff Scorecards</h1>
-          <HelpLink section="sessions" tooltip="Learn about counting sessions" />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-lg border border-white/10 bg-[#16283F]" />
-          ))}
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-48 animate-pulse rounded-lg border border-white/10 bg-[#16283F]" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   const staff = accountability?.staff ?? [];
   const summary = accountability?.summary;
-
-  function accuracyColor(rate: number): string {
-    if (rate >= 95) return "#4CAF50";
-    if (rate >= 85) return "#E9B44C";
-    return "#EF4444";
-  }
-
-  function trendArrow(trend: "improving" | "stable" | "worsening"): string {
-    if (trend === "improving") return "\u2191";
-    if (trend === "worsening") return "\u2193";
-    return "\u2192";
-  }
-
-  function trendColor(trend: "improving" | "stable" | "worsening"): string {
-    if (trend === "improving") return "text-green-400";
-    if (trend === "worsening") return "text-red-400";
-    return "text-[#EAF0FF]/60";
-  }
 
   const expandedReasons = expandedUserId
     ? reasonBreakdown?.find((s) => s.userId === expandedUserId)
     : null;
-  const expandedItems = expandedUserId
+  const expandedItemsDataData = expandedUserId
     ? itemVariance?.find((s) => s.userId === expandedUserId)
     : null;
 
@@ -126,6 +79,53 @@ export default function StaffScorecardsPage() {
       };
     }).filter((d) => d.x > 0);
   }, [staff, accountability]);
+
+  if (!selectedLocationId) {
+    return (
+      <div className="flex h-64 items-center justify-center text-[#EAF0FF]/40">
+        Select a location to view staff scorecards.
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Staff Scorecards</h1>
+          <HelpLink section="sessions" tooltip="Learn about counting sessions" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-lg border border-white/10 bg-[#16283F]" />
+          ))}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-48 animate-pulse rounded-lg border border-white/10 bg-[#16283F]" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function accuracyColor(rate: number): string {
+    if (rate >= 95) return "#4CAF50";
+    if (rate >= 85) return "#E9B44C";
+    return "#EF4444";
+  }
+
+  function trendArrow(trend: "improving" | "stable" | "worsening"): string {
+    if (trend === "improving") return "\u2191";
+    if (trend === "worsening") return "\u2193";
+    return "\u2192";
+  }
+
+  function trendColor(trend: "improving" | "stable" | "worsening"): string {
+    if (trend === "improving") return "text-green-400";
+    if (trend === "worsening") return "text-red-400";
+    return "text-[#EAF0FF]/60";
+  }
 
   return (
     <div className="space-y-6">
@@ -393,7 +393,7 @@ export default function StaffScorecardsPage() {
             <div>
               <h4 className="mb-3 text-sm font-semibold text-[#EAF0FF]/80">Problem Items (Top 10)</h4>
               <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#16283F]">
-                {expandedItems && expandedItems.items.length > 0 ? (
+                {expandedItemsData && expandedItemsData.items.length > 0 ? (
                   <table className="w-full text-left text-sm">
                     <thead className="border-b border-white/10 bg-[#0B1623] text-xs uppercase text-[#EAF0FF]/60">
                       <tr>
@@ -405,7 +405,7 @@ export default function StaffScorecardsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {expandedItems.items.map((item) => (
+                      {expandedItemsData.items.map((item) => (
                         <tr key={item.inventoryItemId} className="hover:bg-[#0B1623]/60">
                           <td className="px-3 py-2 font-medium">{item.itemName}</td>
                           <td className="px-3 py-2 text-[#EAF0FF]/60">{item.categoryName ?? "—"}</td>

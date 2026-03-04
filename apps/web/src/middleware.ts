@@ -40,6 +40,8 @@ const EXPENSIVE_PROCEDURES = new Set([
 
 // Routes that serve public, cacheable content (their handlers set their own Cache-Control)
 const PUBLIC_CACHEABLE_PREFIXES = ["/api/uploads/", "/api/guide/"];
+// next-auth manages its own caching and cookies — don't interfere
+const AUTH_PREFIXES = ["/api/auth/"];
 
 /** Set no-store headers on a response to prevent caching of authenticated/tenant data */
 function setNoStoreHeaders(response: NextResponse): NextResponse {
@@ -48,11 +50,12 @@ function setNoStoreHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-/** Return NextResponse.next() with no-store headers unless the route is public-cacheable */
+/** Return NextResponse.next() with no-store headers unless the route is public-cacheable or auth */
 function nextWithCachePolicy(request: NextRequest): NextResponse {
   const path = request.nextUrl.pathname;
   const isPublicCacheable = PUBLIC_CACHEABLE_PREFIXES.some((p) => path.startsWith(p));
-  if (isPublicCacheable) return NextResponse.next();
+  const isAuth = AUTH_PREFIXES.some((p) => path.startsWith(p));
+  if (isPublicCacheable || isAuth) return NextResponse.next();
   return setNoStoreHeaders(NextResponse.next());
 }
 
