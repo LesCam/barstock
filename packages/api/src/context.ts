@@ -17,6 +17,7 @@ export interface UserPayload {
 export interface Context {
   prisma: ExtendedPrismaClient;
   user: UserPayload | null;
+  requestId: string;
   ip?: string;
   userAgent?: string;
 }

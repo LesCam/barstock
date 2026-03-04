@@ -1,5 +1,6 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter, createContext } from "@barstock/api";
+import { logError } from "@barstock/api/src/lib/error-handler";
 import { auth } from "@/lib/auth";
 import type { UserPayload } from "@barstock/api";
 
@@ -32,6 +33,15 @@ const handler = async (req: Request) => {
     req,
     router: appRouter,
     createContext: () => createContext({ headers: req.headers, user }),
+    onError({ error, path, input, ctx }) {
+      logError({
+        requestId: ctx?.requestId ?? "unknown",
+        path,
+        error,
+        input,
+        userId: ctx?.user?.userId,
+      });
+    },
   });
 };
 

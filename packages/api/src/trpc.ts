@@ -5,11 +5,22 @@ import type { UserPayload } from "./context";
 import { Role, ROLE_HIERARCHY } from "@barstock/types";
 import type { CapabilityToggles } from "@barstock/validators";
 import { SettingsService } from "./services/settings.service";
+import { getClientMessage } from "./lib/error-handler";
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
-  errorFormatter({ shape }) {
-    return shape;
+  errorFormatter({ shape, error, ctx }) {
+    const requestId = ctx?.requestId ?? "unknown";
+    const message = getClientMessage(error);
+    return {
+      ...shape,
+      message,
+      data: {
+        ...shape.data,
+        requestId,
+        stack: undefined,
+      },
+    };
   },
 });
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "@barstock/database";
 import { decodeToken, buildUserPayload } from "./services/auth.service";
 import type { Context, UserPayload } from "./context";
@@ -10,6 +11,7 @@ export async function createContext(opts: {
   headers: Headers;
   user?: UserPayload | null;
 }): Promise<Context> {
+  const requestId = randomUUID();
   const ip =
     opts.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     opts.headers.get("x-real-ip") ??
@@ -18,7 +20,7 @@ export async function createContext(opts: {
 
   // If user already resolved (e.g. from NextAuth session), use directly
   if (opts.user) {
-    return { prisma, user: opts.user, ip, userAgent };
+    return { prisma, user: opts.user, requestId, ip, userAgent };
   }
 
   const authHeader = opts.headers.get("authorization");
@@ -36,5 +38,5 @@ export async function createContext(opts: {
     }
   }
 
-  return { prisma, user, ip, userAgent };
+  return { prisma, user, requestId, ip, userAgent };
 }
