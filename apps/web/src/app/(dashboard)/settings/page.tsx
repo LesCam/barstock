@@ -35,6 +35,19 @@ export default function SettingsPage() {
   const { selectedLocationId: locationId } = useLocation();
   const canEdit = ADMIN_ROLES.includes(user?.highestRole ?? "");
 
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+    let attempts = 0;
+    // Re-scroll repeatedly as async sections load and shift layout
+    const interval = setInterval(() => {
+      const el = document.querySelector(hash);
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+      if (++attempts >= 8) clearInterval(interval);
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
   if (!businessId) {
     return <div className="text-[#EAF0FF]/60">No business selected.</div>;
   }
@@ -1130,7 +1143,7 @@ function AlertRulesSection({ businessId, canEdit }: { businessId: string; canEdi
   if (!local) return <div className="text-[#EAF0FF]/60">Loading alert settings...</div>;
 
   return (
-    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+    <div id="alert-rules" className="rounded-lg border border-white/10 bg-[#16283F] p-6 scroll-mt-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Alert Rules</h2>
         {canEdit && dirty && (

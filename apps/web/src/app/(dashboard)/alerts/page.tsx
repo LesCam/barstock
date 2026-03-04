@@ -144,7 +144,7 @@ export default function AlertsPage() {
           <HelpLink section="alerts" tooltip="Learn about alert rules" />
         </div>
         <Link
-          href="/settings"
+          href="/settings#alert-rules"
           className="rounded-md bg-[#16283F] px-4 py-2 text-sm text-[#E9B44C] hover:bg-[#1a3050]"
         >
           Configure Thresholds
