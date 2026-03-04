@@ -13,9 +13,18 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Non-browser clients (curl, server-to-server) don't send Origin
+  // Server-side calls (Next.js server components, internal fetch) set this header
+  if (request.headers.get("x-internal-request") === "1") {
+    return NextResponse.next();
+  }
+
+  // In production, reject missing Origin — browsers always send it on mutating requests.
+  // In dev, allow missing Origin for curl/Postman/server-to-server testing.
   const origin = request.headers.get("origin");
   if (!origin) {
+    if (process.env.NODE_ENV === "production") {
+      return new NextResponse("Forbidden – missing origin", { status: 403 });
+    }
     return NextResponse.next();
   }
 

@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+// HSTS: browsers ignore over HTTP (dev), so this is safe to set unconditionally.
+// In production, can alternatively be set at the edge (Vercel/Cloudflare) if preferred.
 const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -12,7 +14,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "connect-src 'self' https: wss:",
+      "connect-src 'self' http: https: ws: wss:",
       "frame-ancestors 'none'",
     ].join("; "),
   },
