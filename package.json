@@ -19,7 +19,7 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "expo-haptics": "~15.0.8",
+    "expo-haptics": "~55.0.8",
     "expo": "~52.0.49",
     "react": "18.3.1",
     "react-native": "0.76.9"
