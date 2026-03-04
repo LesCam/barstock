@@ -1,6 +1,7 @@
 import { requireAuth, isAuthFailure } from "@/lib/require-auth";
 import { sessionEmitter } from "@barstock/api/src/lib/session-emitter";
 import type { SessionEvent } from "@barstock/api/src/lib/session-emitter";
+import { prisma } from "@barstock/database";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,15 @@ export async function GET(
   if (isAuthFailure(authResult)) return authResult;
 
   const { sessionId } = await params;
+
+  // H1 fix: verify session belongs to user's business
+  const session = await prisma.inventorySession.findFirst({
+    where: { id: sessionId, location: { businessId: authResult.businessId } },
+    select: { id: true },
+  });
+  if (!session) {
+    return new Response("Not Found", { status: 404 });
+  }
   const encoder = new TextEncoder();
   let listenerCleanup: (() => void) | null = null;
   let heartbeatInterval: ReturnType<typeof setInterval> | null = null;

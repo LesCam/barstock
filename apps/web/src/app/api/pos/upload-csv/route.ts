@@ -63,6 +63,16 @@ export async function POST(req: NextRequest) {
     }
 
     const { sourceSystem, locationId, templateId, sourceLocationId, customMapping: customMappingStr, businessDate: businessDateStr } = parsed.data;
+
+    // H3 fix: verify location belongs to user's business
+    const location = await prisma.location.findFirst({
+      where: { id: locationId, businessId: user.businessId },
+      select: { id: true },
+    });
+    if (!location) {
+      return NextResponse.json({ error: "Location not found" }, { status: 404 });
+    }
+
     const csvText = await file.text();
 
     let customMapping: Record<string, string> | undefined;

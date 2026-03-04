@@ -12,6 +12,13 @@ export async function GET(
   if (isAuthFailure(authResult)) return authResult;
 
   const { scanSessionId } = await params;
+
+  // H2 fix: verify scan session belongs to user's business
+  const claimed = scanImportEmitter.claimSession(scanSessionId, authResult.businessId);
+  if (!claimed) {
+    return new Response("Not Found", { status: 404 });
+  }
+
   const encoder = new TextEncoder();
   let listenerCleanup: (() => void) | null = null;
   let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -51,6 +58,7 @@ export async function GET(
     cancel() {
       if (listenerCleanup) listenerCleanup();
       if (heartbeatInterval) clearInterval(heartbeatInterval);
+      scanImportEmitter.releaseSession(scanSessionId);
     },
   });
 
