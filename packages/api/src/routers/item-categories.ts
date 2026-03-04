@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, forceBusinessId, requireBusinessAccess } from "../trpc";
+import { router, protectedProcedure, requireRole, forceBusinessId, requireBusinessAccess, requireRecentAuth } from "../trpc";
 import {
   itemCategoryCreateSchema,
   itemCategoryUpdateSchema,
@@ -65,6 +65,7 @@ export const itemCategoriesRouter = router({
 
   delete: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const count = await ctx.prisma.inventoryItem.count({

@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId } from "../trpc";
+import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId, requireRecentAuth } from "../trpc";
 import { settingsGetSchema, settingsUpdateSchema } from "@barstock/validators";
 import { SettingsService } from "../services/settings.service";
 import { AuditService } from "../services/audit.service";
@@ -67,6 +67,7 @@ export const settingsRouter = router({
 
   update: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(settingsUpdateSchema)

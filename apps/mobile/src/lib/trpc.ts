@@ -65,6 +65,16 @@ const refreshLink: TRPCLink<AppRouter> = () => {
           observer.next(value);
         },
         error(err) {
+          // Re-auth required — force sign-out so user re-logs with fresh authAt
+          if (
+            err instanceof TRPCClientError &&
+            err.message === "RE_AUTH_REQUIRED"
+          ) {
+            onSignOut?.();
+            observer.error(err);
+            return;
+          }
+
           if (
             err instanceof TRPCClientError &&
             err.data?.code === "UNAUTHORIZED" &&

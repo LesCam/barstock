@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requirePermission } from "../trpc";
+import { router, protectedProcedure, requirePermission, requireRecentAuth } from "../trpc";
 import {
   purchaseOrderCreateSchema,
   purchaseOrderPickupSchema,
@@ -13,6 +13,7 @@ import { z } from "zod";
 export const purchaseOrdersRouter = router({
   create: protectedProcedure
     .use(requirePermission("canOrder"))
+    .use(requireRecentAuth())
     .input(purchaseOrderCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const svc = new PurchaseOrderService(ctx.prisma);
@@ -73,6 +74,7 @@ export const purchaseOrdersRouter = router({
 
   close: protectedProcedure
     .use(requirePermission("canOrder"))
+    .use(requireRecentAuth())
     .input(purchaseOrderCloseSchema)
     .mutation(async ({ ctx, input }) => {
       const svc = new PurchaseOrderService(ctx.prisma);

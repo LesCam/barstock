@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, forceBusinessId, requireBusinessAccess, requireLocationAccess, isPlatformAdmin } from "../trpc";
+import { router, protectedProcedure, requireRole, forceBusinessId, requireBusinessAccess, requireLocationAccess, isPlatformAdmin, requireRecentAuth } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { inventoryItemCreateSchema, inventoryItemUpdateSchema, inventoryItemBulkCreateSchema, priceHistoryCreateSchema, onHandQuerySchema, setItemVendorsSchema } from "@barstock/validators";
 import { InventoryService } from "../services/inventory.service";
@@ -176,6 +176,7 @@ export const inventoryRouter = router({
     }),
 
   addPrice: protectedProcedure
+    .use(requireRecentAuth())
     .input(priceHistoryCreateSchema)
     .mutation(async ({ ctx, input }) => {
       // Verify tenant ownership before mutation

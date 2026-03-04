@@ -495,6 +495,7 @@ export const authRouter = router({
 
   switchPrimaryLocation: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ userId: z.string().uuid(), newPrimaryId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const user = await ctx.prisma.user.findUniqueOrThrow({
@@ -838,6 +839,7 @@ export const authRouter = router({
 
   cancelInvite: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ inviteId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const invite = await ctx.prisma.staffInvite.findUniqueOrThrow({
@@ -861,6 +863,7 @@ export const authRouter = router({
 
   resendInvite: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ inviteId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const oldInvite = await ctx.prisma.staffInvite.findUniqueOrThrow({
@@ -1055,6 +1058,32 @@ export const authRouter = router({
       };
     }),
 
+  // ── Re-authentication ──────────────────────────────────────
+
+  reAuthenticate: protectedProcedure
+    .input(z.object({
+      password: z.string(),
+      mfaCode: z.string().length(6).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: ctx.user.userId },
+        select: { passwordHash: true, mfaEnabled: true, mfaSecret: true },
+      });
+
+      const valid = await verifyPassword(input.password, user.passwordHash);
+      if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid password" });
+
+      if (user.mfaEnabled) {
+        if (!input.mfaCode) throw new TRPCError({ code: "BAD_REQUEST", message: "MFA code required" });
+        const secret = decrypt(user.mfaSecret!);
+        const codeValid = otpVerifySync({ token: input.mfaCode, secret }).valid;
+        if (!codeValid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid MFA code" });
+      }
+
+      return { success: true, requiresMfa: user.mfaEnabled };
+    }),
+
   // ── MFA ──────────────────────────────────────────────────────
 
   mfaLogin: publicProcedure
@@ -1123,6 +1152,7 @@ export const authRouter = router({
 
   mfaSetup: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .mutation(async ({ ctx }) => {
       const user = await ctx.prisma.user.findUniqueOrThrow({
         where: { id: ctx.user.userId },
@@ -1146,6 +1176,7 @@ export const authRouter = router({
 
   mfaVerify: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ code: z.string().length(6) }))
     .mutation(async ({ ctx, input }) => {
       const user = await ctx.prisma.user.findUniqueOrThrow({

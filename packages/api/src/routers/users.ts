@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { router, protectedProcedure, requireRole, forceBusinessId } from "../trpc";
+import { router, protectedProcedure, requireRole, forceBusinessId, requireRecentAuth } from "../trpc";
 import {
   platformUserCreateSchema,
   platformUserUpdateSchema,
@@ -57,6 +57,7 @@ export const usersRouter = router({
 
   create: protectedProcedure
     .use(requireRole("platform_admin"))
+    .use(requireRecentAuth())
     .input(platformUserCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const subService = new SubscriptionService(ctx.prisma);
@@ -97,6 +98,7 @@ export const usersRouter = router({
 
   update: protectedProcedure
     .use(requireRole("platform_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ userId: z.string().uuid() }).merge(platformUserUpdateSchema))
     .mutation(async ({ ctx, input }) => {
       const { userId, ...data } = input;
@@ -108,6 +110,7 @@ export const usersRouter = router({
 
   deactivate: protectedProcedure
     .use(requireRole("platform_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ userId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       return ctx.prisma.user.update({

@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireBusinessAccess, requireRole, forceBusinessId, isPlatformAdmin } from "../trpc";
+import { router, protectedProcedure, requireBusinessAccess, requireRole, forceBusinessId, isPlatformAdmin, requireRecentAuth } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { vendorCreateSchema, vendorListSchema, vendorGetByIdSchema, vendorUpdateSchema, vendorOrdererSchema } from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
@@ -86,6 +86,7 @@ export const vendorsRouter = router({
 
   delete: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireRecentAuth())
     .input(vendorGetByIdSchema)
     .mutation(async ({ ctx, input }) => {
       // Verify tenant ownership before mutation
@@ -114,6 +115,7 @@ export const vendorsRouter = router({
 
   assignOrderer: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(vendorOrdererSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.prisma.vendorOrderer.upsert({
@@ -145,6 +147,7 @@ export const vendorsRouter = router({
 
   removeOrderer: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(vendorOrdererSchema)
     .mutation(async ({ ctx, input }) => {
       await ctx.prisma.vendorOrderer.delete({

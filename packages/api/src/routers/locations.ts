@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId, requireLocationAccess } from "../trpc";
+import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId, requireLocationAccess, requireRecentAuth } from "../trpc";
 import { locationCreateSchema, locationUpdateSchema } from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
 import { SubscriptionService } from "../services/subscription.service";
@@ -48,6 +48,7 @@ export const locationsRouter = router({
 
   archive: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ locationId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const location = await ctx.prisma.location.update({
@@ -70,6 +71,7 @@ export const locationsRouter = router({
 
   restore: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ locationId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const location = await ctx.prisma.location.update({

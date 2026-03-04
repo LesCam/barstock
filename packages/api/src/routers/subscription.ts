@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId } from "../trpc";
+import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId, requireRecentAuth } from "../trpc";
 import { SubscriptionService } from "../services/subscription.service";
 import { TIER_DEFAULTS } from "../services/subscription.constants";
 import { AuditService } from "../services/audit.service";
@@ -18,6 +18,7 @@ export const subscriptionRouter = router({
 
   changeTier: protectedProcedure
     .use(requireRole("platform_admin"))
+    .use(requireRecentAuth())
     .input(
       z.object({
         businessId: z.string().uuid(),
@@ -43,6 +44,7 @@ export const subscriptionRouter = router({
 
   setOverrides: protectedProcedure
     .use(requireRole("platform_admin"))
+    .use(requireRecentAuth())
     .input(
       z.object({
         businessId: z.string().uuid(),

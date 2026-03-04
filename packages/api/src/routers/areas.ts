@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, requireLocationAccess, isPlatformAdmin } from "../trpc";
+import { router, protectedProcedure, requireRole, requireLocationAccess, isPlatformAdmin, requireRecentAuth } from "../trpc";
 import {
   barAreaCreateSchema,
   barAreaUpdateSchema,
@@ -72,6 +72,7 @@ export const areasRouter = router({
 
   deleteBarArea: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await verifyBarAreaAccess(ctx.prisma, input.id, ctx.user, isPlatformAdmin(ctx.user));
@@ -118,6 +119,7 @@ export const areasRouter = router({
 
   deleteSubArea: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireRecentAuth())
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await verifySubAreaAccess(ctx.prisma, input.id, ctx.user, isPlatformAdmin(ctx.user));
