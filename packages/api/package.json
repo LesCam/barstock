@@ -14,7 +14,7 @@
     "@barstock/validators": "workspace:*",
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.3.1",
-    "@trpc/server": "^11.0.0-rc.660",
+    "@trpc/server": "^11.11.0",
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.2",
     "otplib": "^13.3.0",
