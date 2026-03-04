@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { PageTip } from "@/components/page-tip";
 import { HelpLink } from "@/components/help-link";
-import { downloadCsv } from "@/lib/download-csv";
+import { useAuditedDownload } from "@/lib/use-audited-download";
 import {
   AreaChart,
   Area,
@@ -48,6 +48,7 @@ export default function UsageTrendsPage() {
   const user = session?.user as any;
   const { selectedLocationId: locationId } = useLocation();
   const businessId = user?.businessId as string | undefined;
+  const auditedDownload = useAuditedDownload();
 
   const [period, setPeriod] = useState<Period>("30d");
   const [metric, setMetric] = useState<Metric>("cost");
@@ -236,8 +237,8 @@ export default function UsageTrendsPage() {
       item.unitCost != null ? item.unitCost.toFixed(2) : "",
       item.totalCost != null ? item.totalCost.toFixed(2) : "",
     ]);
-    downloadCsv(headers, rows, `usage-trends-${period}.csv`);
-  }, [sortedItems, period]);
+    auditedDownload(headers, rows, `usage-trends-${period}.csv`, "usageTrends");
+  }, [sortedItems, period, auditedDownload]);
 
   // Sort header component
   function SortHeader({ label, field }: { label: string; field: UsageSortKey }) {

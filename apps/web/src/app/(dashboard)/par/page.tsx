@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import { HelpLink } from "@/components/help-link";
-import { downloadCsv } from "@/lib/download-csv";
+import { useAuditedDownload } from "@/lib/use-audited-download";
 
 const ADMIN_ROLES = ["platform_admin", "business_admin", "manager"];
 
@@ -786,6 +786,7 @@ function OrderView({
   const [createdVendorIds, setCreatedVendorIds] = useState<Set<string>>(new Set());
   const [notesMap, setNotesMap] = useState<Map<string, string>>(new Map());
   const [showNotes, setShowNotes] = useState<Set<string>>(new Set());
+  const auditedDownload = useAuditedDownload();
   const utils = trpc.useUtils();
 
   const createPOMutation = trpc.purchaseOrders.create.useMutation({
@@ -930,7 +931,8 @@ function OrderView({
       });
 
     const headers = ["Vendor", "Item Name", "Vendor SKU", "UOM", "Current On-Hand", "Par Level", "Order Qty", "Unit Cost", "Estimated Cost"];
-    downloadCsv(headers, rows, `order-${vendor.vendorName.replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`);
+    const filename = `order-${vendor.vendorName.replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`;
+    auditedDownload(headers, rows, filename, "parOrder");
   }
 
   function exportAllCsv() {
@@ -954,7 +956,7 @@ function OrderView({
         ]);
       }
     }
-    downloadCsv(headers, rows, `order-all-${new Date().toISOString().slice(0, 10)}.csv`);
+    auditedDownload(headers, rows, `order-all-${new Date().toISOString().slice(0, 10)}.csv`, "parOrderAll");
   }
 
   if (isLoading) return <p className="text-[#EAF0FF]/60">Loading...</p>;

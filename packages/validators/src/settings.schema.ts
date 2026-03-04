@@ -51,6 +51,7 @@ export const alertRulesSchema = z.object({
   privilegeEscalation: alertRuleSchema.default({ enabled: false, threshold: 1 }),
   mfaStateChange: alertRuleSchema.default({ enabled: false, threshold: 1 }),
   bulkDataAccess: alertRuleSchema.default({ enabled: false, threshold: 5 }),
+  dataExport: alertRuleSchema.default({ enabled: false, threshold: 10 }),
 });
 
 export type AlertRules = z.infer<typeof alertRulesSchema>;

@@ -61,6 +61,11 @@ export class AlertService {
       alerts.push(...bulkAlerts);
     }
 
+    if ((rules as any).dataExport?.enabled) {
+      const exportAlerts = await this.checkDataExport(businessId, (rules as any).dataExport.threshold);
+      alerts.push(...exportAlerts);
+    }
+
     for (const loc of locations) {
       if (rules.variancePercent.enabled) {
         const varAlerts = await this.checkVariance(loc.id, loc.name, rules.variancePercent.threshold);
@@ -570,6 +575,26 @@ export class AlertService {
       body: `${count} bulk operation(s) in the last hour.`,
       linkUrl: "/audit",
       metadata: { rule: "bulkDataAccess", eventCount: count },
+    }];
+  }
+
+  private async checkDataExport(businessId: string, threshold: number): Promise<AlertResult[]> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const count = await this.prisma.auditLog.count({
+      where: {
+        actionType: "report.exported",
+        businessId,
+        createdAt: { gte: oneHourAgo },
+      },
+    });
+
+    if (count < threshold) return [];
+
+    return [{
+      title: "High volume of data exports",
+      body: `${count} report export(s) in the last hour.`,
+      linkUrl: "/audit",
+      metadata: { rule: "dataExport", eventCount: count },
     }];
   }
 

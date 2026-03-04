@@ -4,7 +4,7 @@ import {
   userActivityQuerySchema,
   activitySummaryQuerySchema,
 } from "@barstock/validators";
-import { AuditService } from "../services/audit.service";
+import { AuditService, writeAudit } from "../services/audit.service";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
@@ -104,5 +104,27 @@ export const auditRouter = router({
       if (!businessId) throw new TRPCError({ code: "FORBIDDEN" });
       const service = new AuditService(ctx.prisma);
       return service.getActivitySummary(businessId, input.fromDate, input.toDate);
+    }),
+
+  logExport: protectedProcedure
+    .input(
+      z.object({
+        reportType: z.string(),
+        rowCount: z.number().int().min(0),
+        filename: z.string(),
+      })
+    )
+    .mutation(({ ctx, input }) => {
+      writeAudit(ctx, {
+        businessId: ctx.user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "report.exported",
+        objectType: "report",
+        metadata: {
+          reportType: input.reportType,
+          rowCount: input.rowCount,
+          filename: input.filename,
+        },
+      });
     }),
 });

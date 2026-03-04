@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { HelpLink } from "@/components/help-link";
-import { downloadCsv } from "@/lib/download-csv";
+import { useAuditedDownload } from "@/lib/use-audited-download";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend,
@@ -201,6 +201,7 @@ export default function ReportsPage() {
   const user = session?.user as any;
   const { selectedLocationId: locationId } = useLocation();
   const businessId = user?.businessId as string | undefined;
+  const auditedDownload = useAuditedDownload();
 
   const { data: eodTime } = trpc.settings.endOfDayTime.useQuery(
     { businessId: businessId! },
@@ -955,7 +956,7 @@ export default function ReportsPage() {
           `${item.variancePercent.toFixed(1)}%`,
           item.valueImpact != null ? item.valueImpact.toFixed(2) : "",
         ]);
-        downloadCsv(headers, rows, `variance-${dateSuffix}.csv`);
+        auditedDownload(headers, rows, `variance-${dateSuffix}.csv`, "variance");
         break;
       }
       case "cogs": {
@@ -967,7 +968,7 @@ export default function ReportsPage() {
           p.unitCost != null ? p.unitCost.toFixed(2) : "",
           p.totalCost != null ? p.totalCost.toFixed(2) : "",
         ]);
-        downloadCsv(headers, rows, `cogs-${dateSuffix}.csv`);
+        auditedDownload(headers, rows, `cogs-${dateSuffix}.csv`, "cogs");
         break;
       }
       case "usage": {
@@ -980,7 +981,7 @@ export default function ReportsPage() {
           item.unitCost != null ? item.unitCost.toFixed(2) : "",
           item.totalCost != null ? item.totalCost.toFixed(2) : "",
         ]);
-        downloadCsv(headers, rows, `usage-${dateSuffix}.csv`);
+        auditedDownload(headers, rows, `usage-${dateSuffix}.csv`, "usage");
         break;
       }
       case "patterns": {
@@ -997,7 +998,7 @@ export default function ReportsPage() {
           item.avgVarianceDollars != null ? item.avgVarianceDollars.toFixed(2) : "",
           item.isShrinkageSuspect ? "Yes" : "No",
         ]);
-        downloadCsv(headers, rows, `patterns-${dateSuffix}.csv`);
+        auditedDownload(headers, rows, `patterns-${dateSuffix}.csv`, "patterns");
         break;
       }
       case "staff": {
@@ -1011,7 +1012,7 @@ export default function ReportsPage() {
           s.manualEntryRate.toFixed(1),
           s.trend,
         ]);
-        downloadCsv(headers, rows, `staff-${dateSuffix}.csv`);
+        auditedDownload(headers, rows, `staff-${dateSuffix}.csv`, "staff");
         break;
       }
       case "recipes": {
@@ -1024,7 +1025,7 @@ export default function ReportsPage() {
           r.avgCostPerServing.toFixed(2),
           `${r.pctOfTotalCost.toFixed(1)}%`,
         ]);
-        downloadCsv(headers, rows, `recipes-${dateSuffix}.csv`);
+        auditedDownload(headers, rows, `recipes-${dateSuffix}.csv`, "recipes");
         break;
       }
       case "pourCost": {
@@ -1037,7 +1038,7 @@ export default function ReportsPage() {
           item.totalIngredientCost.toFixed(2),
           item.pourCostPct != null ? `${item.pourCostPct.toFixed(1)}%` : "",
         ]);
-        downloadCsv(headers, rows, `pour-cost-${dateSuffix}.csv`);
+        auditedDownload(headers, rows, `pour-cost-${dateSuffix}.csv`, "pourCost");
         break;
       }
       case "orders": {
@@ -1048,11 +1049,11 @@ export default function ReportsPage() {
           v.totalSpend.toFixed(2),
           new Date(v.lastOrder).toLocaleDateString(),
         ]);
-        downloadCsv(headers, rows, `orders-${dateSuffix}.csv`);
+        auditedDownload(headers, rows, `orders-${dateSuffix}.csv`, "orders");
         break;
       }
     }
-  }, [activeTab, dateRange, sortedVarianceItems, cogs, sortedUsageItems, sortedPatternItems, sortedStaff, sortedRecipes, pourCostData, orderTrends]);
+  }, [activeTab, dateRange, sortedVarianceItems, cogs, sortedUsageItems, sortedPatternItems, sortedStaff, sortedRecipes, pourCostData, orderTrends, auditedDownload]);
 
   return (
     <div>

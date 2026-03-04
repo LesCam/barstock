@@ -72,6 +72,7 @@ export const DEFAULT_SETTINGS: BusinessSettingsData = {
     privilegeEscalation: { enabled: false, threshold: 1 },
     mfaStateChange: { enabled: false, threshold: 1 },
     bulkDataAccess: { enabled: false, threshold: 5 },
+    dataExport: { enabled: false, threshold: 10 },
   },
   lastAlertEvaluation: undefined,
   endOfDayTime: "04:00",
