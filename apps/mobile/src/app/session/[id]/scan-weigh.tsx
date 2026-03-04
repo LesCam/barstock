@@ -24,6 +24,7 @@ import { useNetwork } from "@/lib/network-context";
 import { enqueue } from "@/lib/offline-queue";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { CreateItemFromScanModal, type BarcodeSuggestion } from "@/components/CreateItemFromScanModal";
+import { OfflineCreateItemModal } from "@/components/OfflineCreateItemModal";
 import { TareWeightEditModal } from "@/components/TareWeightEditModal";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
 import { useVoiceWeight } from "@/lib/voice/use-voice-weight";
@@ -73,6 +74,7 @@ export default function ScanWeighScreen() {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [creatingFromScan, setCreatingFromScan] = useState<{ barcode?: string; suggestion?: BarcodeSuggestion | null } | null>(null);
+  const [creatingOffline, setCreatingOffline] = useState<{ barcode?: string } | null>(null);
   const [lastSubmittedName, setLastSubmittedName] = useState<string | null>(null);
   const [showTareModal, setShowTareModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -667,7 +669,37 @@ export default function ScanWeighScreen() {
 
   function handleCreateItem() {
     if (!scannedBarcode) return;
-    setCreatingFromScan({ barcode: scannedBarcode });
+    if (!isOnline) {
+      setCreatingOffline({ barcode: scannedBarcode });
+    } else {
+      setCreatingFromScan({ barcode: scannedBarcode });
+    }
+  }
+
+  function handleOfflineItemCreated(item: { id: string; name: string; categoryId: string; barcode?: string; countingMethod?: string }) {
+    setCreatingOffline(null);
+    const newItem: MatchedItem = {
+      id: item.id,
+      name: item.name,
+      barcode: item.barcode ?? null,
+      baseUom: "units",
+      containerSize: null,
+      category: item.countingMethod ? {
+        id: item.categoryId,
+        name: "",
+        countingMethod: item.countingMethod,
+        defaultDensity: null,
+      } : null,
+    };
+    setMatchedItem(newItem);
+    if (item.countingMethod === "weighable") {
+      setScaleWeight(null);
+      setManualWeight("");
+      setShowManualEntry(false);
+      setPhase("weighing");
+    } else {
+      setPhase("counting");
+    }
   }
 
   async function handleUnitSubmit() {
@@ -1122,7 +1154,7 @@ export default function ScanWeighScreen() {
           <Text style={styles.notFoundTitle}>Barcode Not Found</Text>
           <Text style={styles.notFoundBarcode}>{scannedBarcode}</Text>
           <View style={styles.notFoundActions}>
-            {canTare && (
+            {(canTare || !isOnline) && (
               <TouchableOpacity style={styles.createBtn} onPress={handleCreateItem}>
                 <Text style={styles.createBtnText}>Create Item</Text>
               </TouchableOpacity>
@@ -1201,6 +1233,19 @@ export default function ScanWeighScreen() {
           }}
           onCancel={() => {
             setCreatingFromScan(null);
+            resetToScanning();
+          }}
+        />
+      )}
+
+      {/* Offline create item modal */}
+      {creatingOffline && (
+        <OfflineCreateItemModal
+          barcode={creatingOffline.barcode}
+          locationId={selectedLocationId!}
+          onSuccess={handleOfflineItemCreated}
+          onCancel={() => {
+            setCreatingOffline(null);
             resetToScanning();
           }}
         />

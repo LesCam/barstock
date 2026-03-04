@@ -2,6 +2,7 @@ import { z } from "zod";
 import { UOM } from "@barstock/types";
 
 export const inventoryItemCreateSchema = z.object({
+  id: z.string().uuid().optional(),
   locationId: z.string().uuid(),
   name: z.string().min(1).max(255),
   categoryId: z.string().uuid(),

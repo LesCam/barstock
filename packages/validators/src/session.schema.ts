@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SessionType, VarianceReason, AssignmentStatus } from "@barstock/types";
 
 export const sessionCreateSchema = z.object({
+  id: z.string().uuid().optional(),
   locationId: z.string().uuid(),
   sessionType: z.nativeEnum(SessionType),
   startedTs: z.coerce.date(),

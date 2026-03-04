@@ -825,30 +825,30 @@ export default function SessionDetailScreen() {
       );
       return;
     }
+    // If there are pending queue items for this session, queue the close
+    // so it processes after pending lines (priority ordering handles this)
     const sessionLineIds = new Set(session?.lines.map((l: any) => l.id) ?? []);
     const pendingForSession = offlineQueue.filter((e) => {
       if (e.status !== "pending" && e.status !== "syncing") return false;
-      // addLine / updateLine have sessionId directly
       if ((e.input as any).sessionId === id) return true;
-      // deleteLine uses line id — check if that line belongs to this session
       if (
-        e.mutation === "sessions.deleteLine" &&
-        sessionLineIds.has((e.input as any).id)
-      )
-        return true;
-      // updateLine by id (sub-area changes)
-      if (
-        e.mutation === "sessions.updateLine" &&
+        (e.mutation === "sessions.deleteLine" || e.mutation === "sessions.updateLine") &&
         sessionLineIds.has((e.input as any).id)
       )
         return true;
       return false;
     });
     if (pendingForSession.length > 0) {
-      Alert.alert(
-        "Pending Items",
-        `${pendingForSession.length} item(s) haven't synced yet. Wait for sync to complete before closing.`,
-      );
+      // Queue close instead of blocking — priority 6 ensures it runs after pending lines
+      enqueue("sessions.close", { sessionId: id!, varianceReasons });
+      AsyncStorage.setItem(`@barstock/pendingClose/${id}`, "1");
+      setPendingClose(true);
+      utils.sessions.getById.setData({ id: id! }, (old: any) => {
+        if (!old) return old;
+        return { ...old, _pendingClose: true };
+      });
+      Alert.alert("Queued", `Session close queued behind ${pendingForSession.length} pending item(s). It will complete when sync finishes.`);
+      router.back();
       return;
     }
     if (workedAreaIds.length === 0) {

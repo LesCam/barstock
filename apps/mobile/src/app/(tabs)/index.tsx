@@ -9,9 +9,11 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Redirect, router } from "expo-router";
+import * as Crypto from "expo-crypto";
 import { trpc } from "@/lib/trpc";
 import { useAuth, usePermission } from "@/lib/auth-context";
 import { useNetwork } from "@/lib/network-context";
+import { enqueue } from "@/lib/offline-queue";
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
   shift: "Inventory Count",
@@ -71,6 +73,36 @@ export default function SessionsTab() {
   const openSessions = sessions?.filter((s: any) => !s.endedTs) ?? [];
   const closedSessions = sessions?.filter((s: any) => s.endedTs) ?? [];
 
+  function createSessionOffline() {
+    if (!selectedLocationId) return;
+    const sessionId = Crypto.randomUUID();
+    const startedTs = new Date();
+
+    utils.sessions.getById.setData({ id: sessionId }, {
+      id: sessionId,
+      locationId: selectedLocationId,
+      sessionType: "shift",
+      startedTs: startedTs.toISOString(),
+      status: "open",
+      createdBy: null,
+      endedTs: null,
+      closedBy: null,
+      lines: [],
+      participants: [],
+      _pendingSync: true,
+    } as any);
+
+    enqueue("sessions.create", {
+      id: sessionId,
+      locationId: selectedLocationId,
+      sessionType: "shift",
+      startedTs: startedTs.toISOString(),
+    });
+
+    setCreating(false);
+    router.push(`/session/${sessionId}`);
+  }
+
   async function handleStartCount() {
     if (creating || !selectedLocationId) return;
 
@@ -91,6 +123,10 @@ export default function SessionsTab() {
             text: "Start New",
             onPress: async () => {
               setCreating(true);
+              if (!isOnline) {
+                createSessionOffline();
+                return;
+              }
               try {
                 const session = await createSession.mutateAsync({
                   locationId: selectedLocationId,
@@ -111,6 +147,10 @@ export default function SessionsTab() {
     }
 
     setCreating(true);
+    if (!isOnline) {
+      createSessionOffline();
+      return;
+    }
     try {
       const session = await createSession.mutateAsync({
         locationId: selectedLocationId,
@@ -143,15 +183,15 @@ export default function SessionsTab() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <TouchableOpacity
-        style={[styles.newButton, (creating || !isOnline) && styles.newButtonDisabled]}
+        style={[styles.newButton, creating && styles.newButtonDisabled]}
         onPress={handleStartCount}
-        disabled={creating || !isOnline}
+        disabled={creating}
       >
         {creating ? (
           <ActivityIndicator color="#0B1623" />
         ) : (
           <Text style={styles.newButtonText}>
-            {isOnline ? "Start Inventory Count" : "Start Inventory Count — Offline"}
+            {isOnline ? "Start Inventory Count" : "Start Inventory Count (Offline)"}
           </Text>
         )}
       </TouchableOpacity>
@@ -185,13 +225,17 @@ export default function SessionsTab() {
                 style={styles.openCardInfo}
                 onPress={() => router.push(`/session/${s.id}`)}
               >
-                <Text style={styles.openCardTitle}>{sessionLabel(s.sessionType)}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={styles.openCardTitle}>{sessionLabel(s.sessionType)}</Text>
+                  {s._pendingSync && <Text style={styles.offlineBadge}>(offline)</Text>}
+                  {s._pendingClose && <Text style={styles.closingBadge}>Closing...</Text>}
+                </View>
                 <Text style={styles.openCardDate}>
                   {new Date(s.startedTs).toLocaleString()}
                   {s.createdByUser?.email ? ` — ${s.createdByUser.email}` : ""}
                 </Text>
                 <Text style={styles.openCardCount}>
-                  {itemsLabel(s.sessionType, s._count.lines)}
+                  {itemsLabel(s.sessionType, s._count?.lines ?? 0)}
                 </Text>
               </TouchableOpacity>
               <View style={styles.openCardActions}>
@@ -334,6 +378,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#dc2626",
+  },
+  offlineBadge: {
+    fontSize: 11,
+    color: "#F59E0B",
+    fontWeight: "600",
+  },
+  closingBadge: {
+    fontSize: 11,
+    color: "#3B82F6",
+    fontWeight: "600",
   },
 
   // History

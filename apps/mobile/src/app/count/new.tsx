@@ -9,9 +9,11 @@ import {
   Alert,
 } from "react-native";
 import { router } from "expo-router";
+import * as Crypto from "expo-crypto";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { useNetwork } from "@/lib/network-context";
+import { enqueue } from "@/lib/offline-queue";
 import type { VarianceReason } from "@barstock/types";
 
 type CountMethod = "liquor" | "packaged" | "draft";
@@ -64,11 +66,41 @@ export default function NewCountScreen() {
 
   const handleSelect = async (_method: CountMethod) => {
     if (creating || !selectedLocationId) return;
+    setCreating(_method);
+
     if (!isOnline) {
-      Alert.alert("Offline", "Cannot start a new session while offline. Please reconnect first.");
+      // Offline: create session locally with client-generated UUID
+      const sessionId = Crypto.randomUUID();
+      const startedTs = new Date();
+
+      // Inject optimistic session into React Query cache
+      utils.sessions.getById.setData({ id: sessionId }, {
+        id: sessionId,
+        locationId: selectedLocationId,
+        sessionType: "shift",
+        startedTs: startedTs.toISOString(),
+        status: "open",
+        createdBy: null,
+        endedTs: null,
+        closedBy: null,
+        lines: [],
+        participants: [],
+        _pendingSync: true,
+      } as any);
+
+      // Queue the create mutation
+      enqueue("sessions.create", {
+        id: sessionId,
+        locationId: selectedLocationId,
+        sessionType: "shift",
+        startedTs: startedTs.toISOString(),
+      });
+
+      setCreating(null);
+      router.push(`/session/${sessionId}`);
       return;
     }
-    setCreating(_method);
+
     try {
       const session = await createSession.mutateAsync({
         locationId: selectedLocationId,
@@ -172,10 +204,6 @@ export default function NewCountScreen() {
                   activeOpacity={0.7}
                   disabled={closeMutation.isPending}
                   onPress={() => {
-                    if (!isOnline) {
-                      Alert.alert("Offline", "Cannot close a session while offline. Please reconnect first.");
-                      return;
-                    }
                     Alert.alert(
                       "Close Session",
                       `Close this session with ${s._count.lines} items counted?`,

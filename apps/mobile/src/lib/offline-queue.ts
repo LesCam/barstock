@@ -11,14 +11,39 @@ export interface ConflictValues {
   updatedBy?: string;
 }
 
+export type MutationType =
+  | "sessions.create"
+  | "sessions.addLine"
+  | "sessions.updateLine"
+  | "sessions.deleteLine"
+  | "sessions.join"
+  | "sessions.close"
+  | "inventory.create"
+  | "receiving.receive"
+  | "transfers.create";
+
+/** Processing priority — lower numbers run first */
+const MUTATION_PRIORITY: Record<MutationType, number> = {
+  "sessions.create": 0,
+  "inventory.create": 1,
+  "sessions.join": 2,
+  "sessions.addLine": 3,
+  "sessions.updateLine": 4,
+  "sessions.deleteLine": 4,
+  "receiving.receive": 5,
+  "transfers.create": 5,
+  "sessions.close": 6,
+};
+
 export interface QueueEntry {
   id: string;
-  mutation: "sessions.addLine" | "sessions.updateLine" | "sessions.deleteLine" | "sessions.join" | "sessions.close" | "receiving.receive" | "transfers.create";
+  mutation: MutationType;
   input: Record<string, unknown>;
   tempId?: string;
   createdAt: string;
   status: "pending" | "syncing" | "failed" | "conflict";
   retryCount: number;
+  priority: number;
   error?: string;
   conflictData?: {
     myValues: ConflictValues;
@@ -64,6 +89,7 @@ export async function enqueue(
     createdAt: new Date().toISOString(),
     status: "pending",
     retryCount: 0,
+    priority: MUTATION_PRIORITY[mutation] ?? 5,
   });
   await persistQueue();
   notify();
@@ -152,6 +178,9 @@ async function executeMutation(
 ): Promise<void> {
   const input = entry.input as any;
   switch (entry.mutation) {
+    case "sessions.create":
+      await client.sessions.create.mutate(input);
+      break;
     case "sessions.addLine":
       await client.sessions.addLine.mutate(input);
       break;
@@ -169,6 +198,9 @@ async function executeMutation(
       break;
     case "sessions.close":
       await client.sessions.close.mutate(input);
+      break;
+    case "inventory.create":
+      await client.inventory.create.mutate(input);
       break;
     case "transfers.create":
       await client.transfers.create.mutate(input);
@@ -201,6 +233,14 @@ function isSessionClosedError(err: unknown): boolean {
 function isNotFoundError(err: unknown): boolean {
   if (err instanceof Error) {
     return err.message.toLowerCase().includes("not found");
+  }
+  return false;
+}
+
+function isAlreadyExistsError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    return msg.includes("already exists") || msg.includes("unique constraint");
   }
   return false;
 }
@@ -265,7 +305,14 @@ export async function processQueue(
   let sessionClosed = false;
   const toRemove: string[] = [];
 
-  for (const entry of queue) {
+  // Sort by priority ASC, then by timestamp ASC for stable ordering
+  const sorted = [...queue].sort((a, b) => {
+    const pDiff = (a.priority ?? 5) - (b.priority ?? 5);
+    if (pDiff !== 0) return pDiff;
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+
+  for (const entry of sorted) {
     if (entry.status === "failed" || entry.status === "conflict") continue; // skip already-failed/conflict entries
 
     entry.status = "syncing";
@@ -276,7 +323,14 @@ export async function processQueue(
       toRemove.push(entry.id);
       synced++;
     } catch (err) {
-      if (isSessionClosedError(err)) {
+      if (
+        isAlreadyExistsError(err) &&
+        (entry.mutation === "sessions.create" || entry.mutation === "inventory.create")
+      ) {
+        // Idempotent: item was created on a previous sync attempt
+        toRemove.push(entry.id);
+        synced++;
+      } else if (isSessionClosedError(err)) {
         // Remove ALL remaining entries for this session
         const sessionId = (entry.input as any).sessionId;
         for (const e of queue) {

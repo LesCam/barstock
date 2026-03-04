@@ -12,7 +12,22 @@ export const inventoryRouter = router({
     .use(requireLocationAccess())
     .input(inventoryItemCreateSchema)
     .mutation(async ({ ctx, input }) => {
-      const item = await ctx.prisma.inventoryItem.create({ data: input });
+      const { id: clientId, ...data } = input;
+
+      // Idempotent: if client provided an ID that already exists, return it
+      if (clientId) {
+        const existing = await ctx.prisma.inventoryItem.findUnique({
+          where: { id: clientId },
+        });
+        if (existing) return existing;
+      }
+
+      const item = await ctx.prisma.inventoryItem.create({
+        data: {
+          ...(clientId ? { id: clientId } : {}),
+          ...data,
+        },
+      });
       const audit = new AuditService(ctx.prisma);
       await audit.log({
         businessId: ctx.user.businessId,
@@ -20,7 +35,7 @@ export const inventoryRouter = router({
         actionType: "inventory_item.created",
         objectType: "inventory_item",
         objectId: item.id,
-        metadata: { name: input.name, categoryId: input.categoryId },
+        metadata: { name: data.name, categoryId: data.categoryId },
       });
       return item;
     }),

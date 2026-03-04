@@ -1,4 +1,4 @@
-import { router, protectedProcedure, checkLocationRole, requireRecentAuth, isPlatformAdmin } from "../trpc";
+import { router, protectedProcedure, checkLocationRole, isPlatformAdmin } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema, sessionJoinSchema, sessionHeartbeatSchema, claimSubAreaSchema, releaseSubAreaSchema, sessionPlanSchema, respondAssignmentSchema, listAssignmentsSchema, flagForVerificationSchema, submitVerificationSchema, resolveVerificationSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
@@ -59,8 +59,22 @@ export const sessionsRouter = router({
   create: protectedProcedure
     .input(sessionCreateSchema)
     .mutation(async ({ ctx, input }) => {
+      const { id: clientId, ...data } = input;
+
+      // Idempotent: if client provided an ID that already exists, return it
+      if (clientId) {
+        const existing = await ctx.prisma.inventorySession.findUnique({
+          where: { id: clientId },
+        });
+        if (existing) return existing;
+      }
+
       const session = await ctx.prisma.inventorySession.create({
-        data: { ...input, createdBy: ctx.user.userId },
+        data: {
+          ...(clientId ? { id: clientId } : {}),
+          ...data,
+          createdBy: ctx.user.userId,
+        },
       });
 
       // Auto-join creator as first participant
@@ -75,7 +89,7 @@ export const sessionsRouter = router({
         actionType: "session.created",
         objectType: "inventory_session",
         objectId: session.id,
-        metadata: { locationId: input.locationId },
+        metadata: { locationId: data.locationId },
       });
 
       return session;
@@ -413,7 +427,6 @@ export const sessionsRouter = router({
     ),
 
   close: protectedProcedure
-    .use(requireRecentAuth())
     .input(z.object({ sessionId: z.string().uuid() }).merge(sessionCloseSchema))
     .mutation(async ({ ctx, input }) => {
       const svc = new SessionService(ctx.prisma);

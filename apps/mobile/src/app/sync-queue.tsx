@@ -20,11 +20,13 @@ import { trpc } from "@/lib/trpc";
 import { trpcVanilla } from "@/lib/trpc";
 
 const MUTATION_LABELS: Record<string, string> = {
+  "sessions.create": "Create Session",
   "sessions.addLine": "Add Count",
   "sessions.updateLine": "Update Count",
   "sessions.deleteLine": "Delete Count",
   "sessions.join": "Join Session",
   "sessions.close": "Close Session",
+  "inventory.create": "Create Item",
   "receiving.receive": "Receive Stock",
   "transfers.create": "Transfer",
 };
