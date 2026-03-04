@@ -171,6 +171,30 @@ export function requirePermission(key: string) {
   });
 }
 
+/** Resolve businessId: platform admins may use supplied value, everyone else gets session value */
+export function resolveBusinessId(user: UserPayload, inputBusinessId?: string): string {
+  if (isPlatformAdmin(user)) return inputBusinessId ?? user.businessId;
+  return user.businessId;
+}
+
+/** Force businessId in input to session value for non-platform-admins (defense-in-depth) */
+export function forceBusinessId() {
+  return middleware(async ({ ctx, next }) => {
+    if (!ctx.user) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+
+    if (!isPlatformAdmin(ctx.user)) {
+      const rawInput = (ctx as any).rawInput;
+      if (rawInput && typeof rawInput === "object" && "businessId" in rawInput) {
+        rawInput.businessId = ctx.user.businessId;
+      }
+    }
+
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  });
+}
+
 /** Check role for specific location */
 export function checkLocationRole(
   locationId: string,

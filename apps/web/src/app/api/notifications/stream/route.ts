@@ -1,16 +1,13 @@
-import { auth } from "@/lib/auth";
+import { requireAuth, isAuthFailure } from "@/lib/require-auth";
 import { notificationEmitter } from "@barstock/api/src/lib/notification-emitter";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+export async function GET(request: Request) {
+  const authResult = await requireAuth(request);
+  if (isAuthFailure(authResult)) return authResult;
 
-  const user = session.user as any;
-  const userId: string = user.id;
+  const userId: string = authResult.userId;
 
   const encoder = new TextEncoder();
   let listenerCleanup: (() => void) | null = null;

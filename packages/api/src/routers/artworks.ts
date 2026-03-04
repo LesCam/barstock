@@ -5,6 +5,7 @@ import {
   requireRole,
   requireBusinessAccess,
   requireCapability,
+  forceBusinessId,
 } from "../trpc";
 import {
   artworkCreateSchema,
@@ -43,6 +44,7 @@ export const artworksRouter = router({
   create: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
     .use(requireRole("staff"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artworkCreateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -59,6 +61,7 @@ export const artworksRouter = router({
 
   list: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artworkListSchema)
     .query(async ({ ctx, input }) => {
@@ -68,6 +71,7 @@ export const artworksRouter = router({
 
   getById: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artworkGetSchema)
     .query(async ({ ctx, input }) => {
@@ -78,6 +82,7 @@ export const artworksRouter = router({
   update: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
     .use(requireRole("staff"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artworkUpdateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -106,6 +111,7 @@ export const artworksRouter = router({
   updateStatus: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
     .use(requireRole("manager"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artworkStatusUpdateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -116,6 +122,7 @@ export const artworksRouter = router({
   addPhoto: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
     .use(requireRole("staff"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artworkAddPhotoSchema)
     .mutation(async ({ ctx, input }) => {
@@ -134,6 +141,7 @@ export const artworksRouter = router({
   removePhoto: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
     .use(requireRole("curator"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artworkRemovePhotoSchema)
     .mutation(async ({ ctx, input }) => {
@@ -144,6 +152,7 @@ export const artworksRouter = router({
   reorderPhotos: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
     .use(requireRole("curator"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artworkReorderPhotosSchema)
     .mutation(async ({ ctx, input }) => {

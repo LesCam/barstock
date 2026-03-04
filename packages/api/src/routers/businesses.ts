@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { router, publicProcedure, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
+import { router, publicProcedure, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin, forceBusinessId } from "../trpc";
 import { businessCreateSchema, businessUpdateSchema, provisionBusinessSchema } from "@barstock/validators";
 import { createStorageAdapter } from "../services/storage";
 import { hashPassword } from "../services/auth.service";
@@ -162,6 +162,7 @@ export const businessesRouter = router({
     }),
 
   getById: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(z.object({ businessId: z.string().uuid() }))
     .query(({ ctx, input }) =>
@@ -177,6 +178,7 @@ export const businessesRouter = router({
 
   update: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(z.object({ businessId: z.string().uuid() }).merge(businessUpdateSchema))
     .mutation(({ ctx, input }) => {
@@ -218,6 +220,7 @@ export const businessesRouter = router({
 
   uploadLogo: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(
       z.object({

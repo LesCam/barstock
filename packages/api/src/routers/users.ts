@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { router, protectedProcedure, requireRole } from "../trpc";
+import { router, protectedProcedure, requireRole, forceBusinessId } from "../trpc";
 import {
   platformUserCreateSchema,
   platformUserUpdateSchema,
@@ -12,6 +12,7 @@ import { SubscriptionService } from "../services/subscription.service";
 export const usersRouter = router({
   listForBusiness: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .input(z.object({ businessId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       return ctx.prisma.user.findMany({

@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireAuth, isAuthFailure } from "@/lib/require-auth";
 import { CSVImportService } from "@barstock/api/src/services/csv-import.service";
 import { prisma } from "@barstock/database";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 export async function POST(req: NextRequest) {
-  // Auth check
-  const session = await auth();
-  if (!session?.user) {
+  const authResult = await requireAuth(req);
+  if (isAuthFailure(authResult)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const user = session.user as any;
+  const user = authResult;
   const highestRole = user.highestRole as string;
   if (highestRole !== "business_admin" && highestRole !== "platform_admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

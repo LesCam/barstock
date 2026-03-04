@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin } from "../trpc";
+import { router, protectedProcedure, requireRole, requireBusinessAccess, isPlatformAdmin, forceBusinessId } from "../trpc";
 import { varianceReportQuerySchema, onHandReportQuerySchema, usageReportQuerySchema, cogsReportQuerySchema, businessRollupQuerySchema, expectedOnHandQuerySchema, variancePatternsQuerySchema, varianceTrendQuerySchema, varianceHeatmapQuerySchema, varianceReasonDistributionQuerySchema, staffAccountabilityQuerySchema, usageOverTimeQuerySchema, recipeAnalyticsQuerySchema, recipeDetailQuerySchema, usageItemDetailQuerySchema, usageByVendorQuerySchema, pourCostQuerySchema, portfolioRollupQuerySchema, portfolioTrendQuerySchema, portfolioStaffComparisonQuerySchema, portfolioVarianceItemsQuerySchema, portfolioForecastQuerySchema, staffVarianceReasonBreakdownQuerySchema, staffItemVarianceQuerySchema, forecastDashboardQuerySchema, forecastAccuracyQuerySchema, forecastItemDetailQuerySchema, captureSnapshotsSchema, captureBusinessSnapshotSchema, industryBenchmarksSchema, benchmarkTrendSchema, platformBenchmarksSchema, usageAnomaliesQuerySchema, posDepletionRatiosQuerySchema, varianceForecastsQuerySchema, analyticsSummaryQuerySchema, varianceByCategoryQuerySchema, varianceItemTrendQuerySchema, portfolioAnomalySummaryQuerySchema, portfolioHealthScorecardQuerySchema, portfolioRadarComparisonQuerySchema, platformAnalyticsSummarySchema, platformTrendQuerySchema, scaleWeightAnomaliesQuerySchema, depletionCorrelationQuerySchema, anomalyClustersQuerySchema } from "@barstock/validators";
 import { VarianceService } from "../services/variance.service";
 import { ReportService } from "../services/report.service";
@@ -35,6 +35,7 @@ export const reportsRouter = router({
     }),
 
   businessRollup: protectedProcedure
+    .use(forceBusinessId())
     .input(businessRollupQuerySchema)
     .query(({ ctx, input }) => {
       const svc = new ReportService(ctx.prisma);
@@ -169,6 +170,7 @@ export const reportsRouter = router({
 
   portfolioRollup: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .input(portfolioRollupQuerySchema)
     .query(({ ctx, input }) => {
       const svc = new ReportService(ctx.prisma);
@@ -177,6 +179,7 @@ export const reportsRouter = router({
 
   portfolioTrend: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(portfolioTrendQuerySchema)
     .query(({ ctx, input }) => {
@@ -186,6 +189,7 @@ export const reportsRouter = router({
 
   portfolioStaffComparison: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(portfolioStaffComparisonQuerySchema)
     .query(({ ctx, input }) => {
@@ -195,6 +199,7 @@ export const reportsRouter = router({
 
   portfolioVarianceItems: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(portfolioVarianceItemsQuerySchema)
     .query(({ ctx, input }) => {
@@ -204,6 +209,7 @@ export const reportsRouter = router({
 
   portfolioForecast: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(portfolioForecastQuerySchema)
     .query(({ ctx, input }) => {
@@ -288,6 +294,7 @@ export const reportsRouter = router({
 
   captureBusinessSnapshot: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(captureBusinessSnapshotSchema)
     .mutation(({ ctx, input }) => {
@@ -297,6 +304,7 @@ export const reportsRouter = router({
 
   industryBenchmarks: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(industryBenchmarksSchema)
     .query(({ ctx, input }) => {
@@ -306,6 +314,7 @@ export const reportsRouter = router({
 
   benchmarkTrend: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(benchmarkTrendSchema)
     .query(({ ctx, input }) => {
@@ -325,6 +334,7 @@ export const reportsRouter = router({
 
   portfolioAnomalySummary: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(portfolioAnomalySummaryQuerySchema)
     .query(({ ctx, input }) => {
@@ -334,6 +344,7 @@ export const reportsRouter = router({
 
   portfolioHealthScorecard: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(portfolioHealthScorecardQuerySchema)
     .query(({ ctx, input }) => {
@@ -343,6 +354,7 @@ export const reportsRouter = router({
 
   portfolioRadarComparison: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(portfolioRadarComparisonQuerySchema)
     .query(({ ctx, input }) => {

@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole } from "../trpc";
+import { router, protectedProcedure, requireRole, forceBusinessId } from "../trpc";
 import { inventoryItemCreateSchema, inventoryItemUpdateSchema, inventoryItemBulkCreateSchema, priceHistoryCreateSchema, onHandQuerySchema, setItemVendorsSchema } from "@barstock/validators";
 import { InventoryService } from "../services/inventory.service";
 import { AuditService } from "../services/audit.service";
@@ -205,6 +205,7 @@ export const inventoryRouter = router({
     }),
 
   kegSizesForItem: protectedProcedure
+    .use(forceBusinessId())
     .input(z.object({ inventoryItemId: z.string().uuid(), businessId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       // Get keg sizes used by this item's keg instances

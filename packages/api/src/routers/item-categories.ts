@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole } from "../trpc";
+import { router, protectedProcedure, requireRole, forceBusinessId } from "../trpc";
 import {
   itemCategoryCreateSchema,
   itemCategoryUpdateSchema,
@@ -10,6 +10,7 @@ import { AuditService } from "../services/audit.service";
 
 export const itemCategoriesRouter = router({
   list: protectedProcedure
+    .use(forceBusinessId())
     .input(itemCategoryListSchema)
     .query(({ ctx, input }) =>
       ctx.prisma.inventoryItemCategory.findMany({
@@ -23,6 +24,7 @@ export const itemCategoriesRouter = router({
 
   create: protectedProcedure
     .use(requireRole("manager"))
+    .use(forceBusinessId())
     .input(itemCategoryCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const category = await ctx.prisma.inventoryItemCategory.create({ data: input });

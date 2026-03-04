@@ -5,6 +5,7 @@ import {
   requireRole,
   requireBusinessAccess,
   requireCapability,
+  forceBusinessId,
 } from "../trpc";
 import {
   artistCreateSchema,
@@ -41,6 +42,7 @@ export const artistsRouter = router({
   create: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
     .use(requireRole("staff"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artistCreateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -57,6 +59,7 @@ export const artistsRouter = router({
 
   list: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artistListSchema)
     .query(async ({ ctx, input }) => {
@@ -66,6 +69,7 @@ export const artistsRouter = router({
 
   getById: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artistDeactivateSchema.pick({ id: true, businessId: true }))
     .query(async ({ ctx, input }) => {
@@ -76,6 +80,7 @@ export const artistsRouter = router({
   update: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
     .use(requireRole("staff"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artistUpdateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -107,6 +112,7 @@ export const artistsRouter = router({
   deactivate: protectedProcedure
     .use(requireCapability("artSalesEnabled"))
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(artistDeactivateSchema)
     .mutation(async ({ ctx, input }) => {

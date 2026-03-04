@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, requireBusinessAccess } from "../trpc";
+import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId } from "../trpc";
 import { SubscriptionService } from "../services/subscription.service";
 import { TIER_DEFAULTS } from "../services/subscription.constants";
 import { AuditService } from "../services/audit.service";
@@ -6,6 +6,7 @@ import { z } from "zod";
 
 export const subscriptionRouter = router({
   getLimits: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(z.object({ businessId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {

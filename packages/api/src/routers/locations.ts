@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, requireBusinessAccess } from "../trpc";
+import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId } from "../trpc";
 import { locationCreateSchema, locationUpdateSchema } from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
 import { SubscriptionService } from "../services/subscription.service";
@@ -7,6 +7,7 @@ import { z } from "zod";
 export const locationsRouter = router({
   create: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .input(locationCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const subService = new SubscriptionService(ctx.prisma);
@@ -15,6 +16,7 @@ export const locationsRouter = router({
     }),
 
   listByBusiness: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(z.object({ businessId: z.string().uuid(), activeOnly: z.boolean().default(true) }))
     .query(({ ctx, input }) =>

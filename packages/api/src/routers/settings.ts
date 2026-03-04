@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requireRole, requireBusinessAccess } from "../trpc";
+import { router, protectedProcedure, requireRole, requireBusinessAccess, forceBusinessId } from "../trpc";
 import { settingsGetSchema, settingsUpdateSchema } from "@barstock/validators";
 import { SettingsService } from "../services/settings.service";
 import { AuditService } from "../services/audit.service";
@@ -6,6 +6,7 @@ import { AlertService } from "../services/alert.service";
 
 export const settingsRouter = router({
   capabilities: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(settingsGetSchema)
     .query(async ({ ctx, input }) => {
@@ -15,6 +16,7 @@ export const settingsRouter = router({
     }),
 
   autoLockPolicy: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(settingsGetSchema)
     .query(async ({ ctx, input }) => {
@@ -24,6 +26,7 @@ export const settingsRouter = router({
     }),
 
   alertRules: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(settingsGetSchema)
     .query(async ({ ctx, input }) => {
@@ -33,6 +36,7 @@ export const settingsRouter = router({
     }),
 
   endOfDayTime: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(settingsGetSchema)
     .query(async ({ ctx, input }) => {
@@ -42,6 +46,7 @@ export const settingsRouter = router({
     }),
 
   countOptimization: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(settingsGetSchema)
     .query(async ({ ctx, input }) => {
@@ -52,6 +57,7 @@ export const settingsRouter = router({
 
   get: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(settingsGetSchema)
     .query(async ({ ctx, input }) => {
@@ -61,6 +67,7 @@ export const settingsRouter = router({
 
   update: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(settingsUpdateSchema)
     .mutation(async ({ ctx, input }) => {

@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { requireAuth, isAuthFailure } from "@/lib/require-auth";
 import { scanImportEmitter } from "@barstock/api/src/lib/scan-import-emitter";
 import type { ScanImportEvent } from "@barstock/api/src/lib/scan-import-emitter";
 
@@ -8,10 +8,8 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ scanSessionId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const authResult = await requireAuth(_request);
+  if (isAuthFailure(authResult)) return authResult;
 
   const { scanSessionId } = await params;
   const encoder = new TextEncoder();

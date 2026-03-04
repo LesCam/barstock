@@ -1,10 +1,11 @@
-import { router, protectedProcedure, requireBusinessAccess, requireRole } from "../trpc";
+import { router, protectedProcedure, requireBusinessAccess, requireRole, forceBusinessId } from "../trpc";
 import { vendorCreateSchema, vendorListSchema, vendorGetByIdSchema, vendorUpdateSchema, vendorOrdererSchema } from "@barstock/validators";
 import { AuditService } from "../services/audit.service";
 import { z } from "zod";
 
 export const vendorsRouter = router({
   create: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(vendorCreateSchema)
     .mutation(async ({ ctx, input }) => {
@@ -24,6 +25,7 @@ export const vendorsRouter = router({
     }),
 
   list: protectedProcedure
+    .use(forceBusinessId())
     .use(requireBusinessAccess())
     .input(vendorListSchema)
     .query(({ ctx, input }) =>
