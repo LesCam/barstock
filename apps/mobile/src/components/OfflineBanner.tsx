@@ -14,7 +14,7 @@ export function OfflineBanner() {
   const insets = useSafeAreaInsets();
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [bannerState, setBannerState] = useState<BannerState>("hidden");
-  const slideAnim = useRef(new Animated.Value(100)).current;
+  const slideAnim = useRef(new Animated.Value(-60)).current;
   const syncedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Subscribe to queue changes + eagerly load current state
@@ -61,10 +61,10 @@ export function OfflineBanner() {
     };
   }, [isOnline, totalPending, syncingCount, failedCount, conflictCount]);
 
-  // Animate slide up from bottom / slide down to hide
+  // Animate slide down from above nav header
   useEffect(() => {
     Animated.timing(slideAnim, {
-      toValue: bannerState === "hidden" ? 100 : 0,
+      toValue: bannerState === "hidden" ? -60 : 0,
       duration: 250,
       useNativeDriver: true,
     }).start();
@@ -122,9 +122,10 @@ export function OfflineBanner() {
 
   return (
     <Animated.View
-      style={[styles.container, { transform: [{ translateY: slideAnim }] }]}
+      pointerEvents="box-none"
+      style={[styles.container, { top: insets.top + 4, transform: [{ translateY: slideAnim }] }]}
     >
-      <View style={[styles.banner, bgColor, { paddingBottom: insets.bottom + 6 }]}>
+      <View style={[styles.banner, bgColor]}>
         {bannerState === "conflict" ? (
           <TouchableOpacity onPress={() => router.push("/sync-queue")} activeOpacity={0.7}>
             <Text style={styles.text}>{text}</Text>
@@ -167,15 +168,22 @@ export function OfflineBanner() {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    bottom: 80,
     left: 0,
     right: 0,
     zIndex: 1000,
+    alignItems: "center",
   },
   banner: {
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 16,
     alignItems: "center",
+    borderRadius: 20,
+    maxWidth: "75%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
   },
   text: {
     color: "#fff",

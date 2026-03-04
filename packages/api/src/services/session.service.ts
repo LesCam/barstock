@@ -80,8 +80,8 @@ export class SessionService {
 
       if (theoretical !== 0 && Math.abs(variance) > threshold) {
         if (!(itemId in varianceReasons)) {
-          requiresReasons.push(itemId);
-          continue;
+          // Default to "unknown" for offline/queued closes that couldn't prompt for reasons
+          varianceReasons[itemId] = "unknown" as any;
         }
       }
 
@@ -140,12 +140,6 @@ export class SessionService {
 
         adjustmentsCreated++;
       }
-    }
-
-    if (requiresReasons.length > 0) {
-      throw new Error(
-        `Variance reasons required for items: ${requiresReasons.join(", ")}`
-      );
     }
 
     // Close session

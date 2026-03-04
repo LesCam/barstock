@@ -168,8 +168,6 @@ export default function SessionDetailScreen() {
     {
       staleTime: isPendingSync ? Infinity : 10_000,
       refetchInterval: isPendingSync ? false : (sseMode === "degraded" ? 15_000 : 60_000),
-      // Don't hit the server while the session hasn't been created there yet
-      networkMode: isPendingSync ? "offlineFirst" : "online",
       retry: isPendingSync ? false : 3,
     }
   );
