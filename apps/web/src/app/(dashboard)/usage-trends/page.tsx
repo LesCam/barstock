@@ -59,13 +59,12 @@ export default function UsageTrendsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const config = PERIOD_CONFIG[period];
-  const now = new Date();
-  const fromDate = new Date(now.getTime() - config.days * 24 * 60 * 60 * 1000);
-  const toDate = now;
-
-  // Previous period for period-over-period comparison
-  const prevFromDate = new Date(fromDate.getTime() - config.days * 24 * 60 * 60 * 1000);
-  const prevToDate = fromDate;
+  const { fromDate, toDate, prevFromDate, prevToDate } = useMemo(() => {
+    const now = new Date();
+    const from = new Date(now.getTime() - config.days * 24 * 60 * 60 * 1000);
+    const prevFrom = new Date(from.getTime() - config.days * 24 * 60 * 60 * 1000);
+    return { fromDate: from, toDate: now, prevFromDate: prevFrom, prevToDate: from };
+  }, [config.days]);
 
   // --- Queries ---
 
