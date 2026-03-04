@@ -175,6 +175,10 @@ function RootNavigator() {
         options={{ title: "Demand Forecast", headerBackTitle: "Back" }}
       />
       <Stack.Screen
+        name="benchmarking/index"
+        options={{ title: "Industry Benchmarks", headerBackTitle: "Back" }}
+      />
+      <Stack.Screen
         name="help"
         options={{ title: "Help", headerBackTitle: "Back" }}
       />

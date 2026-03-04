@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, Switch, StyleSheet, ScrollView, Platform } from "react-native";
+import { View, Text, TouchableOpacity, Switch, StyleSheet, ScrollView, Platform, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useAuth, usePermission } from "@/lib/auth-context";
@@ -37,6 +37,26 @@ export default function SettingsTab() {
     { businessId: user?.businessId ?? "" },
     { enabled: !!user?.businessId, staleTime: 5 * 60 * 1000 }
   );
+
+  const isAdmin = user?.highestRole === "business_admin" || user?.highestRole === "platform_admin";
+  const businessId = user?.businessId ?? "";
+
+  const { data: settings } = trpc.settings.get.useQuery(
+    { businessId },
+    { enabled: !!businessId && isAdmin }
+  );
+
+  const utils = trpc.useUtils();
+  const updateSettingsMutation = trpc.settings.update.useMutation({
+    onSuccess: () => {
+      utils.settings.get.invalidate({ businessId });
+    },
+    onError: (err) => {
+      Alert.alert("Error", err.message);
+    },
+  });
+
+  const benchmarkingOptedIn = settings?.benchmarking?.optedIn ?? false;
 
   const { data: locations } = trpc.locations.listByBusiness.useQuery(
     { businessId: user?.businessId ?? "" },
@@ -199,7 +219,7 @@ export default function SettingsTab() {
         </View>
       </View>
 
-      {(user?.highestRole === "business_admin" || user?.highestRole === "platform_admin") && (
+      {isAdmin && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Administration</Text>
           <TouchableOpacity
@@ -213,6 +233,62 @@ export default function SettingsTab() {
             onPress={() => router.push("/alert-settings")}
           >
             <Text style={styles.rowText}>Alert Settings</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {isAdmin && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Benchmarking</Text>
+          <View style={[styles.card, styles.toggleRow]}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={styles.rowText}>Industry Benchmarking</Text>
+              <Text style={styles.subtitleText}>
+                Share anonymized data to see how you compare to peers
+              </Text>
+              {benchmarkingOptedIn && settings?.benchmarking?.optedInAt && (
+                <Text style={styles.subtitleText}>
+                  Opted in {new Date(settings.benchmarking.optedInAt).toLocaleDateString()}
+                </Text>
+              )}
+            </View>
+            <Switch
+              value={benchmarkingOptedIn}
+              onValueChange={(value) => {
+                updateSettingsMutation.mutate({
+                  businessId,
+                  benchmarking: {
+                    optedIn: value,
+                    optedInAt: value ? new Date().toISOString() : null,
+                  },
+                });
+              }}
+              trackColor={{ false: "#1E3550", true: "#E9B44C" }}
+              thumbColor="#EAF0FF"
+            />
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.card,
+              { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+              !benchmarkingOptedIn && styles.disabledCard,
+            ]}
+            onPress={() => {
+              if (benchmarkingOptedIn) {
+                router.push("/benchmarking" as any);
+              }
+            }}
+            disabled={!benchmarkingOptedIn}
+          >
+            <Text style={[styles.rowText, !benchmarkingOptedIn && styles.disabledText]}>
+              View Benchmarks
+            </Text>
+            {!benchmarkingOptedIn && (
+              <Text style={[styles.disabledText, { fontSize: 12 }]}>Enable above</Text>
+            )}
+            {benchmarkingOptedIn && (
+              <Text style={{ color: "#5A6A7A", fontSize: 18 }}>›</Text>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -275,6 +351,7 @@ const styles = StyleSheet.create({
   switchUserText: { fontSize: 15, color: "#E9B44C", fontWeight: "500" },
   logoutText: { fontSize: 15, color: "#dc2626", fontWeight: "500" },
   toggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  subtitleText: { fontSize: 12, color: "#5A6A7A", marginTop: 4 },
   disabledText: { fontSize: 15, color: "#5A6A7A" },
   selectedCard: { borderColor: "#E9B44C" },
   disabledCard: { opacity: 0.5 },
