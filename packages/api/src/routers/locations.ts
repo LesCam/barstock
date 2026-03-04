@@ -39,6 +39,7 @@ export const locationsRouter = router({
 
   update: protectedProcedure
     .use(requireRole("manager"))
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid() }).merge(locationUpdateSchema))
     .mutation(({ ctx, input }) => {
       const { locationId, ...data } = input;

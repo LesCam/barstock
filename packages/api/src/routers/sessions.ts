@@ -1,4 +1,5 @@
-import { router, protectedProcedure, checkLocationRole, requireRecentAuth } from "../trpc";
+import { router, protectedProcedure, checkLocationRole, requireRecentAuth, isPlatformAdmin } from "../trpc";
+import { TRPCError } from "@trpc/server";
 import { sessionCreateSchema, sessionLineCreateSchema, sessionCloseSchema, expectedItemsForAreaSchema, itemCountHintsSchema, sessionJoinSchema, sessionHeartbeatSchema, claimSubAreaSchema, releaseSubAreaSchema, sessionPlanSchema, respondAssignmentSchema, listAssignmentsSchema, flagForVerificationSchema, submitVerificationSchema, resolveVerificationSchema } from "@barstock/validators";
 import { SessionService } from "../services/session.service";
 import { SettingsService } from "../services/settings.service";
@@ -114,8 +115,8 @@ export const sessionsRouter = router({
 
   getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .query(({ ctx, input }) =>
-      ctx.prisma.inventorySession.findUniqueOrThrow({
+    .query(async ({ ctx, input }) => {
+      const session = await ctx.prisma.inventorySession.findUniqueOrThrow({
         where: { id: input.id },
         include: {
           lines: {
@@ -146,8 +147,12 @@ export const sessionsRouter = router({
             },
           },
         },
-      })
-    ),
+      });
+      if (!isPlatformAdmin(ctx.user) && !ctx.user.locationIds.includes(session.locationId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
+      return session;
+    }),
 
   addLine: protectedProcedure
     .input(sessionLineCreateSchema)

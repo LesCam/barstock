@@ -154,6 +154,14 @@ export const inventoryRouter = router({
     .input(z.object({ id: z.string().uuid() }).merge(inventoryItemUpdateSchema))
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      // Verify tenant ownership before mutation
+      const existing = await ctx.prisma.inventoryItem.findUniqueOrThrow({
+        where: { id },
+        select: { locationId: true },
+      });
+      if (!isPlatformAdmin(ctx.user) && !ctx.user.locationIds.includes(existing.locationId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
       const item = await ctx.prisma.inventoryItem.update({ where: { id }, data });
       const audit = new AuditService(ctx.prisma);
       await audit.log({
@@ -170,6 +178,14 @@ export const inventoryRouter = router({
   addPrice: protectedProcedure
     .input(priceHistoryCreateSchema)
     .mutation(async ({ ctx, input }) => {
+      // Verify tenant ownership before mutation
+      const parentItem = await ctx.prisma.inventoryItem.findUniqueOrThrow({
+        where: { id: input.inventoryItemId },
+        select: { locationId: true },
+      });
+      if (!isPlatformAdmin(ctx.user) && !ctx.user.locationIds.includes(parentItem.locationId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
       const { entryMode, containerCost, containerSizeOz, ...rest } = input;
       let price;
       if (entryMode === "per_container") {

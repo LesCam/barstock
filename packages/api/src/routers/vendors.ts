@@ -63,6 +63,14 @@ export const vendorsRouter = router({
     .input(vendorUpdateSchema)
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      // Verify tenant ownership before mutation
+      const existing = await ctx.prisma.vendor.findUniqueOrThrow({
+        where: { id },
+        select: { businessId: true },
+      });
+      if (!isPlatformAdmin(ctx.user) && existing.businessId !== ctx.user.businessId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
       const vendor = await ctx.prisma.vendor.update({ where: { id }, data });
       const audit = new AuditService(ctx.prisma);
       await audit.log({
@@ -80,6 +88,14 @@ export const vendorsRouter = router({
     .use(requireRole("manager"))
     .input(vendorGetByIdSchema)
     .mutation(async ({ ctx, input }) => {
+      // Verify tenant ownership before mutation
+      const existing = await ctx.prisma.vendor.findUniqueOrThrow({
+        where: { id: input.id },
+        select: { businessId: true },
+      });
+      if (!isPlatformAdmin(ctx.user) && existing.businessId !== ctx.user.businessId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
+      }
       const vendor = await ctx.prisma.vendor.update({
         where: { id: input.id },
         data: { active: false },
