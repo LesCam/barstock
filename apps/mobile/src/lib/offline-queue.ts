@@ -59,7 +59,7 @@ const listeners = new Set<Listener>();
 let syncing = false;
 
 function notify() {
-  const q = cachedQueue ?? [];
+  const q = [...(cachedQueue ?? [])];
   for (const cb of listeners) cb(q);
 }
 
