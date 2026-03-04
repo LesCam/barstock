@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import {
   authLimiter,
   expensiveLimiter,
+  cronLimiter,
   getClientIp,
   rateLimitKey,
   rateLimitResponse,
@@ -32,9 +33,15 @@ export async function middleware(req: NextRequest) {
     if (result.limited) return rateLimitResponse(result.retryAfterMs!);
   }
 
+  // Cron endpoints: 6 requests / 5 min per IP
+  if (path.startsWith("/api/cron/")) {
+    const result = await cronLimiter.check(`cron:${ip}`);
+    if (result.limited) return rateLimitResponse(result.retryAfterMs!);
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/api/auth/:path*", "/api/trpc/:path*"],
+  matcher: ["/api/auth/:path*", "/api/trpc/:path*", "/api/cron/:path*"],
 };

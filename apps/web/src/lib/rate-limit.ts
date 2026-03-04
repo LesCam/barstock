@@ -97,6 +97,12 @@ export const expensiveLimiter = createRateLimiter({
   windowMs: 60 * 1000,
 });
 
+/** Cron endpoints: 6 per 5 min per key */
+export const cronLimiter = createRateLimiter({
+  limit: 6,
+  windowMs: 5 * 60 * 1000,
+});
+
 // ─── Key Helpers ─────────────────────────────────────────────────────────────
 
 /** Extract client IP from request headers */
