@@ -2,13 +2,11 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@barstock/database";
 import { verifyPassword, buildUserPayload } from "@barstock/api/src/services/auth.service";
+import { assertServerEnv } from "./assert-server-env";
+
+assertServerEnv();
 
 const isProd = process.env.NODE_ENV === "production";
-const nextAuthUrl = process.env.NEXTAUTH_URL;
-
-if (isProd && (!nextAuthUrl || !nextAuthUrl.startsWith("https://"))) {
-  throw new Error("NEXTAUTH_URL must be an https:// URL in production");
-}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "change-me-in-production",
