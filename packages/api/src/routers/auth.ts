@@ -258,6 +258,18 @@ export const authRouter = router({
           phone: input.phone,
           pin: pinHash,
         },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          locationId: true,
+          businessId: true,
+          isActive: true,
+          createdAt: true,
+        },
       });
 
       const audit = new AuditService(ctx.prisma);
@@ -355,7 +367,22 @@ export const authRouter = router({
           updateData.pin = null;
         }
       }
-      const user = await ctx.prisma.user.update({ where: { id: userId }, data: updateData });
+      const user = await ctx.prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          locationId: true,
+          businessId: true,
+          isActive: true,
+          createdAt: true,
+        },
+      });
 
       const audit = new AuditService(ctx.prisma);
       // Exclude password and pin from metadata

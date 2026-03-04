@@ -6,7 +6,8 @@ import {
   platformUserUpdateSchema,
   platformUserListSchema,
 } from "@barstock/validators";
-import { hashPassword } from "../services/auth.service";
+import { hashPassword, invalidateUserSessions } from "../services/auth.service";
+import { AuditService } from "../services/audit.service";
 import { SubscriptionService } from "../services/subscription.service";
 
 export const usersRouter = router({
@@ -102,10 +103,27 @@ export const usersRouter = router({
     .input(z.object({ userId: z.string().uuid() }).merge(platformUserUpdateSchema))
     .mutation(async ({ ctx, input }) => {
       const { userId, ...data } = input;
-      return ctx.prisma.user.update({
+      const user = await ctx.prisma.user.update({
         where: { id: userId },
         data,
+        select: { id: true, email: true, role: true, isActive: true, businessId: true },
       });
+
+      if (data.role || data.isActive === false) {
+        await invalidateUserSessions(ctx.prisma, userId);
+        const audit = new AuditService(ctx.prisma);
+        const reason = data.role ? "role_change" : "deactivation";
+        await audit.log({
+          businessId: user.businessId,
+          actorUserId: ctx.user.userId,
+          actionType: "auth.sessions_invalidated",
+          objectType: "user",
+          objectId: userId,
+          metadata: { reason },
+        });
+      }
+
+      return user;
     }),
 
   deactivate: protectedProcedure
@@ -113,9 +131,23 @@ export const usersRouter = router({
     .use(requireRecentAuth())
     .input(z.object({ userId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      return ctx.prisma.user.update({
+      const user = await ctx.prisma.user.update({
         where: { id: input.userId },
         data: { isActive: false },
+        select: { id: true, email: true, role: true, isActive: true, businessId: true },
       });
+
+      await invalidateUserSessions(ctx.prisma, input.userId);
+      const audit = new AuditService(ctx.prisma);
+      await audit.log({
+        businessId: user.businessId,
+        actorUserId: ctx.user.userId,
+        actionType: "auth.sessions_invalidated",
+        objectType: "user",
+        objectId: input.userId,
+        metadata: { reason: "deactivation" },
+      });
+
+      return user;
     }),
 });

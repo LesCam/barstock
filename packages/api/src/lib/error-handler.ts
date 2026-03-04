@@ -12,6 +12,8 @@ const SENSITIVE_PATHS = new Set([
   "auth.createUser",
   "auth.updateUser",
   "auth.mfaDisable",
+  "auth.mfaSetup",
+  "auth.mfaVerify",
   "auth.verifyPin",
   "auth.reAuthenticate",
 ]);
