@@ -1,9 +1,11 @@
 /**
  * Sliding-window rate limiter with a pluggable store interface.
  *
- * Default: in-memory Map (single-process, dev/MVP).
- * To swap to Redis/Upstash, implement RateLimitStore and pass it to createRateLimiter().
+ * Uses Upstash Redis when UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+ * are set (shared across instances). Falls back to in-memory (single-process).
  */
+
+import { Redis } from "@upstash/redis";
 
 // ─── Store Interface ─────────────────────────────────────────────────────────
 
@@ -12,7 +14,7 @@ export interface RateLimitStore {
   increment(key: string, windowMs: number): Promise<{ count: number; resetMs: number }>;
 }
 
-// ─── In-Memory Store (default) ───────────────────────────────────────────────
+// ─── In-Memory Store (fallback) ─────────────────────────────────────────────
 
 interface MemEntry { timestamps: number[] }
 
@@ -21,13 +23,15 @@ class InMemoryStore implements RateLimitStore {
 
   constructor() {
     // Periodic cleanup every 60s to prevent unbounded growth
-    setInterval(() => {
-      const now = Date.now();
-      for (const [key, entry] of this.data) {
-        entry.timestamps = entry.timestamps.filter((t) => now - t < 300_000);
-        if (entry.timestamps.length === 0) this.data.delete(key);
-      }
-    }, 60_000).unref?.();
+    if (typeof setInterval !== "undefined") {
+      setInterval(() => {
+        const now = Date.now();
+        for (const [key, entry] of this.data) {
+          entry.timestamps = entry.timestamps.filter((t) => now - t < 300_000);
+          if (entry.timestamps.length === 0) this.data.delete(key);
+        }
+      }, 60_000).unref?.();
+    }
   }
 
   async increment(key: string, windowMs: number): Promise<{ count: number; resetMs: number }> {
@@ -46,6 +50,34 @@ class InMemoryStore implements RateLimitStore {
   }
 }
 
+// ─── Upstash Redis Store ────────────────────────────────────────────────────
+
+class UpstashStore implements RateLimitStore {
+  private redis: Redis;
+
+  constructor(redis: Redis) {
+    this.redis = redis;
+  }
+
+  async increment(key: string, windowMs: number): Promise<{ count: number; resetMs: number }> {
+    const now = Date.now();
+    const windowStart = now - windowMs;
+    const rKey = `rl:${key}`;
+
+    // Atomic sliding window: remove expired, add current, count, set TTL
+    const pipeline = this.redis.pipeline();
+    pipeline.zremrangebyscore(rKey, 0, windowStart);
+    pipeline.zadd(rKey, { score: now, member: `${now}:${Math.random()}` });
+    pipeline.zcard(rKey);
+    pipeline.pexpire(rKey, windowMs);
+
+    const results = await pipeline.exec();
+    const count = (results[2] as number) ?? 0;
+
+    return { count, resetMs: windowMs };
+  }
+}
+
 // ─── Limiter Factory ─────────────────────────────────────────────────────────
 
 interface RateLimiterOptions {
@@ -53,11 +85,20 @@ interface RateLimiterOptions {
   limit: number;
   /** Window size in milliseconds */
   windowMs: number;
-  /** Optional custom store (defaults to in-memory) */
+  /** Optional custom store (defaults to auto-detected) */
   store?: RateLimitStore;
 }
 
-const defaultStore = new InMemoryStore();
+function createDefaultStore(): RateLimitStore {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) {
+    return new UpstashStore(new Redis({ url, token }));
+  }
+  return new InMemoryStore();
+}
+
+const defaultStore = createDefaultStore();
 
 export function createRateLimiter(options: RateLimiterOptions) {
   const store = options.store ?? defaultStore;
