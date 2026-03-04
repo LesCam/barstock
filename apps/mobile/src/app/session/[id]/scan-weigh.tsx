@@ -14,6 +14,7 @@ import {
   Platform,
 } from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import * as Crypto from "expo-crypto";
@@ -51,11 +52,12 @@ interface MatchedItem {
 }
 
 export default function ScanWeighScreen() {
-  const { id: sessionId, subAreaId, areaName, itemId: preselectedItemId } = useLocalSearchParams<{
+  const { id: sessionId, subAreaId, areaName, itemId: preselectedItemId, skipToCount } = useLocalSearchParams<{
     id: string;
     subAreaId?: string;
     areaName?: string;
     itemId?: string;
+    skipToCount?: string;
   }>();
   const { selectedLocationId, user: authUser } = useAuth();
   const canTare = usePermission("canManageTareWeights");
@@ -97,6 +99,12 @@ export default function ScanWeighScreen() {
   const autoSubmitWeightRef = useRef<number | null>(null);
   const autoSubmitSuppressedRef = useRef(false);
 
+  // When skipToCount is set (from connect-scale "Count Full Units"), always route to counting phase
+  const phaseForItem = useCallback((countingMethod?: string) => {
+    if (skipToCount === "1") return "counting" as Phase;
+    return countingMethod === "weighable" ? "weighing" as Phase : "counting" as Phase;
+  }, [skipToCount]);
+
   // Use refs so the scale listener closure always sees current values
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
@@ -109,7 +117,17 @@ export default function ScanWeighScreen() {
   useFocusEffect(
     useCallback(() => {
       setScaleConnected(scaleManager.isConnected);
-    }, [])
+      // Check if connect-scale sent us back with "count full units" intent
+      AsyncStorage.getItem("@barstock/skipToCount").then((val) => {
+        if (val === "1") {
+          AsyncStorage.removeItem("@barstock/skipToCount");
+          if (matchedItem) {
+            setUnitCount("");
+            setPhase("counting");
+          }
+        }
+      });
+    }, [matchedItem])
   );
 
   // Session data for duplicate detection
@@ -358,13 +376,9 @@ export default function ScanWeighScreen() {
         if (item) {
           const typedItem = item as MatchedItem;
           setMatchedItem(typedItem);
-          if (typedItem.category?.countingMethod !== "weighable") {
-            setPhase("counting");
-          } else {
-            // Suppress auto-submit for tap-to-count — no barcode confirmation
-            autoSubmitSuppressedRef.current = true;
-            setPhase("weighing");
-          }
+          // Suppress auto-submit for tap-to-count — no barcode confirmation
+          autoSubmitSuppressedRef.current = true;
+          setPhase(phaseForItem(typedItem.category?.countingMethod));
         } else {
           setPhase("scanning");
         }
@@ -394,11 +408,7 @@ export default function ScanWeighScreen() {
         );
         if (cachedMatch) {
           setMatchedItem(cachedMatch);
-          if (cachedMatch.category?.countingMethod !== "weighable") {
-            setPhase("counting");
-          } else {
-            setPhase("weighing");
-          }
+          setPhase(phaseForItem(cachedMatch.category?.countingMethod));
           return;
         }
         // No cached match while offline — skip network call
@@ -415,11 +425,7 @@ export default function ScanWeighScreen() {
         if (result.source === "local" && result.localItem) {
           const typedItem = result.localItem as MatchedItem;
           setMatchedItem(typedItem);
-          if (typedItem.category?.countingMethod !== "weighable") {
-            setPhase("counting");
-          } else {
-            setPhase("weighing");
-          }
+          setPhase(phaseForItem(typedItem.category?.countingMethod));
         } else if (
           (result.source === "master" || result.source === "openfoodfacts" || result.source === "upcitemdb") &&
           result.suggestion
@@ -434,7 +440,7 @@ export default function ScanWeighScreen() {
         setPhase("not_found");
       }
     },
-    [selectedLocationId, utils, hapticEnabled, isOnline, inventoryItems]
+    [selectedLocationId, utils, hapticEnabled, isOnline, inventoryItems, phaseForItem]
   );
 
   // Check if this item was already weighed with a similar value
@@ -658,14 +664,13 @@ export default function ScanWeighScreen() {
     Keyboard.dismiss();
     setSearchQuery("");
     setMatchedItem(item);
-    if (item.category?.countingMethod !== "weighable") {
-      setPhase("counting");
-    } else {
+    const targetPhase = phaseForItem(item.category?.countingMethod);
+    if (targetPhase === "weighing") {
       setScaleWeight(null);
       setManualWeight("");
       setShowManualEntry(false);
-      setPhase("weighing");
     }
+    setPhase(targetPhase);
   }
 
   function handleSkipNotFound() {
@@ -697,14 +702,13 @@ export default function ScanWeighScreen() {
       } : null,
     };
     setMatchedItem(newItem);
-    if (item.countingMethod === "weighable") {
+    const targetPhase = phaseForItem(item.countingMethod);
+    if (targetPhase === "weighing") {
       setScaleWeight(null);
       setManualWeight("");
       setShowManualEntry(false);
-      setPhase("weighing");
-    } else {
-      setPhase("counting");
     }
+    setPhase(targetPhase);
   }
 
   async function handleUnitSubmit() {
@@ -1107,6 +1111,18 @@ export default function ScanWeighScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Switch to unit counting (e.g. full sealed bottles) */}
+            <TouchableOpacity
+              style={styles.modeToggle}
+              onPress={() => {
+                cancelAutoSubmit();
+                setUnitCount("");
+                setPhase("counting");
+              }}
+            >
+              <Text style={styles.modeToggleText}>Count full units instead</Text>
+            </TouchableOpacity>
+
             {/* Calculation display */}
             {calcQuery.data && (
               <View style={styles.calcRow}>
@@ -1199,7 +1215,7 @@ export default function ScanWeighScreen() {
               {matchedItem.baseUom || "units"}
             </Text>
           </View>
-          <NumericKeypad value={unitCount} onChange={setUnitCount} />
+          <NumericKeypad value={unitCount} onChange={setUnitCount} compact />
           {matchedItem.category?.countingMethod === "weighable" && (
             <TouchableOpacity
               style={styles.modeToggle}

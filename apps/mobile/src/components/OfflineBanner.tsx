@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Alert } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useNetwork } from "@/lib/network-context";
-import { subscribe, isSyncing, retryFailed, clearFailed, type QueueEntry } from "@/lib/offline-queue";
+import { subscribe, getQueue, isSyncing, retryFailed, clearFailed, type QueueEntry } from "@/lib/offline-queue";
 import { trpcVanilla } from "@/lib/trpc";
 
 type BannerState = "hidden" | "offline" | "syncing" | "synced" | "failed" | "conflict";
@@ -10,13 +11,15 @@ type BannerState = "hidden" | "offline" | "syncing" | "synced" | "failed" | "con
 export function OfflineBanner() {
   const { isOnline } = useNetwork();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [bannerState, setBannerState] = useState<BannerState>("hidden");
-  const slideAnim = useRef(new Animated.Value(-50)).current;
+  const slideAnim = useRef(new Animated.Value(100)).current;
   const syncedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Subscribe to queue changes
+  // Subscribe to queue changes + eagerly load current state
   useEffect(() => {
+    getQueue().then(setQueue);
     return subscribe(setQueue);
   }, []);
 
@@ -58,10 +61,10 @@ export function OfflineBanner() {
     };
   }, [isOnline, totalPending, syncingCount, failedCount, conflictCount]);
 
-  // Animate slide in/out
+  // Animate slide up from bottom / slide down to hide
   useEffect(() => {
     Animated.timing(slideAnim, {
-      toValue: bannerState === "hidden" ? -50 : 0,
+      toValue: bannerState === "hidden" ? 100 : 0,
       duration: 250,
       useNativeDriver: true,
     }).start();
@@ -91,12 +94,14 @@ export function OfflineBanner() {
   let bgColor = styles.bgOffline;
 
   switch (bannerState) {
-    case "offline":
-      text = totalPending > 0
-        ? `Offline \u2014 ${totalPending} item${totalPending !== 1 ? "s" : ""} pending`
+    case "offline": {
+      const queuedCount = totalPending > 0 ? totalPending : queue.length;
+      text = queuedCount > 0
+        ? `Offline \u2014 ${queuedCount} item${queuedCount !== 1 ? "s" : ""} pending`
         : "Offline";
       bgColor = styles.bgOffline;
       break;
+    }
     case "syncing":
       text = `Syncing ${totalPending} item${totalPending !== 1 ? "s" : ""}...`;
       bgColor = styles.bgSyncing;
@@ -119,7 +124,7 @@ export function OfflineBanner() {
     <Animated.View
       style={[styles.container, { transform: [{ translateY: slideAnim }] }]}
     >
-      <View style={[styles.banner, bgColor]}>
+      <View style={[styles.banner, bgColor, { paddingBottom: insets.bottom + 6 }]}>
         {bannerState === "conflict" ? (
           <TouchableOpacity onPress={() => router.push("/sync-queue")} activeOpacity={0.7}>
             <Text style={styles.text}>{text}</Text>
@@ -162,7 +167,7 @@ export function OfflineBanner() {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    top: 0,
+    bottom: 80,
     left: 0,
     right: 0,
     zIndex: 1000,
@@ -205,24 +210,28 @@ const styles = StyleSheet.create({
   retryBtn: {
     backgroundColor: "#2563eb",
     borderRadius: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minHeight: 32,
+    justifyContent: "center" as const,
   },
   retryBtnText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
   },
   clearBtn: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.5)",
     borderRadius: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minHeight: 32,
+    justifyContent: "center" as const,
   },
   clearBtnText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
   },
 });

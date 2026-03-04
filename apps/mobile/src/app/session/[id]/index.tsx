@@ -59,6 +59,22 @@ export default function SessionDetailScreen() {
   useEffect(() => {
     return subscribe(setOfflineQueue);
   }, []);
+
+  // When the sessions.create entry is synced (removed from queue), clear _pendingSync and refetch
+  useEffect(() => {
+    const hasCreateEntry = offlineQueue.some(
+      (e) => e.mutation === "sessions.create" && (e.input as any).id === id
+    );
+    const cached = utils.sessions.getById.getData({ id: id! });
+    if (!hasCreateEntry && (cached as any)?._pendingSync) {
+      utils.sessions.getById.setData({ id: id! }, (old: any) => {
+        if (!old) return old;
+        const { _pendingSync, ...rest } = old;
+        return rest;
+      });
+      utils.sessions.getById.invalidate({ id: id! });
+    }
+  }, [offlineQueue, id]);
   const pendingTempIds = useMemo(
     () => new Set(offlineQueue.filter((e) => e.status !== "failed" && e.tempId).map((e) => e.tempId!)),
     [offlineQueue],
@@ -144,9 +160,18 @@ export default function SessionDetailScreen() {
   // SSE mode tracked for polling fallback — updated by useSessionSSE below
   const [sseMode, setSseMode] = useState<SSEMode>("streaming");
 
+  // Check if this session was created offline and hasn't synced yet
+  const isPendingSync = (utils.sessions.getById.getData({ id: id! }) as any)?._pendingSync === true;
+
   const { data: session, isLoading } = trpc.sessions.getById.useQuery(
     { id: id! },
-    { staleTime: 10_000, refetchInterval: sseMode === "degraded" ? 15_000 : 60_000 }
+    {
+      staleTime: isPendingSync ? Infinity : 10_000,
+      refetchInterval: isPendingSync ? false : (sseMode === "degraded" ? 15_000 : 60_000),
+      // Don't hit the server while the session hasn't been created there yet
+      networkMode: isPendingSync ? "offlineFirst" : "online",
+      retry: isPendingSync ? false : 3,
+    }
   );
 
   // --- Cache warming: prefetch data needed for offline counting ---
@@ -808,9 +833,9 @@ export default function SessionDetailScreen() {
           { text: "Cancel", style: "cancel" },
           {
             text: "Queue Close",
-            onPress: () => {
-              enqueue("sessions.close", { sessionId: id!, varianceReasons });
-              AsyncStorage.setItem(`@barstock/pendingClose/${id}`, "1");
+            onPress: async () => {
+              await enqueue("sessions.close", { sessionId: id!, varianceReasons });
+              await AsyncStorage.setItem(`@barstock/pendingClose/${id}`, "1");
               setPendingClose(true);
               // Optimistically mark session as closing in cache
               utils.sessions.getById.setData({ id: id! }, (old: any) => {
@@ -840,8 +865,8 @@ export default function SessionDetailScreen() {
     });
     if (pendingForSession.length > 0) {
       // Queue close instead of blocking — priority 6 ensures it runs after pending lines
-      enqueue("sessions.close", { sessionId: id!, varianceReasons });
-      AsyncStorage.setItem(`@barstock/pendingClose/${id}`, "1");
+      await enqueue("sessions.close", { sessionId: id!, varianceReasons });
+      await AsyncStorage.setItem(`@barstock/pendingClose/${id}`, "1");
       setPendingClose(true);
       utils.sessions.getById.setData({ id: id! }, (old: any) => {
         if (!old) return old;
@@ -897,8 +922,8 @@ export default function SessionDetailScreen() {
       }
     } catch {
       // Network failed or timed out — fall back to queued offline close
-      enqueue("sessions.close", { sessionId: id!, varianceReasons });
-      AsyncStorage.setItem(`@barstock/pendingClose/${id}`, "1");
+      await enqueue("sessions.close", { sessionId: id!, varianceReasons });
+      await AsyncStorage.setItem(`@barstock/pendingClose/${id}`, "1");
       setPendingClose(true);
       utils.sessions.getById.setData({ id: id! }, (old: any) => {
         if (!old) return old;

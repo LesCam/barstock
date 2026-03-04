@@ -89,7 +89,7 @@ export default function NewCountScreen() {
       } as any);
 
       // Queue the create mutation
-      enqueue("sessions.create", {
+      await enqueue("sessions.create", {
         id: sessionId,
         locationId: selectedLocationId,
         sessionType: "shift",

@@ -5,6 +5,7 @@ interface NumericKeypadProps {
   onChange: (value: string) => void;
   maxLength?: number;
   showSublabels?: boolean;
+  compact?: boolean;
 }
 
 const SUBLABELS: Record<string, string> = {
@@ -27,7 +28,7 @@ const KEYS = [
   ["C", "0", "⌫"],
 ];
 
-export function NumericKeypad({ value, onChange, maxLength = 6, showSublabels = false }: NumericKeypadProps) {
+export function NumericKeypad({ value, onChange, maxLength = 6, showSublabels = false, compact = false }: NumericKeypadProps) {
   function handlePress(key: string) {
     if (key === "C") {
       onChange("");
@@ -42,14 +43,15 @@ export function NumericKeypad({ value, onChange, maxLength = 6, showSublabels = 
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, compact && styles.containerCompact]}>
       {KEYS.map((row, ri) => (
-        <View key={ri} style={styles.row}>
+        <View key={ri} style={[styles.row, compact && styles.rowCompact]}>
           {row.map((key) => (
             <TouchableOpacity
               key={key}
               style={[
                 styles.key,
+                compact && styles.keyCompact,
                 key === "C" && styles.keyAction,
                 key === "⌫" && styles.keyAction,
               ]}
@@ -59,7 +61,9 @@ export function NumericKeypad({ value, onChange, maxLength = 6, showSublabels = 
               <Text
                 style={[
                   styles.keyText,
+                  compact && styles.keyTextCompact,
                   (key === "C" || key === "⌫") && styles.keyActionText,
+                  (key === "C" || key === "⌫") && compact && styles.keyActionTextCompact,
                 ]}
               >
                 {key}
@@ -79,9 +83,15 @@ const styles = StyleSheet.create({
   container: {
     gap: 8,
   },
+  containerCompact: {
+    gap: 4,
+  },
   row: {
     flexDirection: "row",
     gap: 8,
+  },
+  rowCompact: {
+    gap: 4,
   },
   key: {
     flex: 1,
@@ -91,6 +101,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  keyCompact: {
+    height: 48,
+    borderRadius: 8,
+  },
   keyAction: {
     backgroundColor: "#1E3550",
   },
@@ -99,9 +113,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#EAF0FF",
   },
+  keyTextCompact: {
+    fontSize: 22,
+  },
   keyActionText: {
     fontSize: 22,
     color: "#8899AA",
+  },
+  keyActionTextCompact: {
+    fontSize: 18,
   },
   sublabel: {
     fontSize: 10,

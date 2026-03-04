@@ -9,6 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { scaleManager, type ScaleReading } from "@/lib/scale/scale-manager";
 import { getMappingForDevice, setMappingForDevice, getAllMappings } from "@/lib/scale/scale-mappings";
 import { useScaleHeartbeat } from "@/lib/scale/use-scale-heartbeat";
@@ -319,6 +320,17 @@ export default function ConnectScaleScreen() {
           <Text style={styles.manualButtonText}>Enter Weight Manually</Text>
         </TouchableOpacity>
 
+        {/* Count full units without weighing */}
+        <TouchableOpacity
+          style={styles.countButton}
+          onPress={async () => {
+            await AsyncStorage.setItem("@barstock/skipToCount", "1");
+            router.back();
+          }}
+        >
+          <Text style={styles.countButtonText}>Count Full Units Instead</Text>
+        </TouchableOpacity>
+
         {/* Troubleshooting */}
         <TouchableOpacity
           style={styles.troubleshootLink}
@@ -547,6 +559,19 @@ const styles = StyleSheet.create({
   },
   manualButtonText: {
     color: "#E9B44C",
+    fontSize: 17,
+    fontWeight: "600",
+  },
+  countButton: {
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  countButtonText: {
+    color: "#4CAF50",
     fontSize: 17,
     fontWeight: "600",
   },
