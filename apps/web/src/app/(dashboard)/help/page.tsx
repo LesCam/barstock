@@ -100,9 +100,9 @@ const SECTION_SEARCH_TEXT: Record<string, string> = {
   benchmarking:
     "benchmarking industry comparison portfolio metrics opt-in anonymized pour cost snapshot trend",
   "receipt-capture":
-    "receipt capture scan OCR Gemini camera photo auto-match alias barcode vendor SKU fuzzy confirm skipped items price history",
+    "receipt capture scan OCR Gemini camera photo upload JPEG PNG PDF auto-match alias barcode vendor SKU fuzzy confirm skipped items price history field mapping purchase order PO link error handling",
   "product-guide":
-    "product guide menu public QR code image lookup barcode drag reorder categories catalog browse",
+    "product guide menu public QR code image lookup find image barcode drag reorder categories catalog browse pricing bulk import quick-create scan tasting notes labels print",
   "art-gallery":
     "art gallery artwork artist consignment agreement sale tracking status lifecycle QR label printing photo capture",
   "voice-commands":
@@ -116,7 +116,7 @@ const SECTION_SEARCH_TEXT: Record<string, string> = {
   portfolio:
     "portfolio analytics cross-location performance comparison on-hand value COGS variance pour cost mapping coverage trend",
   "usage-trends":
-    "usage trends charts filter category item date range trend visualization over time",
+    "usage trends charts filter category item date range trend visualization over time breakdown export CSV forecast seasonality day-of-week stacked consumption",
   "scan-import":
     "barcode scanning import mobile web pairing bridge relay quick-create modal CSV bulk find image",
 };
@@ -715,11 +715,44 @@ const sections: Section[] = [
         </p>
         <div className="space-y-3">
           <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Upload Workflow</h4>
+            <p>
+              Navigate to <strong>Receipts</strong> and tap <strong>+ New Receipt</strong>. You can
+              snap a photo with your camera or upload an image file (JPEG, PNG, or PDF). The OCR
+              engine extracts vendor name, date, line items, quantities, and prices. Review the
+              parsed results, correct any misreads, then confirm to create receiving events.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Supported Formats</h4>
+            <p>
+              JPEG and PNG images work best — ensure receipts are well-lit and flat. PDF invoices
+              are also supported. Very long receipts can be captured in multiple photos and merged.
+              Handwritten or thermal-faded receipts may need manual correction after OCR.
+            </p>
+          </div>
+          <div>
             <h4 className="font-medium text-[#EAF0FF]/90">Auto-Matching</h4>
             <p>
               Each extracted line is matched using a cascade: vendor alias, barcode, vendor SKU, then
               fuzzy name matching. Matched items are pre-filled for quick confirmation. Unmatched items
               can be manually assigned or skipped.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Field Mapping</h4>
+            <p>
+              The OCR extracts product name, quantity, unit price, and total per line. If fields are
+              mis-parsed (e.g. quantity in the price column), you can manually reassign them before
+              confirming. The system learns from your corrections for that vendor&apos;s format.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Linking to Purchase Orders</h4>
+            <p>
+              If you have an open purchase order for the vendor, the receipt can be matched against it.
+              Received quantities update the PO fulfillment status, and any discrepancies (short
+              shipments, substitutions) are flagged for review.
             </p>
           </div>
           <div>
@@ -737,6 +770,14 @@ const sections: Section[] = [
               trend analysis.
             </p>
           </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Error Handling</h4>
+            <p>
+              If OCR fails or returns no results, you&apos;ll be prompted to retake the photo or
+              enter items manually. Partially parsed receipts show a warning banner — review flagged
+              lines before confirming. You can always edit or delete a receipt before it&apos;s finalized.
+            </p>
+          </div>
         </div>
       </div>
     ),
@@ -752,26 +793,69 @@ const sections: Section[] = [
         </p>
         <div className="space-y-3">
           <div>
-            <h4 className="font-medium text-[#EAF0FF]/90">Public Menu</h4>
+            <h4 className="font-medium text-[#EAF0FF]/90">Managing Items</h4>
             <p>
-              Each location has a shareable public menu page. Customers scan a QR code (with your
-              business logo embedded) to browse your offerings on their phone. Categories display
-              as sticky pills with card layouts and thumbnails.
+              Add items to the guide from your inventory catalog. Each guide entry can include a
+              display name, description, tasting notes, price, and photo. Items are organized by
+              category (Spirits, Beer, Wine, etc.) and displayed in custom sort order.
             </p>
           </div>
           <div>
-            <h4 className="font-medium text-[#EAF0FF]/90">Image Lookup & Bulk Import</h4>
+            <h4 className="font-medium text-[#EAF0FF]/90">Image Management</h4>
             <p>
-              Use &quot;Find Image&quot; to search external databases by barcode and auto-import
-              product photos. Bulk import lets you add multiple inventory items to the guide at
-              once by selecting from your catalog.
+              Upload product photos directly or use <strong>Find Image</strong> to search external
+              databases by barcode — matching images are auto-imported. On mobile, tap Find Image
+              on the item detail screen. On web, use it from the guide editor. Images are optimized
+              and cached for fast loading on the public menu.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Pricing</h4>
+            <p>
+              Set display prices per item. Prices show on the public menu and internal guide.
+              Price changes are tracked so you can review pricing history over time.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Bulk Operations</h4>
+            <p>
+              Use <strong>Bulk Import</strong> to add multiple inventory items to the guide at
+              once — select items from your catalog and they&apos;re added with default information.
+              You can also bulk-update prices or remove multiple items in a single operation.
             </p>
           </div>
           <div>
             <h4 className="font-medium text-[#EAF0FF]/90">Drag-to-Reorder</h4>
             <p>
-              Reorder categories and items within a category by dragging. The sort order is
-              reflected on the public menu.
+              Reorder categories and items within a category by dragging on the web. The sort
+              order is reflected on the public menu. Drag handles appear on hover next to each item.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Public Menu</h4>
+            <p>
+              Each location has a shareable public menu page. Customers scan a QR code (with your
+              business logo embedded) to browse your offerings on their phone. Categories display
+              as sticky pills with card layouts and thumbnails. The menu is a server-rendered page
+              that loads fast with no login required.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">QR Codes</h4>
+            <p>
+              Generate and print QR codes from the web (<strong>Print Labels</strong>) or mobile
+              (<strong>QR</strong> tab). QR codes include your business logo overlay and use high
+              error correction so they scan reliably even when partially obscured. Place them on
+              tables, at the bar, or on printed menus.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Quick-Create from Scan</h4>
+            <p>
+              On mobile, scanning a barcode that isn&apos;t in your catalog opens the
+              quick-create modal. Select a category, enter basic details, and the item is added to
+              both inventory and the guide in one step. The modal adapts its fields based on the
+              selected category&apos;s counting method.
             </p>
           </div>
         </div>
@@ -987,22 +1071,51 @@ const sections: Section[] = [
     content: (
       <div className="space-y-3 text-sm text-[#EAF0FF]/70">
         <p>
-          Usage Trends visualizes how your inventory is consumed over time.
+          Usage Trends visualizes how your inventory is consumed over time, helping you spot
+          patterns and make data-driven purchasing decisions.
         </p>
         <div className="space-y-3">
           <div>
-            <h4 className="font-medium text-[#EAF0FF]/90">Charts & Filters</h4>
+            <h4 className="font-medium text-[#EAF0FF]/90">Chart Interpretation</h4>
             <p>
-              View usage charts filtered by category or individual item. Select a date range to
-              zoom into specific periods. Trend lines help you spot seasonal patterns, unusual
-              spikes, or declining demand.
+              The main chart shows daily or weekly consumption units over your selected date range.
+              Each bar or line represents total depletion for that period. Look for consistent
+              patterns (e.g. higher weekend usage), sudden spikes (possible over-pouring or events),
+              or declining trends (items losing popularity).
             </p>
           </div>
           <div>
-            <h4 className="font-medium text-[#EAF0FF]/90">Actionable Insights</h4>
+            <h4 className="font-medium text-[#EAF0FF]/90">Filtering & Date Range</h4>
             <p>
-              Use trend data to inform purchasing decisions, adjust par levels, and identify
-              products that may need menu changes or promotions.
+              Filter by category to compare usage across product types (e.g. all spirits vs. all
+              beer). Drill into a single item to see its individual trend. Adjust the date range
+              picker to zoom in on a specific week or expand to a full quarter. The default view
+              shows the last 30 days.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Category Breakdown</h4>
+            <p>
+              The category breakdown view shows a stacked chart with each category&apos;s
+              contribution to total usage. This helps identify which product groups drive the most
+              volume and how the mix changes over time (e.g. seasonal shifts from beer to spirits).
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Export</h4>
+            <p>
+              Export usage data as CSV for further analysis in a spreadsheet. The export includes
+              item name, category, date, quantity, and source (POS, manual adjustment, etc.).
+              Exports are logged in the audit trail.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-medium text-[#EAF0FF]/90">Relationship to Forecast</h4>
+            <p>
+              Usage trends feed directly into the <strong>Forecast</strong> engine. Historical
+              consumption patterns — including day-of-week seasonality — are used to project
+              future demand and calculate days-to-stockout. If usage trends look unusual, your
+              forecasts may also shift. Check the Forecast page for projected impact.
             </p>
           </div>
         </div>

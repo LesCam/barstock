@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { HelpLink } from "@/components/help-link";
+import { PageTip } from "@/components/page-tip";
 import { useAuditedDownload } from "@/lib/use-audited-download";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -1061,6 +1062,12 @@ export default function ReportsPage() {
         <h1 className="text-2xl font-bold text-[#EAF0FF]">Reports</h1>
         <HelpLink section="reports" tooltip="Learn about available reports" />
       </div>
+
+      <PageTip
+        tipId="reports-intro"
+        title="Reports & Insights"
+        description="View variance, COGS, and shrinkage reports to understand where inventory is going."
+      />
 
       {/* Date range picker */}
       <div className="mb-6 flex gap-3">

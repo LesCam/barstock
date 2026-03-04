@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { useRouter } from "next/navigation";
 import { HelpLink } from "@/components/help-link";
+import { PageTip } from "@/components/page-tip";
 
 interface Notification {
   id: string;
@@ -148,6 +149,12 @@ export default function NotificationsPage() {
           </button>
         )}
       </div>
+
+      <PageTip
+        tipId="notifications-intro"
+        title="Notification Center"
+        description="Real-time alerts for variance thresholds, low stock, shrinkage patterns, and more are delivered here."
+      />
 
       {items.length === 0 ? (
         <p className="text-[#EAF0FF]/60">No notifications yet.</p>

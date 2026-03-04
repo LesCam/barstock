@@ -102,6 +102,12 @@ const SECTION_SEARCH_TEXT: Record<string, string> = {
     "orders purchasing purchase order PO vendor management fulfillment pickup trends spend",
   benchmarking:
     "benchmarking industry comparison portfolio metrics opt-in anonymized pour cost snapshot trend",
+  "receipt-capture":
+    "receipt capture scan OCR Gemini camera photo upload JPEG PNG PDF auto-match alias barcode vendor SKU fuzzy confirm skipped items price history field mapping purchase order PO link error handling",
+  "product-guide":
+    "product guide menu public QR code image lookup find image barcode drag reorder categories catalog browse pricing bulk import quick-create scan tasting notes labels print",
+  "usage-trends":
+    "usage trends charts filter category item date range trend visualization over time breakdown export CSV forecast seasonality day-of-week stacked consumption",
 };
 
 const sections: HelpSection[] = [
@@ -476,6 +482,117 @@ const sections: HelpSection[] = [
       {
         heading: "Portfolio Metrics",
         text: "Multi-location businesses can compare performance across their own locations in the My Locations table. See on-hand value, COGS, variance, pour cost, and mapping coverage side by side. The Trend view tracks your business vs. industry median over time.",
+      },
+    ],
+  },
+  {
+    id: "receipt-capture",
+    title: "Receipt Capture",
+    content: [
+      {
+        text: "Scan vendor receipts using your camera or upload a photo. Gemini OCR extracts line items automatically, then Barstock matches them to your inventory.",
+      },
+      {
+        heading: "Upload Workflow",
+        text: "Navigate to Receipts and tap + New Receipt. Snap a photo with your camera or upload an image (JPEG, PNG, or PDF). The OCR engine extracts vendor name, date, line items, quantities, and prices. Review the parsed results, correct any misreads, then confirm to create receiving events.",
+      },
+      {
+        heading: "Supported Formats",
+        text: "JPEG and PNG images work best — ensure receipts are well-lit and flat. PDF invoices are also supported. Handwritten or thermal-faded receipts may need manual correction after OCR.",
+      },
+      {
+        heading: "Auto-Matching",
+        text: "Each extracted line is matched using a cascade: vendor alias, barcode, vendor SKU, then fuzzy name matching. Matched items are pre-filled for quick confirmation. Unmatched items can be manually assigned or skipped.",
+      },
+      {
+        heading: "Field Mapping",
+        text: "The OCR extracts product name, quantity, unit price, and total per line. If fields are mis-parsed, you can manually reassign them before confirming. The system learns from your corrections for that vendor's format.",
+      },
+      {
+        heading: "Linking to Purchase Orders",
+        text: "If you have an open purchase order for the vendor, the receipt can be matched against it. Received quantities update the PO fulfillment status, and any discrepancies are flagged for review.",
+      },
+      {
+        heading: "Skipped Items",
+        text: "Items that couldn't be matched are marked as skipped. Managers can create new inventory items directly from skipped lines.",
+      },
+      {
+        heading: "Learning & Price History",
+        text: "Each confirmed match teaches the system — vendor aliases and barcode associations are saved for future receipts. Price history is tracked per item per vendor for cost trend analysis.",
+      },
+      {
+        heading: "Error Handling",
+        text: "If OCR fails or returns no results, you'll be prompted to retake the photo or enter items manually. Partially parsed receipts show a warning — review flagged lines before confirming.",
+      },
+    ],
+  },
+  {
+    id: "product-guide",
+    title: "Product Guide & Menu",
+    content: [
+      {
+        text: "The Product Guide is your internal catalog of items with images, descriptions, prices, and tasting notes. It also powers the public-facing menu.",
+      },
+      {
+        heading: "Managing Items",
+        text: "Add items to the guide from your inventory catalog. Each guide entry can include a display name, description, tasting notes, price, and photo. Items are organized by category and displayed in custom sort order.",
+      },
+      {
+        heading: "Image Management",
+        text: "Upload product photos directly or use Find Image to search external databases by barcode — matching images are auto-imported. On mobile, tap Find Image on the item detail screen.",
+      },
+      {
+        heading: "Pricing",
+        text: "Set display prices per item. Prices show on the public menu and internal guide. Price changes are tracked so you can review pricing history over time.",
+      },
+      {
+        heading: "Bulk Operations",
+        text: "Use Bulk Import to add multiple inventory items to the guide at once — select items from your catalog and they're added with default information.",
+      },
+      {
+        heading: "Drag-to-Reorder",
+        text: "Reorder categories and items within a category by dragging on the web. The sort order is reflected on the public menu.",
+      },
+      {
+        heading: "Public Menu",
+        text: "Each location has a shareable public menu page. Customers scan a QR code (with your business logo embedded) to browse your offerings. Categories display as sticky pills with card layouts and thumbnails.",
+      },
+      {
+        heading: "QR Codes",
+        text: "Generate and print QR codes from the web (Print Labels) or mobile (QR tab). QR codes include your business logo overlay and use high error correction so they scan reliably.",
+      },
+      {
+        heading: "Quick-Create from Scan",
+        text: "On mobile, scanning a barcode that isn't in your catalog opens the quick-create modal. Select a category, enter basic details, and the item is added to both inventory and the guide in one step.",
+      },
+    ],
+  },
+  {
+    id: "usage-trends",
+    title: "Usage Trends",
+    content: [
+      {
+        text: "Usage Trends visualizes how your inventory is consumed over time, helping you spot patterns and make data-driven purchasing decisions.",
+      },
+      {
+        heading: "Chart Interpretation",
+        text: "The main chart shows daily or weekly consumption units over your selected date range. Look for consistent patterns (e.g. higher weekend usage), sudden spikes (possible over-pouring), or declining trends (items losing popularity).",
+      },
+      {
+        heading: "Filtering & Date Range",
+        text: "Filter by category to compare usage across product types. Drill into a single item to see its individual trend. Adjust the date range picker to zoom in on a specific week or expand to a full quarter. The default view shows the last 30 days.",
+      },
+      {
+        heading: "Category Breakdown",
+        text: "The category breakdown view shows a stacked chart with each category's contribution to total usage. This helps identify which product groups drive the most volume and how the mix changes over time.",
+      },
+      {
+        heading: "Export",
+        text: "Export usage data as CSV for further analysis. The export includes item name, category, date, quantity, and source (POS, manual adjustment, etc.). Exports are logged in the audit trail.",
+      },
+      {
+        heading: "Relationship to Forecast",
+        text: "Usage trends feed directly into the Forecast engine. Historical consumption patterns — including day-of-week seasonality — are used to project future demand and calculate days-to-stockout.",
       },
     ],
   },

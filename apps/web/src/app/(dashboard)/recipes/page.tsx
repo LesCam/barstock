@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import Link from "next/link";
 import { HelpLink } from "@/components/help-link";
+import { PageTip } from "@/components/page-tip";
 import { UOM } from "@barstock/types";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -662,6 +663,11 @@ export default function RecipesPage() {
             Define cocktail and drink recipes for multi-ingredient POS depletion.
           </p>
         </div>
+        <PageTip
+          tipId="recipes-intro"
+          title="Recipe Mapping"
+          description="Map cocktails and multi-ingredient POS items to their recipe components for accurate depletion tracking."
+        />
         {activeTab === "recipes" && (
           <div className="flex gap-3">
             <Link

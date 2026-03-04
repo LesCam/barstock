@@ -21,6 +21,8 @@ export function OnboardingChecklist() {
   const user = session?.user as any;
   const highestRole: string | undefined = user?.highestRole;
   const isManager = MANAGER_ROLES.includes(highestRole ?? "");
+  const isCurator = highestRole === "curator";
+  const isAccounting = highestRole === "accounting";
   const { selectedLocationId: locationId } = useLocation();
 
   const [dismissed, setDismissed] = useState(true);
@@ -31,12 +33,12 @@ export function OnboardingChecklist() {
 
   const { data: inventory } = trpc.inventory.list.useQuery(
     { locationId: locationId! },
-    { enabled: !!locationId }
+    { enabled: !!locationId && !isCurator && !isAccounting }
   );
 
   const { data: sessions } = trpc.sessions.list.useQuery(
     { locationId: locationId!, openOnly: false },
-    { enabled: !!locationId }
+    { enabled: !!locationId && !isCurator && !isAccounting }
   );
 
   const { data: connections } = trpc.pos.listConnections.useQuery(
@@ -44,52 +46,104 @@ export function OnboardingChecklist() {
     { enabled: !!locationId && isManager }
   );
 
-  // Help progress: 28 total sections, "done" at >= 50% visited
-  const { percentComplete: helpPercent } = useHelpProgress(28);
+  const businessId: string | undefined = user?.businessId;
+  const { data: artworks } = trpc.artworks.list.useQuery(
+    { businessId: businessId! },
+    { enabled: !!businessId && isCurator }
+  );
+
+  // Help progress: 27 total sections, "done" at >= 50% visited
+  const { percentComplete: helpPercent, visitedSections } = useHelpProgress(27);
 
   if (dismissed || !locationId) return null;
 
-  const steps: Step[] = isManager
-    ? [
-        {
-          id: "inventory",
-          label: "Add first inventory item",
-          href: "/inventory",
-          done: (inventory?.length ?? 0) > 0,
-        },
-        {
-          id: "session",
-          label: "Create first counting session",
-          href: "/sessions",
-          done: (sessions?.length ?? 0) > 0,
-        },
-        {
-          id: "pos",
-          label: "Connect POS system",
-          href: "/pos",
-          done: (connections?.length ?? 0) > 0,
-        },
-        {
-          id: "help",
-          label: "Explore Help Guide",
-          href: "/help",
-          done: helpPercent >= 50,
-        },
-      ]
-    : [
-        {
-          id: "session",
-          label: "Join a counting session",
-          href: "/sessions",
-          done: (sessions?.length ?? 0) > 0,
-        },
-        {
-          id: "help",
-          label: "Explore Help Guide",
-          href: "/help",
-          done: helpPercent >= 50,
-        },
-      ];
+  let steps: Step[];
+
+  if (isCurator) {
+    steps = [
+      {
+        id: "artwork",
+        label: "Add first artwork",
+        href: "/art",
+        done: (artworks?.items?.length ?? 0) > 0,
+      },
+      {
+        id: "labels",
+        label: "Print QR labels",
+        href: "/art/labels",
+        done: visitedSections.has("art-gallery"),
+      },
+      {
+        id: "help",
+        label: "Explore Help Guide",
+        href: "/help",
+        done: helpPercent >= 50,
+      },
+    ];
+  } else if (isAccounting) {
+    steps = [
+      {
+        id: "reports",
+        label: "Review reports",
+        href: "/reports",
+        done: visitedSections.has("reports"),
+      },
+      {
+        id: "audit",
+        label: "Check audit log",
+        href: "/audit",
+        done: visitedSections.has("audit"),
+      },
+      {
+        id: "help",
+        label: "Explore Help Guide",
+        href: "/help",
+        done: helpPercent >= 50,
+      },
+    ];
+  } else if (isManager) {
+    steps = [
+      {
+        id: "inventory",
+        label: "Add first inventory item",
+        href: "/inventory",
+        done: (inventory?.length ?? 0) > 0,
+      },
+      {
+        id: "session",
+        label: "Create first counting session",
+        href: "/sessions",
+        done: (sessions?.length ?? 0) > 0,
+      },
+      {
+        id: "pos",
+        label: "Connect POS system",
+        href: "/pos",
+        done: (connections?.length ?? 0) > 0,
+      },
+      {
+        id: "help",
+        label: "Explore Help Guide",
+        href: "/help",
+        done: helpPercent >= 50,
+      },
+    ];
+  } else {
+    steps = [
+      {
+        id: "session",
+        label: "Join a counting session",
+        href: "/sessions",
+        done: (sessions?.length ?? 0) > 0,
+      },
+      {
+        id: "help",
+        label: "Explore Help Guide",
+        href: "/help",
+        done: helpPercent >= 50,
+      },
+    ];
+  }
 
   const completedCount = steps.filter((s) => s.done).length;
   const allDone = completedCount === steps.length;

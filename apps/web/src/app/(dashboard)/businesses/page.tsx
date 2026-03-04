@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
+import { HelpLink } from "@/components/help-link";
 
 const TIER_COLORS: Record<string, string> = {
   starter: "bg-gray-500/10 text-gray-400",
@@ -45,7 +46,10 @@ export default function BusinessesPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#EAF0FF]">Businesses</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-[#EAF0FF]">Businesses</h1>
+          <HelpLink section="settings-roles" tooltip="Roles & permissions" />
+        </div>
         <Link
           href="/businesses/new"
           className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#C8922E]"

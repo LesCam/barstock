@@ -6,6 +6,7 @@ import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 import { HelpLink } from "@/components/help-link";
+import { PageTip } from "@/components/page-tip";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -73,6 +74,12 @@ export default function ReceiptsPage() {
           Receipt scans and skipped items needing attention
         </p>
       </div>
+
+      <PageTip
+        tipId="receipts-intro"
+        title="Receipt Capture"
+        description="Capture vendor invoices to track receiving. Scan or upload receipts and auto-match line items to inventory."
+      />
 
       {/* Learning Stats Banner */}
       <LearningStatsBanner />

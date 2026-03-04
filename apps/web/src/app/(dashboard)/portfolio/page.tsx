@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "@/components/location-context";
 import { HelpLink } from "@/components/help-link";
+import { PageTip } from "@/components/page-tip";
 import { PortfolioOverview } from "@/components/portfolio-overview";
 import {
   LineChart,
@@ -100,6 +101,12 @@ export default function PortfolioPage() {
           Compare performance across all your locations
         </p>
       </div>
+
+      <PageTip
+        tipId="portfolio-intro"
+        title="Portfolio Overview"
+        description="Compare performance across all your locations — on-hand value, COGS, variance, and mapping coverage."
+      />
 
       {/* KPI Summary (reuse existing component) */}
       <PortfolioOverview

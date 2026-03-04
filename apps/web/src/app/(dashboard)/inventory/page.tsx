@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { useSession } from "next-auth/react";
 import { useLocation } from "@/components/location-context";
 import { HelpLink } from "@/components/help-link";
+import { PageTip } from "@/components/page-tip";
 import { UOM, CountingMethod } from "@barstock/types";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -357,6 +358,12 @@ export default function InventoryPage() {
           {showCreate ? "Cancel" : "New Item"}
         </button>
       </div>
+
+      <PageTip
+        tipId="inventory-overview"
+        title="Your Inventory Catalog"
+        description="Browse and manage all inventory items. Add items, set categories, and track bottle sizes and costs."
+      />
 
       {/* Create form */}
       {showCreate && (
