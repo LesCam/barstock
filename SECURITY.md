@@ -97,7 +97,12 @@ The server validates all secrets at startup (`apps/web/src/lib/assert-server-env
 
 - **Authentication:** NextAuth with JWT strategy (8-hour token lifetime)
 - **Authorization:** Layered tRPC middleware — role, business, location, permission checks
-- **Audit trail:** All mutations logged to `audit_logs` table (append-only)
-- **Rate limiting:** Edge middleware on auth (10/15min) and report endpoints (30/min)
+- **Multi-tenant isolation:** All SSE streams, file uploads, and data queries enforce `businessId` scoping
+- **Audit trail:** All mutations logged to `audit_logs` table (append-only); CSV exports audited via `report.exported` events
+- **Rate limiting:** Edge middleware — auth (10/15min), reports/exports (30/min), cron (6/5min), public endpoints (60/min); distributed via Upstash Redis when configured, in-memory fallback
+- **CSP:** Environment-aware — `unsafe-eval` removed in production, `connect-src` restricted to HTTPS
+- **Response caching:** All authenticated routes return `Cache-Control: no-store`; tRPC responses include `cache-control: no-store` via `responseMeta`
+- **Log redaction:** Sensitive fields (password, pin, token, secret) auto-redacted in tRPC error logs; auth endpoint inputs fully redacted
+- **CSV export safety:** Formula injection prevention — cells starting with `=`, `+`, `-`, `@`, `|` are neutralized
 - **CSRF:** Origin header validation on all mutations; Bearer tokens exempt
 - **Headers:** HSTS, X-Frame-Options DENY, CSP, Permissions-Policy via next.config.js
