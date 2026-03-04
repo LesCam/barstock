@@ -1,4 +1,4 @@
-import { router, protectedProcedure, requirePermission } from "../trpc";
+import { router, protectedProcedure, requirePermission, requireLocationAccess } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { SettingsService } from "../services/settings.service";
@@ -74,6 +74,7 @@ async function contributeWeightToMasterDb(
 export const scaleRouter = router({
   /** Bottle templates for a location (includes org-level) */
   listTemplates: protectedProcedure
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const location = await ctx.prisma.location.findUniqueOrThrow({
@@ -102,6 +103,7 @@ export const scaleRouter = router({
 
   /** Look up an item by barcode and return its existing template (if any) */
   lookupByBarcode: protectedProcedure
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid(), barcode: z.string() }))
     .query(async ({ ctx, input }) => {
       const item = await ctx.prisma.inventoryItem.findFirst({

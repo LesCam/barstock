@@ -48,6 +48,7 @@ export const locationsRouter = router({
 
   archive: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireLocationAccess())
     .use(requireRecentAuth())
     .input(z.object({ locationId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -71,6 +72,7 @@ export const locationsRouter = router({
 
   restore: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireLocationAccess())
     .use(requireRecentAuth())
     .input(z.object({ locationId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -94,6 +96,7 @@ export const locationsRouter = router({
 
   archiveSummary: protectedProcedure
     .use(requireRole("business_admin"))
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const lid = input.locationId;
@@ -153,6 +156,7 @@ export const locationsRouter = router({
 
   /** Dashboard stats for a location */
   stats: protectedProcedure
+    .use(requireLocationAccess())
     .input(z.object({ locationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const [unmappedCount, openSessions, lastConnection] = await Promise.all([
