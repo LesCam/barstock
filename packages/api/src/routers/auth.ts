@@ -1228,6 +1228,17 @@ export const authRouter = router({
       };
     }),
 
+  mfaStatus: protectedProcedure.query(async ({ ctx }) => {
+    const user = await ctx.prisma.user.findUniqueOrThrow({
+      where: { id: ctx.user.userId },
+      select: { mfaEnabled: true, mfaBackupCodes: true },
+    });
+    const backupCodesRemaining = user.mfaBackupCodes
+      ? (JSON.parse(user.mfaBackupCodes) as string[]).length
+      : 0;
+    return { mfaEnabled: user.mfaEnabled, backupCodesRemaining };
+  }),
+
   mfaSetup: protectedProcedure
     .use(requireRole("business_admin"))
     .use(requireRecentAuth())

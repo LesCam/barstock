@@ -6,6 +6,7 @@ import { useLocation } from "@/components/location-context";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 import { HelpLink } from "@/components/help-link";
+import { QRCodeSVG } from "qrcode.react";
 
 const ADMIN_ROLES = ["platform_admin", "business_admin"];
 
@@ -67,6 +68,7 @@ export default function SettingsPage() {
       <EndOfDaySection businessId={businessId} canEdit={canEdit} />
       <CapabilityTogglesSection businessId={businessId} canEdit={canEdit} />
       <AutoLockPolicySection businessId={businessId} canEdit={canEdit} />
+      <MfaSection />
       <AlertRulesSection businessId={businessId} canEdit={canEdit} />
       <CountOptimizationSection businessId={businessId} canEdit={canEdit} />
       <VerificationSettingsSection businessId={businessId} canEdit={canEdit} />
@@ -1533,6 +1535,271 @@ function AdaptiveDepletionSection({ businessId, canEdit }: { businessId: string;
 
       {updateMutation.error && (
         <p className="mt-3 text-sm text-red-600">{updateMutation.error.message}</p>
+      )}
+    </div>
+  );
+}
+
+type MfaStep = "idle" | "qr" | "codes" | "disable" | "regenerate";
+
+function MfaSection() {
+  const [step, setStep] = useState<MfaStep>("idle");
+  const [otpauthUri, setOtpauthUri] = useState("");
+  const [secret, setSecret] = useState("");
+  const [code, setCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const utils = trpc.useUtils();
+  const { data: status } = trpc.auth.mfaStatus.useQuery();
+
+  const setupMutation = trpc.auth.mfaSetup.useMutation({
+    onSuccess: (data) => {
+      setOtpauthUri(data.otpauthUri);
+      setSecret(data.secret);
+      setStep("qr");
+      setError("");
+    },
+    onError: (err) => setError(err.message),
+  });
+
+  const verifyMutation = trpc.auth.mfaVerify.useMutation({
+    onSuccess: (data) => {
+      setBackupCodes(data.backupCodes);
+      setStep("codes");
+      setCode("");
+      setError("");
+    },
+    onError: (err) => setError(err.message),
+  });
+
+  const disableMutation = trpc.auth.mfaDisable.useMutation({
+    onSuccess: () => {
+      resetState();
+      utils.auth.mfaStatus.invalidate();
+    },
+    onError: (err) => setError(err.message),
+  });
+
+  const regenerateMutation = trpc.auth.regenerateBackupCodes.useMutation({
+    onSuccess: (data) => {
+      setBackupCodes(data.backupCodes);
+      setStep("codes");
+      setPassword("");
+      setError("");
+    },
+    onError: (err) => setError(err.message),
+  });
+
+  function resetState() {
+    setStep("idle");
+    setOtpauthUri("");
+    setSecret("");
+    setCode("");
+    setBackupCodes([]);
+    setPassword("");
+    setError("");
+  }
+
+  if (!status) return <div className="text-[#EAF0FF]/60">Loading MFA settings...</div>;
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#16283F] p-6">
+      <h2 className="mb-4 text-lg font-semibold text-[#EAF0FF]">Multi-Factor Authentication</h2>
+
+      {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
+
+      {/* Idle — status display */}
+      {step === "idle" && (
+        <>
+          {!status.mfaEnabled ? (
+            <div>
+              <p className="mb-4 text-sm text-[#EAF0FF]/60">
+                Add an extra layer of security by enabling MFA with an authenticator app.
+              </p>
+              <button
+                onClick={() => { setError(""); setupMutation.mutate(); }}
+                disabled={setupMutation.isPending}
+                className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#D4A43C] disabled:opacity-50"
+              >
+                {setupMutation.isPending ? "Setting up..." : "Enable MFA"}
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className="mb-4 text-sm text-[#EAF0FF]/60">
+                MFA is enabled. {status.backupCodesRemaining} backup code{status.backupCodesRemaining !== 1 ? "s" : ""} remaining.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setError(""); setStep("regenerate"); }}
+                  className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#D4A43C]"
+                >
+                  Regenerate Codes
+                </button>
+                <button
+                  onClick={() => { setError(""); setStep("disable"); }}
+                  className="rounded-md border border-red-400/50 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-400/10"
+                >
+                  Disable MFA
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* QR — scan + verify */}
+      {step === "qr" && (
+        <div className="space-y-4">
+          <p className="text-sm text-[#EAF0FF]/60">
+            Scan this QR code with your authenticator app, then enter the 6-digit code to verify.
+          </p>
+          <div className="flex items-start gap-6">
+            <div className="rounded-lg bg-white p-3">
+              <QRCodeSVG value={otpauthUri} size={160} />
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs text-[#EAF0FF]/50">Manual entry key</label>
+                <code className="block select-all rounded bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF]">
+                  {secret}
+                </code>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[#EAF0FF]/50">Verification code</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  className="w-32 rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => verifyMutation.mutate({ code })}
+                  disabled={code.length !== 6 || verifyMutation.isPending}
+                  className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#D4A43C] disabled:opacity-50"
+                >
+                  {verifyMutation.isPending ? "Verifying..." : "Verify"}
+                </button>
+                <button
+                  onClick={resetState}
+                  className="rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF]/60 hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Backup codes display */}
+      {step === "codes" && (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-[#E9B44C]/40 bg-[#E9B44C]/5 p-4">
+            <p className="mb-3 text-sm font-medium text-[#E9B44C]">
+              Save these codes in a safe place. They won&apos;t be shown again.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {backupCodes.map((c) => (
+                <code key={c} className="rounded bg-[#0B1623] px-3 py-1.5 text-center font-mono text-sm text-[#EAF0FF]">
+                  {c}
+                </code>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setBackupCodes([]);
+              setStep("idle");
+              utils.auth.mfaStatus.invalidate();
+            }}
+            className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#D4A43C]"
+          >
+            I&apos;ve Saved These Codes
+          </button>
+        </div>
+      )}
+
+      {/* Disable MFA */}
+      {step === "disable" && (
+        <div className="space-y-4">
+          <p className="text-sm text-[#EAF0FF]/60">
+            Enter your password and a current TOTP code to disable MFA.
+          </p>
+          <div className="flex max-w-xs flex-col gap-3">
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="6-digit code"
+              className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => disableMutation.mutate({ password, code })}
+                disabled={!password || code.length !== 6 || disableMutation.isPending}
+                className="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {disableMutation.isPending ? "Disabling..." : "Disable MFA"}
+              </button>
+              <button
+                onClick={resetState}
+                className="rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF]/60 hover:bg-white/5"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Regenerate backup codes */}
+      {step === "regenerate" && (
+        <div className="space-y-4">
+          <p className="text-sm text-red-400">
+            This will invalidate all existing backup codes and generate new ones.
+          </p>
+          <div className="flex max-w-xs flex-col gap-3">
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              className="rounded-md border border-white/10 bg-[#0B1623] px-3 py-2 text-sm text-[#EAF0FF] placeholder:text-[#EAF0FF]/30"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => regenerateMutation.mutate({ password })}
+                disabled={!password || regenerateMutation.isPending}
+                className="rounded-md bg-[#E9B44C] px-4 py-2 text-sm font-medium text-[#0B1623] hover:bg-[#D4A43C] disabled:opacity-50"
+              >
+                {regenerateMutation.isPending ? "Regenerating..." : "Regenerate"}
+              </button>
+              <button
+                onClick={resetState}
+                className="rounded-md border border-white/10 px-4 py-2 text-sm text-[#EAF0FF]/60 hover:bg-white/5"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
